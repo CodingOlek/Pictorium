@@ -50,6 +50,7 @@ export function saveDefaults(ed: PosterEditorCtx): Promise<boolean> {
     region: ed.defaultRegion,
     networkLogo: ed.defaultNetworkLogo,
     ribbonSide: ed.defaultRibbonSide,
+    posterShape: ed.defaultPosterShape,
     episodeMetadataSource: ed.defaultEpisodeMetadataSource,
   }
   safeSetItem("badgeDefaults", JSON.stringify(d))

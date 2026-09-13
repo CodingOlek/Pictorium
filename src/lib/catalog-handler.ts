@@ -21,6 +21,7 @@ import { concurrentMap } from "@/lib/episode-ordering"
 import { isPersonQuery, pickTopPerson } from "@/lib/person-search"
 import { normalizeCatalogId, normalizeCatalogIdKeys, normalizeCatalogIdList } from "@/lib/catalog-definitions"
 import { envWithFallback } from "@/lib/env-compat"
+import { isPosterShape, type PosterShape } from "@/lib/types"
 
 const log = createLogger("catalog")
 
@@ -239,6 +240,38 @@ function catalogBackground(backdropPath: string | null | undefined): string | un
 }
 
 /**
+ * Fallback di formato per un intero catalogo (senza mapping per-titolo):
+ * config token > defaults server > portrait. Calcolato una volta per
+ * richiesta; il per-titolo (`catalogItemPosterShape`) vince quando il
+ * mapping ha uno shape salvato.
+ */
+function catalogPosterShapeFallback(configParam: string | null): PosterShape {
+  const sd = getServerDefaults()
+  if (configParam) {
+    const cfg = decodeConfig(configParam)
+    if (isPosterShape(cfg?.posterShape)) return cfg.posterShape
+  }
+  return sd.posterShape === "landscape" ? "landscape" : "poster"
+}
+
+/**
+ * Formato del singolo item: mapping salvato > fallback di catalogo.
+ * Il lookup è cachato (stesso getById del poster URL) — su errore degrada
+ * al fallback senza rompere il catalogo.
+ */
+async function catalogItemPosterShape(
+  type: "movie" | "series",
+  id: number,
+  fallback: PosterShape,
+): Promise<PosterShape> {
+  try {
+    const mapping = await getById(type === "series" ? "tv" : "movie", id)
+    if (isPosterShape(mapping?.posterShape)) return mapping.posterShape
+  } catch { /* ignore — fallback */ }
+  return fallback
+}
+
+/**
  * Mappa genre_ids → nomi localizzati per le righe di ricerca (TMDB `/genre/list`).
  * La risposta è cachata da tmdbFetch (LRU 5 min) ed è condivisa tra richieste;
  * in caso di errore degrada a mappa vuota (righe senza generi).
@@ -373,6 +406,8 @@ export async function pictoriumCatalog(
   userConfig.disabledCatalogIds = normalizeCatalogIdList(userConfig.disabledCatalogIds)
   userConfig.catalogOrder = normalizeCatalogIdList(userConfig.catalogOrder)
   userConfig.catalogRenames = normalizeCatalogIdKeys(userConfig.catalogRenames)
+  // Formato canvas di default per gli item senza mapping (config > server).
+  const shapeFallback = catalogPosterShapeFallback(configParam)
   // Epoch globale + hash dei server defaults: frammenti di freschezza per TUTTI
   // i cache key di questo handler (ricerche + catalogo). Su deploy
   // multi-istanza la `cacheInvalidate("stremio")` del save non raggiunge le
@@ -451,6 +486,7 @@ export async function pictoriumCatalog(
             type: stType,
             name: item.title || item.name || "",
             poster,
+            posterShape: await catalogItemPosterShape(stType, item.id, shapeFallback),
             background: catalogBackground(item.backdrop_path),
             releaseInfo,
             imdbRating: item.vote_average ? item.vote_average.toFixed(1) : undefined,
@@ -492,6 +528,7 @@ export async function pictoriumCatalog(
           type: stType,
           name: item.title || item.name || "",
           poster,
+          posterShape: await catalogItemPosterShape(stType, item.id, shapeFallback),
           background: catalogBackground(item.backdrop_path),
           releaseInfo,
           imdbRating: item.vote_average ? item.vote_average.toFixed(1) : undefined,
@@ -608,6 +645,7 @@ export async function pictoriumCatalog(
             type: stType,
             name: r.title,
             poster,
+            posterShape: await catalogItemPosterShape(stType, r.tmdbId, shapeFallback),
             background,
             banner: background,
             logo,
@@ -669,6 +707,7 @@ export async function pictoriumCatalog(
           type: stType,
           name: r.d.title || r.d.name || "",
           poster,
+          posterShape: await catalogItemPosterShape(stType, r.tmdbId, shapeFallback),
           background,
           banner: background,
           logo,
@@ -728,6 +767,7 @@ export async function pictoriumCatalog(
           type: stType,
           name: r.name,
           poster,
+          posterShape: await catalogItemPosterShape(stType, r.tmdbId, shapeFallback),
           background,
           banner: background,
           logo,
@@ -820,6 +860,7 @@ export async function pictoriumCatalog(
               type: stType,
               name: r.title,
               poster,
+              posterShape: await catalogItemPosterShape(stType, r.tmdbId, shapeFallback),
               background,
               banner: background,
               logo,
@@ -858,6 +899,7 @@ export async function pictoriumCatalog(
                 type: stType,
                 name: italianTitle,
                 poster,
+                posterShape: await catalogItemPosterShape(stType, item.tmdbId, shapeFallback),
                 background,
                 banner: background,
                 logo,

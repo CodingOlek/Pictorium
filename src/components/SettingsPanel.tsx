@@ -45,6 +45,8 @@ import {
   Search,
   ArrowLeftRight,
   ArrowUpDown,
+  RectangleVertical,
+  RectangleHorizontal,
 } from "lucide-react"
 
 interface Props {
@@ -611,6 +613,49 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
                 }`}
               >
                 Stremio
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span className="text-zinc-300 font-medium flex items-center gap-1.5 shrink-0">
+              <RectangleHorizontal className="w-3.5 h-3.5 text-accent-orange" />
+              {t("ui.posterShape")}
+            </span>
+            <div className="flex gap-1 flex-1 max-w-[160px]">
+              <button
+                type="button"
+                title={t("ui.posterShapePortrait")}
+                aria-label={t("ui.posterShapePortrait")}
+                aria-pressed={ed.defaultPosterShape !== "landscape"}
+                onClick={() => {
+                  ed.setDefaultPosterShape("poster")
+                }}
+                className={`flex-1 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer flex items-center justify-center gap-1 ${
+                  ed.defaultPosterShape !== "landscape"
+                    ? "bg-white/20 text-white shadow-sm"
+                    : "bg-white/5 text-muted hover:bg-white/10 hover:text-zinc-200"
+                }`}
+              >
+                <RectangleVertical className="w-3.5 h-3.5" />
+                {t("ui.posterShapePortrait")}
+              </button>
+              <button
+                type="button"
+                title={t("ui.posterShapeLandscape")}
+                aria-label={t("ui.posterShapeLandscape")}
+                aria-pressed={ed.defaultPosterShape === "landscape"}
+                onClick={() => {
+                  ed.setDefaultPosterShape("landscape")
+                }}
+                className={`flex-1 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 cursor-pointer flex items-center justify-center gap-1 ${
+                  ed.defaultPosterShape === "landscape"
+                    ? "bg-white/20 text-white shadow-sm"
+                    : "bg-white/5 text-muted hover:bg-white/10 hover:text-zinc-200"
+                }`}
+              >
+                <RectangleHorizontal className="w-3.5 h-3.5" />
+                {t("ui.posterShapeLandscape")}
               </button>
             </div>
           </div>

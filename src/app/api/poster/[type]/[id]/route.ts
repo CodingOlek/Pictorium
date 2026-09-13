@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import sharp from "sharp"
 import { initSharp } from "@/lib/sharp-config"
-import { getImages, getDetails, getExternalIds, getKeywords, getReleaseDates, resolveRequestApiKey, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
+import { getImages, getDetails, getExternalIds, getKeywords, getReleaseDates, resolveRequestApiKey, posterUrlOriginal, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
 import { getJWRankings, hasJWOffers } from "@/lib/justwatch"
 import { extractDigitalReleaseDate, isDigitalPreRelease } from "@/lib/pre-release"
 import { getById } from "@/lib/store"
@@ -56,6 +56,7 @@ import {
   isValidHex,
   topLuminance,
 } from "@/lib/poster-render-helpers"
+import { LAND_W, LAND_H } from "@/lib/image-utils"
 import { generatePosterBuffer, type GenerationInput } from "@/lib/poster-service"
 import { computeTopBadge } from "@/lib/poster-badge"
 
@@ -63,7 +64,7 @@ import { resolveImdbToTmdb } from "@/lib/imdb-resolver"
 import { validatePosterQuery } from "@/lib/validation"
 import { decodeConfig } from "@/lib/config-token"
 import { createLogger } from "@/lib/logger"
-import { resolvePosterRenderConfig } from "@/lib/poster-config"
+import { resolvePosterRenderConfig, resolvePosterShape } from "@/lib/poster-config"
 import { selectBestLogo, logoBestLogoFallbackReason } from "@/lib/logo-selection"
 import { resolveStreamQuality } from "@/lib/stream-quality"
 import { combineAbortSignals } from "@/lib/abort-signal"
@@ -392,6 +393,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   let logoPathBuffer: Buffer | null = null
   let logoPath: string | null = null
   let backdropPath: string | null = null
+  // Sfondi TMDB del ramo automatico (details.backdrop_path o primo backdrops
+  // di getImages): fallback per la base landscape quando query/mapping non
+  // ne forniscono uno.
+  let autoBackdropPath: string | null = null
   let backdropScale = 100
   let backdropOffsetX = 0
   let backdropOffsetY = 0
@@ -433,6 +438,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const queryPoster = req.nextUrl.searchParams.get("poster")
   const queryLogo = req.nextUrl.searchParams.get("logo")
   const queryBackdrop = req.nextUrl.searchParams.get("backdrop")
+  // Formato canvas: query `shape` > mapping > config > defaults (stessa
+  // catena degli altri parametri — vedi resolvePosterShape). Solo
+  // "landscape" attiva il ramo 16:9 con base = sfondo TMDB.
+  const isLandscape = resolvePosterShape(req.nextUrl.searchParams, mapping, configOverride, sd) === "landscape"
   const queryGenre = req.nextUrl.searchParams.get("genreName")
   const queryVote = req.nextUrl.searchParams.get("voteAverage")
   const qRsrc = req.nextUrl.searchParams.get("rsrc")
@@ -549,6 +558,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           : imgs
         setTMDBSessionCache(mediaType, tmdbId, { details: det, images, externalIds: ext })
       }
+      // Candidato sfondo per il ramo landscape: backdrop principale TMDB,
+      // poi il primo backdrops di /images (già 16:9 nativi).
+      autoBackdropPath = details.backdrop_path || images.backdrops[0]?.file_path || null
       imdbId = extIds.imdb_id
       // A1: fetch deferito — la media TMDB+IMDb parte subito ma non blocca.
       ratingAbort = imdbId ? new AbortController() : null
@@ -689,6 +701,37 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     etag = `"a${etagBase}"`
   }
 
+  // Landscape senza backdrop esplicito (query `backdrop` o mapping): i rami
+  // query/mapping non toccano TMDB, ma la base 16:9 richiede uno sfondo —
+  // fallback live a details.backdrop_path (poi primo backdrops di /images).
+  // Solo ramo landscape: il portrait non ne ha bisogno. Su errore resta null
+  // e il blocco landscape sotto risponde 404 onesto.
+  if (isLandscape && !queryBackdrop && !mapping?.backdropPath && !autoBackdropPath) {
+    try {
+      const fbApiKey = resolveRequestApiKey(req)
+      const fbLang = req.nextUrl.searchParams.get("lang") || mapping?.language || "it"
+      const cached = getTMDBSessionCache(mediaType, tmdbId)
+      let fbDetails = cached?.details
+      if (!fbDetails) {
+        fbDetails = await getDetails(mediaType, tmdbId, fbLang, fbApiKey, renderAbort.signal, POSTER_TMDB_TIMEOUT_MS)
+        const prev = getTMDBSessionCache(mediaType, tmdbId)
+        setTMDBSessionCache(mediaType, tmdbId, { ...prev ?? undefined, details: fbDetails })
+      }
+      autoBackdropPath = fbDetails?.backdrop_path || null
+      if (!autoBackdropPath) {
+        const fbImages = cached?.images
+          ?? await getImages(mediaType, tmdbId, `${fbLang},en,null`, fbApiKey, renderAbort.signal, POSTER_TMDB_TIMEOUT_MS).catch(() => null)
+        if (fbImages && !cached?.images) {
+          const prev = getTMDBSessionCache(mediaType, tmdbId)
+          setTMDBSessionCache(mediaType, tmdbId, { ...prev ?? undefined, images: fbImages })
+        }
+        autoBackdropPath = fbImages?.backdrops?.[0]?.file_path || null
+      }
+    } catch {
+      autoBackdropPath = null
+    }
+  }
+
   if (!posterPath) {
     clearTimeout(renderDeadline)
     // C1: il ramo non-mappato può già detenere lo slot (logo-fit) — questo
@@ -707,6 +750,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     writePosterError(cacheKey, 404)
     completePosterRender(null)
     return new Response("Poster not found", { status: 404, headers: corsHeaders() })
+  }
+
+  // Ramo landscape: la base è lo sfondo TMDB (query `backdrop` > mapping >
+  // ramo automatico). Senza sfondo non c'è base 16:9 → 404 onesto, non un
+  // portrait camuffato.
+  if (isLandscape) {
+    backdropPath = queryBackdrop || mapping?.backdropPath || autoBackdropPath || backdropPath
+    if (!backdropPath) {
+      clearTimeout(renderDeadline)
+      releaseSlotOnce()
+      writePosterError(cacheKey, 404)
+      completePosterRender(null)
+      return new Response("Landscape backdrop not available", { status: 404, headers: corsHeaders() })
+    }
   }
 
   try {
@@ -763,7 +820,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         logoPathBuffer
           ? Promise.resolve(logoPathBuffer)
           : logoPath ? fetchImg(imgSrc(logoPath), renderAbort.signal).catch(() => null) : Promise.resolve(null),
-        backdropPath ? fetchImg(imgSrc(backdropPath), renderAbort.signal).catch(() => null) : Promise.resolve(null),
+        backdropPath ? fetchImg(isLandscape ? posterUrlOriginal(backdropPath) : imgSrc(backdropPath), renderAbort.signal).catch(() => null) : Promise.resolve(null),
         rankingEnabledEarly
           // R3: signal del watchdog — allo scatto della deadline il fetch
           // abortisce invece di proseguire come zombie in background.
@@ -946,7 +1003,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       ratingAbort?.abort()
     }
 
-    if (!originalBuf) {
+    // Base effettiva: portrait = poster, landscape = sfondo TMDB.
+    const baseBuf = isLandscape ? backdropFetch : originalBuf
+    if (!baseBuf) {
       // Deadline sforato → 503 con negative cache: il fetch dell'immagine è
       // stato abortito dal watchdog, non è un titolo inesistente.
       if (deadlineFired) {
@@ -958,7 +1017,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       // waiter coalesced e per le richieste successive.
       writePosterError(cacheKey, 404)
       completePosterRender(null)
-      return new Response("Poster image not available", { status: 404, headers: corsHeaders() })
+      return new Response(isLandscape ? "Landscape backdrop not available" : "Poster image not available", { status: 404, headers: corsHeaders() })
     }
 
     // rankingResult è autoritativo: il fallback al mapping salvato avviene solo
@@ -971,7 +1030,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     const finalRank = qRank !== null ? (parseInt(qRank, 10) >= 0 ? parseInt(qRank, 10) : rankingRank) : rankingRank
 
     // 6. Resize poster + compute luminance
-    const posterBuf = await sharp(originalBuf).resize(STD_W, STD_H, { fit: 'cover', position: 'centre' }).toBuffer()
+    // Landscape: la base è lo sfondo TMDB ritagliato sul canvas 16:9.
+    const posterBuf = isLandscape
+      ? await sharp(baseBuf).resize(LAND_W, LAND_H, { fit: 'cover', position: 'centre' }).toBuffer()
+      : await sharp(baseBuf).resize(STD_W, STD_H, { fit: 'cover', position: 'centre' }).toBuffer()
     const qTopLight = req.nextUrl.searchParams.get("tl")
 
     // Apply mapping TV metadata (synchronous — no race, no side-effects in parallel closures)
@@ -1051,7 +1113,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY,
       networkLogoOffsetX, networkLogoOffsetY,
       queryExtra, qNetLogo, networkLogo, ribbonSide,
-      preRelease,
+      preRelease, posterShape,
     } = renderConfig
 
     // Il rilevamento (`preReleaseDetected`) cambia nel tempo: non entra nella
@@ -1062,7 +1124,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     const finalQuality = qQualityParam || liveQualityResult || null
 
     const locale = req.nextUrl.searchParams.get("lang") || mapping?.language || "it"
-    const targetCenter = Math.round(30 * STD_H / 570)
+    const targetCenter = Math.round(30 * (isLandscape ? LAND_H : STD_H) / 570)
 
     // 8. Pre-resolve accent color override
     const qAc = req.nextUrl.searchParams.get("ac")
@@ -1106,6 +1168,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           imdbId,
           imdbTop250: !!imdbTop250,
           renderVersion: RENDER_VERSION,
+          shape: isLandscape ? "landscape" : "poster",
         },
         images: {
           poster: posterPath,
@@ -1191,7 +1254,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     const genInput: GenerationInput = {
       // Custom values override internal sources with the same ID, preserving order.
       ratings: customRatingConfig.enabled ? [...new Map([...ratings, ...customRatings].map(item => [item.id, item])).values()] : undefined,
-      posterBuf, logoFetch, backdropFetch,
+      posterBuf, logoFetch, backdropFetch: isLandscape ? null : backdropFetch,
       backdropScale, backdropOffsetX, backdropOffsetY,
       blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness,
       badgesEnabled, rankingEnabled, genreName, voteAverage, badgeStyle,
@@ -1212,9 +1275,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       wikidataResult, tmdbKeywords, locale, t,
       qLabel, queryExtra, qNetLogo, networkLogo, sd,
       accentOverride, imdbTop250, preRelease: applyPreRelease,
-      posterSrc: posterPath,
+      shape: posterShape,
+      posterSrc: isLandscape ? backdropPath : posterPath,
       logoSrc: logoPath,
-      backdropSrc: backdropPath,
+      backdropSrc: isLandscape ? null : backdropPath,
       // C3: render sempre canonico jpeg (tranne ?fmt=avif legacy esplicito).
       format: legacyAvif ? outputFormat : "jpeg",
     }

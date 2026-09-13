@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PictoriumUserConfig } from "./config-token"
-import type { Mapping } from "./types"
+import type { Mapping, PosterShape } from "./types"
 import type { ServerDefaults } from "./server-defaults"
 import { resolveLabelFor } from "./i18n"
 import { SUPPORTED_RATING_SOURCES, DEFAULT_RATING_SOURCES } from "./ratings"
@@ -21,6 +21,28 @@ import {
 
 export function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
+}
+
+/**
+ * Formato canvas — precedenza: query `shape` > mapping salvato >
+ * config token > server defaults > "poster". Solo "landscape" attiva il
+ * ramo 16:9 (base = backdrop TMDB); qualsiasi altro valore → portrait.
+ * Usato dalla route PRIMA del fetch (serve a scegliere la base) e dentro
+ * resolvePosterRenderConfig per coerenza.
+ */
+export function resolvePosterShape(
+  searchParams: URLSearchParams,
+  mapping: Mapping | null,
+  configOverride: PictoriumUserConfig | null,
+  sd: ServerDefaults,
+): PosterShape {
+  const q = (searchParams.get("shape") || "").toLowerCase()
+  if (q === "landscape") return "landscape"
+  if (q === "poster") return "poster"
+  if (mapping?.posterShape === "landscape" || mapping?.posterShape === "poster") return mapping.posterShape
+  if (configOverride?.posterShape === "landscape" || configOverride?.posterShape === "poster") return configOverride.posterShape
+  if (sd.posterShape === "landscape" || sd.posterShape === "poster") return sd.posterShape
+  return "poster"
 }
 
 export interface PosterRenderConfigInput {
@@ -86,6 +108,8 @@ export interface PosterRenderConfig {
   ribbonSide: "left" | "right"
   /** Stato pre-digitale (darken + badge Coming Soon, solo film). Default OFF. */
   preRelease: boolean
+  /** Formato canvas (query `shape` > mapping > config > defaults > "poster"). */
+  posterShape: PosterShape
 }
 
 export function resolvePosterRenderConfig(input: PosterRenderConfigInput): PosterRenderConfig {
@@ -316,6 +340,8 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
   const qPre = q.get("pre")
   const preRelease = qPre !== null ? qPre !== "0" : (configOverride?.preRelease ?? sd.preRelease ?? false)
 
+  const posterShape = resolvePosterShape(q, mapping, configOverride, sd)
+
   return {
     badgeStyle,
     rankingBadgeStyle,
@@ -352,5 +378,6 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
     networkLogo,
     ribbonSide,
     preRelease,
+    posterShape,
   }
 }

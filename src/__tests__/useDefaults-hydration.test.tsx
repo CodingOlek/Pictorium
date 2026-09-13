@@ -56,6 +56,7 @@ const USER_SAVED = {
   networkLogo: true,
   preRelease: false,
   ribbonSide: "left",
+  posterShape: "poster",
   episodeMetadataSource: "tvdb",
   region: "IT",
 }

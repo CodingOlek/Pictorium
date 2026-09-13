@@ -88,6 +88,9 @@ export function buildStremioPosterUrl(input: BuildStremioPosterUrlInput): URL {
     preRelease: input.defaults.preRelease,
     // ribbonSide solo globale: i mapping storici con valore salvato lo ignorano.
     ribbonSide: input.defaults.ribbonSide,
+    // Formato canvas: per-titolo vince sul default globale (come gli altri
+    // parametri espliciti). Emesso solo quando landscape (vedi params).
+    posterShape: mapping?.posterShape ?? input.defaults.posterShape,
   })
 
   params.forEach((value, key) => url.searchParams.set(key, value))

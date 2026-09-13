@@ -13,6 +13,8 @@ interface PosterPreviewProps {
   setImageError: (error: boolean) => void
   imgSrc: string
   onRetry?: () => void
+  /** Formato orizzontale 16:9: cornice video + immagine intera (contain). */
+  landscape?: boolean
 }
 
 export function PosterPreview({
@@ -21,7 +23,8 @@ export function PosterPreview({
   imageError,
   setImageError,
   imgSrc,
-  onRetry
+  onRetry,
+  landscape,
 }: PosterPreviewProps) {
   const selected = usePSelector((v) => v.selected)
   const selectedLogo = usePSelector((v) => v.selectedLogo)
@@ -35,7 +38,7 @@ export function PosterPreview({
   return (
     <div role="img" aria-label={`Preview of ${selected?.title || selected?.name || ""} poster with ${selectedLogo ? "logo" : "no logo"}`}
          className={`preview-frame w-full rounded-[1.35rem] overflow-hidden relative ${previewPoster ? "preview-frame-active" : ""}`}>
-      <div className="relative aspect-[2/3] select-none pointer-events-none bg-zinc-950/70 overflow-hidden rounded-[1.2rem]">
+      <div className={`relative select-none pointer-events-none bg-zinc-950/70 overflow-hidden rounded-[1.2rem] ${landscape ? "aspect-video" : "aspect-[2/3]"}`}>
         {previewUrl ? (
           <>
             <div className="preview-loading-overlay" style={{ opacity: previewLoading ? 1 : 0 }} />
@@ -51,7 +54,7 @@ export function PosterPreview({
               <img
                 src={imgSrc}
                 alt={selected?.title || selected?.name || ""}
-                className="absolute inset-0 w-full h-full object-cover"
+                className={`absolute inset-0 w-full h-full ${landscape ? "object-contain" : "object-cover"}`}
               />
             )}
           </>

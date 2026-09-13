@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useMemo, useCallback } from "react"
-import type { TMDBImage } from "@/lib/types"
+import type { TMDBImage, PosterShape } from "@/lib/types"
 import { useDefaults } from "@/lib/useDefaults"
 import type { BadgeStyle, RankingBadgeStyle } from "@/lib/badge-styles"
 
@@ -45,6 +45,9 @@ export interface PosterEditorCtx {
   setPreRelease: (v: boolean | ((prev: boolean) => boolean)) => void
   ribbonSide: "left" | "right"
   setRibbonSide: (v: "left" | "right" | ((prev: "left" | "right") => "left" | "right")) => void
+  /** Formato canvas del poster in editing (switch per-titolo in EditView). */
+  posterShape: PosterShape
+  setPosterShape: (v: PosterShape | ((prev: PosterShape) => PosterShape)) => void
   episodeMetadataSource: "tmdb" | "tvdb"
   setEpisodeMetadataSource: (v: "tmdb" | "tvdb" | ((prev: "tmdb" | "tvdb") => "tmdb" | "tvdb")) => void
   region: string
@@ -122,6 +125,9 @@ export interface PosterEditorCtx {
   setDefaultPreRelease: (v: boolean | ((prev: boolean) => boolean)) => void
   defaultRibbonSide: "left" | "right"
   setDefaultRibbonSide: (v: "left" | "right" | ((prev: "left" | "right") => "left" | "right")) => void
+  /** Formato canvas di default (Impostazioni globali). */
+  defaultPosterShape: PosterShape
+  setDefaultPosterShape: (v: PosterShape | ((prev: PosterShape) => PosterShape)) => void
   defaultRegion: string
   setDefaultRegion: (v: string | ((prev: string) => string)) => void
   loadDefaultsToState: () => void
@@ -252,7 +258,7 @@ export function PosterEditorProvider({
   const [customBadge, setCustomBadge] = useState<string | null>(null)
 
   const {
-    globalBadges, rankingBadges, networkLogo, preRelease, ribbonSide,
+    globalBadges, rankingBadges, networkLogo, preRelease, ribbonSide, posterShape,
     badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources,
     gradientHeight, blurIntensity, blurFade, blurDarkness, blurEnabled,
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY,
@@ -268,7 +274,7 @@ export function PosterEditorProvider({
     defaultGenreBadgeOffsetX, defaultGenreBadgeOffsetY, defaultQualityBadgeOffsetX, defaultQualityBadgeOffsetY,
     defaultNetworkLogoOffsetX, defaultNetworkLogoOffsetY,
     defaultBadgeGenre, defaultBadgeYear, defaultBadgeRating, defaultBadgeQuality, defaultCustomRatings, defaultCustomRatingEndpoint, defaultCustomRatingApiKeyHeader, defaultRatingSources,
-    defaultAutoRotateClean, defaultLogoFitEnabled, defaultNetworkLogo, defaultPreRelease, defaultRibbonSide,
+    defaultAutoRotateClean, defaultLogoFitEnabled, defaultNetworkLogo, defaultPreRelease, defaultRibbonSide, defaultPosterShape,
     episodeMetadataSource, defaultEpisodeMetadataSource,
     region, defaultRegion,
     loadDefaultsToState, update,
@@ -329,6 +335,11 @@ export function PosterEditorProvider({
       const next = typeof v === "function" ? v(ribbonSide) : v
       update({ ribbonSide: next })
     }, [ribbonSide, update])
+  const setPosterShape = useCallback(
+    (v: PosterShape | ((prev: PosterShape) => PosterShape)) => {
+      const next = typeof v === "function" ? v(posterShape) : v
+      update({ posterShape: next })
+    }, [posterShape, update])
   // Regola di split corrente/default (vale per TUTTI i setter di questo file):
   // i setter dell'editor (setX) scrivono solo il valore corrente del poster
   // aperto, i setter delle Impostazioni (setDefaultX) solo il default globale.
@@ -601,6 +612,11 @@ export function PosterEditorProvider({
       const next = typeof v === "function" ? v(defaultRibbonSide) : v
       update({ defaultRibbonSide: next })
     }, [defaultRibbonSide, update])
+  const setDefaultPosterShape = useCallback(
+    (v: PosterShape | ((prev: PosterShape) => PosterShape)) => {
+      const next = typeof v === "function" ? v(defaultPosterShape) : v
+      update({ defaultPosterShape: next })
+    }, [defaultPosterShape, update])
   const setEpisodeMetadataSource = useCallback(
     (v: "tmdb" | "tvdb" | ((prev: "tmdb" | "tvdb") => "tmdb" | "tvdb")) => {
       const next = typeof v === "function" ? v(episodeMetadataSource) : v
@@ -653,6 +669,8 @@ export function PosterEditorProvider({
       setPreRelease,
       ribbonSide,
       setRibbonSide,
+      posterShape,
+      setPosterShape,
       episodeMetadataSource,
       setEpisodeMetadataSource,
       region,
@@ -729,6 +747,8 @@ export function PosterEditorProvider({
       setDefaultPreRelease,
       defaultRibbonSide,
       setDefaultRibbonSide,
+      defaultPosterShape,
+      setDefaultPosterShape,
       defaultRegion,
       setDefaultRegion,
       loadDefaultsToState,
@@ -829,6 +849,7 @@ export function PosterEditorProvider({
       networkLogo, setNetworkLogo,
       preRelease, setPreRelease,
       ribbonSide, setRibbonSide,
+      posterShape, setPosterShape,
       episodeMetadataSource, setEpisodeMetadataSource,
       region, setRegion,
       defaultRegion, setDefaultRegion,
@@ -878,6 +899,7 @@ export function PosterEditorProvider({
       defaultNetworkLogo, setDefaultNetworkLogo,
       defaultPreRelease, setDefaultPreRelease,
       defaultRibbonSide, setDefaultRibbonSide,
+      defaultPosterShape, setDefaultPosterShape,
       loadDefaultsToState,
 
       // Blur

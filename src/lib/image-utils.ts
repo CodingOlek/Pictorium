@@ -19,6 +19,12 @@ import sharp from "sharp"
 export const STD_W = 500
 export const STD_H = 750
 
+// ---- Landscape poster dimensions (prova: ?shape=landscape) ----
+// Canvas 16:9 per i poster orizzontali stile Nuvio: la base è il backdrop
+// TMDB (sfondo, già 16:9 nativo) invece del poster verticale.
+export const LAND_W = 768
+export const LAND_H = 432
+
 // ---- Math utilities ----
 
 /**

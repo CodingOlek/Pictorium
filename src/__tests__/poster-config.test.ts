@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { resolvePosterRenderConfig, clamp, type PosterRenderConfigInput } from "@/lib/poster-config"
+import { resolvePosterRenderConfig, resolvePosterShape, clamp, type PosterRenderConfigInput } from "@/lib/poster-config"
 import type { Mapping } from "@/lib/types"
 import type { PictoriumUserConfig } from "@/lib/config-token"
 
@@ -558,5 +558,29 @@ describe("resolvePosterRenderConfig", () => {
       configOverride: config({ ratingSources: ["letterboxd", "trakt"] }),
     }))
     expect(rConfig.ratingSources).toEqual(["letterboxd", "trakt"])
+  })
+
+  it("posterShape: query shape wins, then mapping, then config token, then sd, then poster", () => {
+    expect(resolvePosterShape(new URLSearchParams({ shape: "landscape" }), mapping({ posterShape: "poster" }), config({ posterShape: "poster" }), { posterShape: "poster" })).toBe("landscape")
+    expect(resolvePosterShape(new URLSearchParams({ shape: "poster" }), mapping({ posterShape: "landscape" }), config({ posterShape: "landscape" }), { posterShape: "landscape" })).toBe("poster")
+    expect(resolvePosterShape(new URLSearchParams(), mapping({ posterShape: "landscape" }), config({ posterShape: "poster" }), { posterShape: "poster" })).toBe("landscape")
+    expect(resolvePosterShape(new URLSearchParams(), null, config({ posterShape: "landscape" }), { posterShape: "poster" })).toBe("landscape")
+    expect(resolvePosterShape(new URLSearchParams(), null, null, { posterShape: "landscape" })).toBe("landscape")
+    expect(resolvePosterShape(new URLSearchParams(), null, null, {})).toBe("poster")
+  })
+
+  it("posterShape: unknown query value falls back to mapping/config/sd (never garbage)", () => {
+    expect(resolvePosterShape(new URLSearchParams({ shape: "panorama" }), mapping({ posterShape: "landscape" }), null, {})).toBe("landscape")
+    expect(resolvePosterShape(new URLSearchParams({ shape: "panorama" }), null, null, {})).toBe("poster")
+  })
+
+  it("resolvePosterRenderConfig exposes posterShape from the same chain", () => {
+    expect(resolvePosterRenderConfig(baseInput()).posterShape).toBe("poster")
+    expect(resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ shape: "landscape" }),
+    })).posterShape).toBe("landscape")
+    expect(resolvePosterRenderConfig(baseInput({
+      mapping: mapping({ posterShape: "landscape" }),
+    })).posterShape).toBe("landscape")
   })
 })

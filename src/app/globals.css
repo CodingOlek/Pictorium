@@ -1779,6 +1779,28 @@ select:focus-visible {
   }
 }
 
+/* Variante orizzontale 16:9 (vista landscape): a differenza del portrait
+   (alto e stretto, guidato dall'altezza), il 16:9 sta sempre in altezza —
+   quindi sizing guidato dalla larghezza della colonna, mai oltre il 100%.
+   Un max-width fisso (es. 640px) traboccherebbe dalla colonna centrale
+   tagliando l'immagine ai lati. */
+.editor-preview-fit-landscape {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+@media (min-width: 1024px) {
+  .editor-preview-fit-landscape {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: none;
+    aspect-ratio: 16 / 9;
+  }
+}
+
 /* Riempie la box di dimensionamento (override di position:relative di .editor-stage) */
 .editor-stage-fill {
   position: absolute;

@@ -57,6 +57,8 @@ export interface ServerDefaults {
   /** Effetto pre-digitale (darken + badge Coming Soon, solo film). Default OFF. */
   preRelease?: boolean
   ribbonSide?: "left" | "right"
+  /** Formato canvas globale: "landscape" = 16:9 da backdrop TMDB. Default portrait. */
+  posterShape?: import("@/lib/types").PosterShape
   episodeMetadataSource?: "tmdb" | "tvdb"
   /** Regione classifiche JustWatch/FlixPatrol + lingua titoli (codice JW, es. "IT"). */
   region?: string
@@ -125,6 +127,8 @@ function defaultsFromEnv(): ServerDefaults {
   const bs = getEnv("BADGE_STYLE")?.trim()
   const rbs = getEnv("RANKING_BADGE_STYLE")?.trim()
   const side = getEnv("RIBBON_SIDE")?.trim().toLowerCase()
+  const shapeEnv = getEnv("POSTER_SHAPE")?.trim().toLowerCase()
+  if (shapeEnv === "poster" || shapeEnv === "landscape") d.posterShape = shapeEnv
   const blurI = envNum("BLUR_INTENSITY")
   const blurF = envNum("BLUR_FADE")
   const blurD = envNum("BLUR_DARKNESS")

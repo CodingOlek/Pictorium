@@ -1,5 +1,12 @@
 import type { BadgeStyle, RankingBadgeStyle } from "./badge-styles"
 
+/** Formato canvas del poster: verticale standard o orizzontale 16:9 (Nuvio). */
+export type PosterShape = "poster" | "landscape"
+
+export function isPosterShape(value: unknown): value is PosterShape {
+  return value === "poster" || value === "landscape"
+}
+
 export interface SearchResult {
   id: number
   media_type: "movie" | "tv"
@@ -123,6 +130,8 @@ export interface Mapping {
   autoRotateClean?: boolean | null
   networkLogo?: boolean | null
   ribbonSide?: "left" | "right" | null
+  /** Formato canvas per-titolo: "landscape" = 16:9 da backdrop TMDB. Default portrait. */
+  posterShape?: PosterShape | null
   /** Logo	path TMDB del network/produttore (es. /8AcaW...png) — usato come fallback quando non c'è SVG locale. */
   networkLogoPath?: string | null
   networkLogoName?: string | null

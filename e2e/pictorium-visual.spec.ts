@@ -336,6 +336,22 @@ test.describe("poster API — functional", () => {
     const buffer = await res.body()
     expect(buffer.length).toBeGreaterThan(1000)
   })
+
+  test("landscape shape — 16:9 image rendered from backdrop", async ({ page }) => {
+    // ?shape=landscape usa lo sfondo TMDB come base invece del poster
+    // verticale: l'immagine risultante è 768×432.
+    const url = posterUrl({ backdrop: "/mocked/backdrop.jpg", shape: "landscape", genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0" })
+    const poster = await renderPoster(page, url)
+    const size = await poster.evaluate((img: HTMLImageElement) => ({ w: img.naturalWidth, h: img.naturalHeight }))
+    expect(size).toEqual({ w: 768, h: 432 })
+  })
+
+  test("landscape shape without backdrop — 404", async ({ request }) => {
+    // Senza sfondo non c'è base 16:9: 404 onesto, mai un portrait camuffato.
+    const url = posterUrl({ shape: "landscape", badges: "0", ranking: "0" })
+    const res = await request.get(url)
+    expect(res.status()).toBe(404)
+  })
 })
 
 //
@@ -462,5 +478,13 @@ test.describe("poster API — visual regression", () => {
     const url = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "1", rank: "3", rs: "netflix", side: "right", quality: "4K" })
     const poster = await renderPoster(page, url)
     await expect(poster).toHaveScreenshot("poster-quality-stremio-left.png", { maxDiffPixelRatio: 0.10 })
+  })
+
+  test("landscape shape — screenshot", async ({ page }) => {
+    // Formato orizzontale 16:9 da sfondo TMDB (stile Nuvio): base backdrop +
+    // logo/badge adattati al canvas landscape.
+    const url = posterUrl({ backdrop: "/mocked/backdrop.jpg", shape: "landscape", genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0" })
+    const poster = await renderPoster(page, url)
+    await expect(poster).toHaveScreenshot("poster-landscape.png", { maxDiffPixelRatio: 0.10 })
   })
 })

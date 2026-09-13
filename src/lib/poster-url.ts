@@ -7,6 +7,7 @@ import { TOP_LIGHT_LUMINANCE } from "./constants"
 import type { SearchResult, TMDBImage } from "./types"
 import type { EnrichedAnimeItem } from "./validation"
 import type { BadgeStyle, RankingBadgeStyle } from "./badge-styles"
+import type { PosterShape } from "./types"
 
 interface BadgeParams {
   globalBadges: boolean
@@ -50,6 +51,8 @@ interface BadgeParams {
   /** Effetto pre-digitale (darken + Coming Soon, solo film). Default OFF. */
   preRelease?: boolean
   ribbonSide?: "left" | "right"
+  /** Formato canvas del poster in editing (preview WYSIWYG). */
+  posterShape?: PosterShape
 }
 
 interface PosterState {
@@ -109,6 +112,7 @@ export function buildUrlPattern(bp: BadgeParams & { tmdbKey: string; lang: strin
     networkLogo: bp.networkLogo,
     preRelease: bp.preRelease,
     ribbonSide: bp.ribbonSide,
+    posterShape: bp.posterShape,
     topBadgeScale: bp.topBadgeScale,
     topBadgeOffsetX: bp.topBadgeOffsetX,
     topBadgeOffsetY: bp.topBadgeOffsetY,
@@ -217,6 +221,10 @@ export function buildPreviewUrl(ps: PosterState, bp: BadgeParams): string {
   // default right in modalità Stremio) e la preview rendeva a destra anche
   // quando l'editor mostra lo stato sinistra.
   if (bp.ribbonSide) params.push(`side=${bp.ribbonSide}`)
+  // Shape SEMPRE esplicito in preview (come badges/ranking/cr): senza, un
+  // mapping salvato con shape diversa scavalcerebbe il toggle editor (desync
+  // WYSIWYG) — vedi catena query > mapping > config > defaults.
+  params.push(`shape=${bp.posterShape === "landscape" ? "landscape" : "poster"}`)
   if (ps.accentColor) params.push(`ac=${encodeURIComponent(ps.accentColor)}`)
   // Fix M16: tl è inviato SOLO a calcolo completato: con topEdgeColor null
   // (colore non ancora campionato) la preview forzava tl=1 (testo chiaro)
