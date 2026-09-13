@@ -346,11 +346,13 @@ test.describe("poster API — functional", () => {
     expect(size).toEqual({ w: 768, h: 432 })
   })
 
-  test("landscape shape without backdrop — 404", async ({ request }) => {
-    // Senza sfondo non c'è base 16:9: 404 onesto, mai un portrait camuffato.
+  test("landscape shape without backdrop — pillarbox fallback, valid image", async ({ page }) => {
+    // Senza sfondo TMDB la base diventa pillarbox dal poster: mai 404,
+    // nessun riquadro rotto su Stremio. Dimensioni sempre 768×432.
     const url = posterUrl({ shape: "landscape", badges: "0", ranking: "0" })
-    const res = await request.get(url)
-    expect(res.status()).toBe(404)
+    const poster = await renderPoster(page, url)
+    const size = await poster.evaluate((img: HTMLImageElement) => ({ w: img.naturalWidth, h: img.naturalHeight }))
+    expect(size).toEqual({ w: 768, h: 432 })
   })
 })
 
@@ -486,5 +488,12 @@ test.describe("poster API — visual regression", () => {
     const url = posterUrl({ backdrop: "/mocked/backdrop.jpg", shape: "landscape", genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0" })
     const poster = await renderPoster(page, url)
     await expect(poster).toHaveScreenshot("poster-landscape.png", { maxDiffPixelRatio: 0.10 })
+  })
+
+  test("landscape shape with rank badge — screenshot", async ({ page }) => {
+    // Il badge superiore centrale in landscape è reso al 120% (topBadgePw).
+    const url = posterUrl({ backdrop: "/mocked/backdrop.jpg", shape: "landscape", genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "1", rank: "3", label: "Top 3", rs: "pill" })
+    const poster = await renderPoster(page, url)
+    await expect(poster).toHaveScreenshot("poster-landscape-rank.png", { maxDiffPixelRatio: 0.10 })
   })
 })

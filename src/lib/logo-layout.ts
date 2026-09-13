@@ -7,13 +7,20 @@ type LogoLayoutInput = {
   readonly logoOffsetX: number
   readonly logoOffsetY: number
   readonly hasBadges: boolean
+  /** Allineamento orizzontale: "center" (default) o "left" (Cinematic). */
+  readonly align?: "left" | "center"
   /** Cap larghezza logo in % del poster (default 100 = nessun cap). */
   readonly maxWidthPct?: number
+  /** Cap altezza logo in % dell'altezza poster (default 100 = nessun cap).
+   *  Impedisce ai loghi quadrati/verticali di esplodere in altezza. */
+  readonly maxHeightPct?: number
   /** Margine inferiore in % dell'altezza poster (default 10). */
   readonly bottomMarginPct?: number
+  /** Offset Y fisso di calibrazione (es. +55 nel layout landscape). */
+  readonly topOffset?: number
 }
 
-type LogoBoxInput = Pick<LogoLayoutInput, "posterW" | "posterH" | "logoW" | "logoH" | "logoScale" | "maxWidthPct">
+type LogoBoxInput = Pick<LogoLayoutInput, "posterW" | "posterH" | "logoW" | "logoH" | "logoScale" | "maxWidthPct" | "maxHeightPct">
 
 type LogoBox = {
   readonly width: number
@@ -49,8 +56,18 @@ export function computeLogoBox(input: LogoBoxInput): LogoBox {
   const capPct = input.maxWidthPct != null && Number.isFinite(input.maxWidthPct)
     ? Math.min(Math.max(input.maxWidthPct, 10), 100) / 100
     : 1
+  const capHeightPct = input.maxHeightPct != null && Number.isFinite(input.maxHeightPct)
+    ? Math.min(Math.max(input.maxHeightPct, 10), 100) / 100
+    : 1
   const targetW = Math.min(Math.round(posterW * scalePct), Math.round(posterW * capPct), posterW)
-  const targetH = Math.round(logoH * (targetW / logoW))
+  let targetH = Math.round(logoH * (targetW / logoW))
+  // Vincolo altezza: i loghi quadrati/verticali scalano per larghezza e
+  // possono superare l'altezza utile (in landscape il canvas è basso).
+  const maxAllowedH = Math.round(posterH * capHeightPct)
+  if (targetH > maxAllowedH) {
+    targetH = Math.max(maxAllowedH, 1)
+    return { width: Math.max(Math.round(logoW * (targetH / logoH)), 1), height: targetH }
+  }
   if (targetH <= posterH) return { width: targetW, height: targetH }
 
   const ratio = posterH / targetH
@@ -58,6 +75,11 @@ export function computeLogoBox(input: LogoBoxInput): LogoBox {
     width: Math.max(Math.round(targetW * ratio), 1),
     height: posterH,
   }
+}
+
+/** Padding sinistro dell'ancoraggio "left", in scala col canvas (36px a 768). */
+export function logoAlignPadX(posterW: number): number {
+  return Math.round(36 * (sanePositive(posterW, 768) / 768))
 }
 
 function bottomMargin(input: { readonly bottomMarginPct?: number }): number {
@@ -71,8 +93,10 @@ export function computeLogoLayout(input: LogoLayoutInput): LogoLayout {
   const box = computeLogoBox(input)
   const margin = bottomMargin(input)
   const badgeOffset = input.hasBadges ? 0 : Math.round(40 * posterH / 1500)
-  const left = Math.round((posterW - box.width) / 2 + input.logoOffsetX)
-  const top = Math.max(0, Math.round(posterH - box.height - posterH * margin + input.logoOffsetY + badgeOffset))
+  const left = input.align === "left"
+    ? logoAlignPadX(posterW) + input.logoOffsetX
+    : Math.round((posterW - box.width) / 2 + input.logoOffsetX)
+  const top = Math.max(0, Math.round(posterH - box.height - posterH * margin + input.logoOffsetY + badgeOffset + (input.topOffset ?? 0)))
   return { ...box, left, top }
 }
 
@@ -82,8 +106,13 @@ export function computeLogoOffsetBounds(input: Omit<LogoLayoutInput, "logoOffset
   const box = computeLogoBox(input)
   const margin = bottomMargin(input)
   const badgeOffset = input.hasBadges ? 0 : Math.round(40 * posterH / 1500)
+  const baseTop = Math.round(posterH - box.height - posterH * margin + badgeOffset + (input.topOffset ?? 0))
+  const maxY = Math.round(posterH * margin - badgeOffset - (input.topOffset ?? 0))
+  // Center: corsa simmetrica attorno al centro; left: dal bordo sinistro
+  // (meno padX) al bordo destro (meno padX e larghezza logo).
+  const padX = logoAlignPadX(posterW)
   const halfX = Math.round((posterW - box.width) / 2)
-  const baseTop = Math.round(posterH - box.height - posterH * margin + badgeOffset)
-  const maxY = Math.round(posterH * margin - badgeOffset)
-  return { minX: cleanZero(-halfX), maxX: cleanZero(halfX), minY: cleanZero(-baseTop), maxY: cleanZero(maxY) }
+  const minX = input.align === "left" ? -padX : -halfX
+  const maxX = input.align === "left" ? posterW - box.width - padX : halfX
+  return { minX: cleanZero(minX), maxX: cleanZero(maxX), minY: cleanZero(-baseTop), maxY: cleanZero(maxY) }
 }

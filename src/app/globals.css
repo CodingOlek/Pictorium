@@ -115,6 +115,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
   transform: scale(1.15);
   box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.5);
 }
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 7px rgb(var(--accent-rgb) / 0.35);
+}
 .ui-accent input[type="range"]::-webkit-slider-thumb:hover {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent, var(--color-accent-orange)) 50%, transparent);
 }
@@ -148,6 +152,9 @@ input[type="range"]::-moz-range-thumb {
 .ui-accent input[type="range"]::-moz-range-thumb {
   background: var(--color-accent, var(--color-accent-orange));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent, var(--color-accent-orange)) 50%, transparent);
+}
+input[type="range"]::-moz-range-thumb:active {
+  transform: scale(1.3);
 }
 
 @keyframes overlay-in {

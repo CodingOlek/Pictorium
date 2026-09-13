@@ -59,6 +59,8 @@ export interface ServerDefaults {
   ribbonSide?: "left" | "right"
   /** Formato canvas globale: "landscape" = 16:9 da backdrop TMDB. Default portrait. */
   posterShape?: import("@/lib/types").PosterShape
+  /** Allineamento blocco logo/metadati (default di formato se assente). */
+  logoAlign?: "left" | "center"
   episodeMetadataSource?: "tmdb" | "tvdb"
   /** Regione classifiche JustWatch/FlixPatrol + lingua titoli (codice JW, es. "IT"). */
   region?: string
@@ -129,6 +131,8 @@ function defaultsFromEnv(): ServerDefaults {
   const side = getEnv("RIBBON_SIDE")?.trim().toLowerCase()
   const shapeEnv = getEnv("POSTER_SHAPE")?.trim().toLowerCase()
   if (shapeEnv === "poster" || shapeEnv === "landscape") d.posterShape = shapeEnv
+  const alignEnv = getEnv("LOGO_ALIGN")?.trim().toLowerCase()
+  if (alignEnv === "left" || alignEnv === "center") d.logoAlign = alignEnv
   const blurI = envNum("BLUR_INTENSITY")
   const blurF = envNum("BLUR_FADE")
   const blurD = envNum("BLUR_DARKNESS")

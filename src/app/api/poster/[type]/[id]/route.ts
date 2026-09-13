@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import sharp from "sharp"
 import { initSharp } from "@/lib/sharp-config"
-import { getImages, getDetails, getExternalIds, getKeywords, getReleaseDates, resolveRequestApiKey, posterUrlOriginal, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
+import { getImages, getDetails, getExternalIds, getKeywords, getReleaseDates, resolveRequestApiKey, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
 import { getJWRankings, hasJWOffers } from "@/lib/justwatch"
 import { extractDigitalReleaseDate, isDigitalPreRelease } from "@/lib/pre-release"
 import { getById } from "@/lib/store"
@@ -17,7 +17,7 @@ import type { EnrichedAnimeItem } from "@/lib/validation"
 import { fetchMDBList, type MDBListEntry } from "@/lib/mdblist"
 import { fetchAggregatedRating, calculateAverageRating } from "@/lib/ratings"
 import { isImdbTop250 } from "@/lib/imdb-top250"
-import { getEffectiveRotationState, tryRotatePoster } from "@/lib/poster-rotation"
+import { getEffectiveRotationState, tryRotatePoster, getEffectiveBackdropRotationState, tryRotateBackdrop } from "@/lib/poster-rotation"
 import { getTMDBSessionCache, setTMDBSessionCache } from "@/lib/tmdb-session-cache"
 import { mappingVersionParam } from "@/lib/stremio-poster-url"
 import { RENDER_VERSION } from "@/lib/render-version"
@@ -56,7 +56,7 @@ import {
   isValidHex,
   topLuminance,
 } from "@/lib/poster-render-helpers"
-import { LAND_W, LAND_H } from "@/lib/image-utils"
+import { LAND_W, LAND_H, landscapeBackdropUrl, pillarboxLandscapeBase } from "@/lib/image-utils"
 import { generatePosterBuffer, type GenerationInput } from "@/lib/poster-service"
 import { computeTopBadge } from "@/lib/poster-badge"
 
@@ -84,10 +84,14 @@ const log = createLogger("poster")
 // level: un cambio env richiede restart, non hot-reload.
 const RENDER_TIMEOUT_MS = (() => {
   const raw = envWithFallback("RENDER_TIMEOUT_MS")
-  const n = raw ? parseInt(raw, 10) : 30000
+  // Vercel Hobby: 10s di limite funzione — con 30s di deadline la piattaforma
+  // chiuderebbe con 504 prima del nostro 503 degradato. Default hobby-safe
+  // SOLO se l'utente non ha impostato un valore esplicito (su Pro vale 30s).
+  const fallback = process.env.VERCEL && raw === undefined ? 8500 : 30000
+  const n = raw ? parseInt(raw, 10) : fallback
   // Clamp superiore = maxDuration (40s): un timeout interno più lungo del
   // limite della funzione serverless non avrebbe mai tempo di scattare (finding 11).
-  return Number.isFinite(n) && n >= 1000 && n <= 40000 ? n : 30000
+  return Number.isFinite(n) && n >= 1000 && n <= 40000 ? n : fallback
 })()
 
 // D5: tetto TMDB nel path poster (slot-bound). Un singolo fetch TMDB appeso
@@ -190,13 +194,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const langRegion = langParam ? (parseRegion(langParam) ?? defaultRegionForLang(langParam)) : null
   const posterRegion = getRegionDef(qRegion ?? configRegion ?? langRegion ?? normalizeRegion(sd.region))
 
-  // Auto-rotate clean poster
-  const rotationState = getEffectiveRotationState(mapping)
-  const isRotating = rotationState.isRotating
-  if (isRotating && mapping) {
+  // Formato canvas PRIMA della rotazione: in landscape ruota il backdrop
+  // (cleanBackdrops), in portrait il poster (cleanPosters). Stessa catena
+  // query > mapping > config > defaults usata dal render.
+  const earlyLandscape = resolvePosterShape(req.nextUrl.searchParams, mapping, configOverride, sd) === "landscape"
+
+  // Auto-rotate 24h: sfondi landscape o poster verticali a seconda del formato.
+  let isRotating = false
+  if (mapping) {
     try {
-      const rotated = await tryRotatePoster(mapping, rotationState)
-      if (rotated) mapping = rotated
+      if (earlyLandscape) {
+        const backdropState = getEffectiveBackdropRotationState(mapping)
+        isRotating = backdropState.isRotating
+        const rotated = await tryRotateBackdrop(mapping, backdropState)
+        if (rotated) mapping = rotated
+      } else {
+        const posterState = getEffectiveRotationState(mapping)
+        isRotating = posterState.isRotating
+        const rotated = await tryRotatePoster(mapping, posterState)
+        if (rotated) mapping = rotated
+      }
     } catch (error) {
       log.warn("Auto-rotate failed", { error: error instanceof Error ? error.message : String(error) })
     }
@@ -226,7 +243,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   cacheParams.delete("api_key")
   if (typeof cacheParams.sort === "function") cacheParams.sort()
   const cachedRank = mapping?.trendRank ?? null
-  const rotateKey = isRotating ? `:ci${mapping?.cleanPosterIndex ?? "x"}` : ""
+  const rotateKey = isRotating
+    ? (earlyLandscape ? `:bi${mapping?.cleanBackdropIndex ?? "x"}` : `:ci${mapping?.cleanPosterIndex ?? "x"}`)
+    : ""
   const mapVersion = mapping?.updatedAt ? `:mu${mapping.updatedAt}` : ""
   const configHash = configOverride ? hashKey(JSON.stringify(configOverride)) : ""
   const outputFormat = resolveImageFormat(req.headers.get("accept"), req.nextUrl.searchParams.get("fmt") || req.nextUrl.searchParams.get("format"))
@@ -753,17 +772,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   }
 
   // Ramo landscape: la base è lo sfondo TMDB (query `backdrop` > mapping >
-  // ramo automatico). Senza sfondo non c'è base 16:9 → 404 onesto, non un
-  // portrait camuffato.
+  // ramo automatico). Senza sfondo la base diventa pillarbox dal poster
+  // (mai 404: nessun riquadro rotto su Stremio).
   if (isLandscape) {
     backdropPath = queryBackdrop || mapping?.backdropPath || autoBackdropPath || backdropPath
-    if (!backdropPath) {
-      clearTimeout(renderDeadline)
-      releaseSlotOnce()
-      writePosterError(cacheKey, 404)
-      completePosterRender(null)
-      return new Response("Landscape backdrop not available", { status: 404, headers: corsHeaders() })
-    }
   }
 
   try {
@@ -820,7 +832,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         logoPathBuffer
           ? Promise.resolve(logoPathBuffer)
           : logoPath ? fetchImg(imgSrc(logoPath), renderAbort.signal).catch(() => null) : Promise.resolve(null),
-        backdropPath ? fetchImg(isLandscape ? posterUrlOriginal(backdropPath) : imgSrc(backdropPath), renderAbort.signal).catch(() => null) : Promise.resolve(null),
+        backdropPath ? fetchImg(isLandscape ? landscapeBackdropUrl(backdropPath) : imgSrc(backdropPath), renderAbort.signal).catch(() => null) : Promise.resolve(null),
         rankingEnabledEarly
           // R3: signal del watchdog — allo scatto della deadline il fetch
           // abortisce invece di proseguire come zombie in background.
@@ -1003,8 +1015,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       ratingAbort?.abort()
     }
 
-    // Base effettiva: portrait = poster, landscape = sfondo TMDB.
-    const baseBuf = isLandscape ? backdropFetch : originalBuf
+    // Base effettiva: portrait = poster; landscape = sfondo TMDB o, in sua
+    // assenza, pillarbox ricavato dal poster (vedi sotto).
+    const baseBuf = isLandscape ? (backdropFetch ?? originalBuf) : originalBuf
     if (!baseBuf) {
       // Deadline sforato → 503 con negative cache: il fetch dell'immagine è
       // stato abortito dal watchdog, non è un titolo inesistente.
@@ -1030,9 +1043,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     const finalRank = qRank !== null ? (parseInt(qRank, 10) >= 0 ? parseInt(qRank, 10) : rankingRank) : rankingRank
 
     // 6. Resize poster + compute luminance
-    // Landscape: la base è lo sfondo TMDB ritagliato sul canvas 16:9.
+    // Landscape: base = sfondo TMDB ritagliato sul canvas 16:9, oppure
+    // pillarbox dal poster quando il titolo non ha sfondi.
     const posterBuf = isLandscape
-      ? await sharp(baseBuf).resize(LAND_W, LAND_H, { fit: 'cover', position: 'centre' }).toBuffer()
+      ? (backdropFetch
+          ? await sharp(backdropFetch).resize(LAND_W, LAND_H, { fit: 'cover', position: 'centre' }).toBuffer()
+          : await pillarboxLandscapeBase(baseBuf))
       : await sharp(baseBuf).resize(STD_W, STD_H, { fit: 'cover', position: 'centre' }).toBuffer()
     const qTopLight = req.nextUrl.searchParams.get("tl")
 
@@ -1113,7 +1129,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY,
       networkLogoOffsetX, networkLogoOffsetY,
       queryExtra, qNetLogo, networkLogo, ribbonSide,
-      preRelease, posterShape,
+      preRelease, posterShape, logoAlign,
     } = renderConfig
 
     // Il rilevamento (`preReleaseDetected`) cambia nel tempo: non entra nella
@@ -1276,6 +1292,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       qLabel, queryExtra, qNetLogo, networkLogo, sd,
       accentOverride, imdbTop250, preRelease: applyPreRelease,
       shape: posterShape,
+      logoAlign,
       posterSrc: isLandscape ? backdropPath : posterPath,
       logoSrc: logoPath,
       backdropSrc: isLandscape ? null : backdropPath,

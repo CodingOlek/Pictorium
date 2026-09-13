@@ -6,6 +6,7 @@ import { usePSelector } from "@/lib/context"
 import { useT } from "@/lib/contexts/TranslationContext"
 import { usePosterEditor } from "@/lib/contexts/PosterEditorContext"
 import type { TMDBImage } from "@/lib/types"
+import { effectiveMappingForShape, type LandscapeSettings } from "@/lib/types"
 import { PosterOptions } from "@/components/PosterOptions"
 import { BackdropOptions } from "@/components/BackdropOptions"
 import { LogoOptions } from "@/components/LogoOptions"
@@ -90,26 +91,84 @@ export default function EditView() {
   // Mobile: dopo il tap su un poster salta ad "Anteprima" (nella tab Poster
   // non si vedrebbe alcun feedback). Solo sotto lg, dove lo switcher esiste;
   // su desktop resti dove sei per confrontare varianti.
-  // Landscape: senza sfondo esplicito seleziona in automatico il primo di
-  // TMDB. Solo titoli senza mapping: un titolo salvato mantiene il backdrop
-  // congelato nel mapping (o nessun backdrop se non ne aveva).
+  // Landscape: senza sfondo esplicito seleziona in automatico uno sfondo.
+  // - Titolo con mapping che HA un backdrop: ripristina quello salvato
+  //   (mai sovrascritto dal primo TMDB).
+  // - Mapping senza backdrop o titolo nuovo: primo sfondo TMDB.
   const selectedMappingKey = selected ? `${selected.media_type}:${selected.id}` : null
-  const hasMapping = selectedMappingKey ? mappingsMap.has(selectedMappingKey) : false
+  const selectedMapping = selectedMappingKey ? mappingsMap.get(selectedMappingKey) : undefined
+  const hasMapping = !!selectedMapping
   useEffect(() => {
     if (ed.posterShape !== "landscape") return
     if (ed.selectedBackdrop) return
+    if (selectedMapping?.backdropPath) {
+      // Ripristino diretto (NON selectBackdrop: quello azzererebbe
+      // backdropScale/offset già caricati dal mapping).
+      const saved = ed.backdrops.find((b) => b.file_path === selectedMapping.backdropPath)
+      ed.setSelectedBackdrop(saved ?? { file_path: selectedMapping.backdropPath, iso_639_1: null, vote_average: 0, width: 0, height: 0 })
+      return
+    }
     if (hasMapping) return
     if (ed.backdrops.length === 0) return
     void selectBackdrop(ed.backdrops[0])
-  }, [ed.posterShape, ed.selectedBackdrop, hasMapping, ed.backdrops, selectBackdrop])
+  }, [ed.posterShape, ed.selectedBackdrop, hasMapping, selectedMapping, ed.backdrops, selectBackdrop]) // eslint-disable-line react-hooks/exhaustive-deps -- dipendenze granulari intenzionali: `ed` intero rifarebbe scattare l'effetto a ogni tick editor e riselezionerebbe dopo una deselezione volontaria
 
+  // Dual-format: stash degli slider non salvati per formato. Senza, passare
+  // da A a B e ritorno perderebbe in silenzio le modifiche non salvate di A
+  // (lo switch caricherebbe i valori salvati di B sopra quelle di A). Lo
+  // stash è per-titolo: cambiando titolo si azzera (selectedMappingKey).
+  const shapeStashRef = useRef<Partial<Record<"poster" | "landscape", LandscapeSettings>>>({})
+  const shapeStashKeyRef = useRef<string | null>(null)
   // Cambio formato: portrait deseleziona sempre lo sfondo (in verticale
   // `poster=` + `backdrop=` comporrebbero la banda sopra il poster),
-  // landscape lascia fare all'effetto sopra.
+  // landscape lascia fare all'effetto sopra. Gli slider passano al profilo
+  // del formato scelto (stash non salvato > profilo salvato), così la
+  // preview WYSIWYG mostra il tuning reale di quel formato.
   const handleShapeChange = useCallback((next: "poster" | "landscape") => {
+    const prev = ed.posterShape
+    if (prev === next) return
+    const stashKey = selectedMappingKey ?? "new"
+    if (shapeStashKeyRef.current !== stashKey) {
+      shapeStashRef.current = {}
+      shapeStashKeyRef.current = stashKey
+    }
+    shapeStashRef.current[prev] = {
+      logoScale: ed.logoScale, logoOffsetX: ed.logoOffsetX, logoOffsetY: ed.logoOffsetY,
+      topBadgeScale: ed.topBadgeScale, topBadgeOffsetX: ed.topBadgeOffsetX, topBadgeOffsetY: ed.topBadgeOffsetY,
+      genreBadgeScale: ed.genreBadgeScale, genreBadgeOffsetX: ed.genreBadgeOffsetX, genreBadgeOffsetY: ed.genreBadgeOffsetY,
+      qualityBadgeScale: ed.qualityBadgeScale, qualityBadgeOffsetX: ed.qualityBadgeOffsetX, qualityBadgeOffsetY: ed.qualityBadgeOffsetY,
+      networkLogoScale: ed.networkLogoScale, networkLogoOffsetX: ed.networkLogoOffsetX, networkLogoOffsetY: ed.networkLogoOffsetY,
+      gradientHeight: ed.gradientHeight, blurEnabled: ed.blurEnabled,
+      blurIntensity: ed.blurIntensity, blurFade: ed.blurFade, blurDarkness: ed.blurDarkness,
+    }
     if (next === "poster") removeBackdrop()
     ed.setPosterShape(next)
-  }, [ed, removeBackdrop])
+    ed.setLogoAlign(next === "landscape" ? (ed.defaultLogoAlign ?? "left") : "center")
+    const src = shapeStashRef.current[next]
+      ?? (selectedMapping ? effectiveMappingForShape(selectedMapping, next) : null)
+    if (src) {
+      ed.setLogoScale(src.logoScale ?? ed.logoScale)
+      ed.setLogoOffsetX(src.logoOffsetX ?? ed.logoOffsetX)
+      ed.setLogoOffsetY(src.logoOffsetY ?? ed.logoOffsetY)
+      ed.setTopBadgeScale(src.topBadgeScale ?? ed.topBadgeScale)
+      ed.setTopBadgeOffsetX(src.topBadgeOffsetX ?? ed.topBadgeOffsetX)
+      ed.setTopBadgeOffsetY(src.topBadgeOffsetY ?? ed.topBadgeOffsetY)
+      ed.setGenreBadgeScale(src.genreBadgeScale ?? ed.genreBadgeScale)
+      ed.setGenreBadgeOffsetX(src.genreBadgeOffsetX ?? ed.genreBadgeOffsetX)
+      ed.setGenreBadgeOffsetY(src.genreBadgeOffsetY ?? ed.genreBadgeOffsetY)
+      ed.setQualityBadgeScale(src.qualityBadgeScale ?? ed.qualityBadgeScale)
+      ed.setQualityBadgeOffsetX(src.qualityBadgeOffsetX ?? ed.qualityBadgeOffsetX)
+      ed.setQualityBadgeOffsetY(src.qualityBadgeOffsetY ?? ed.qualityBadgeOffsetY)
+      ed.setNetworkLogoScale(src.networkLogoScale ?? ed.networkLogoScale)
+      ed.setNetworkLogoOffsetX(src.networkLogoOffsetX ?? ed.networkLogoOffsetX)
+      ed.setNetworkLogoOffsetY(src.networkLogoOffsetY ?? ed.networkLogoOffsetY)
+      ed.setGradientHeight(src.gradientHeight ?? ed.gradientHeight)
+      ed.setBlurEnabled(src.blurEnabled ?? ed.blurEnabled)
+      ed.setBlurIntensity(src.blurIntensity ?? ed.blurIntensity)
+      ed.setBlurFade(src.blurFade ?? ed.blurFade)
+      ed.setBlurDarkness(src.blurDarkness ?? ed.blurDarkness)
+    }
+  }, [ed, removeBackdrop, selectedMapping, selectedMappingKey])
 
   const handleSelectPoster = useCallback((img: TMDBImage) => {    void selectPoster(img)
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023.5px)").matches) {
@@ -337,7 +396,7 @@ export default function EditView() {
                 {loadingImages ? (
                   <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-8 rounded-lg skeleton-shimmer" />)}</div>
                 ) : isLandscape ? (
-                  <BackdropOptions backdrops={ed.backdrops} backdropActivePath={ed.selectedBackdrop?.file_path ?? null} selectBackdrop={handleSelectBackdrop} clearBackdrop={removeBackdrop} />
+                  <BackdropOptions backdrops={ed.backdrops} backdropActivePath={ed.selectedBackdrop?.file_path ?? null} selectBackdrop={handleSelectBackdrop} clearBackdrop={removeBackdrop} loading={loadingImages} />
                 ) : (
                   <PosterOptions posters={posters} posterActivePath={posterActivePath}
                     lang={lang} selectPoster={handleSelectPoster} activeGroup={activePosterTab} onActiveGroupChange={setActivePosterTab}
@@ -434,6 +493,7 @@ export default function EditView() {
                         networkLogo: ed.networkLogo,
                         ribbonSide: ed.ribbonSide,
                         posterShape: ed.posterShape,
+                        logoAlign: ed.logoAlign,
                         topBadgeScale: ed.topBadgeScale,
                         topBadgeOffsetX: ed.topBadgeOffsetX,
                         topBadgeOffsetY: ed.topBadgeOffsetY,

@@ -53,6 +53,8 @@ interface BadgeParams {
   ribbonSide?: "left" | "right"
   /** Formato canvas del poster in editing (preview WYSIWYG). */
   posterShape?: PosterShape
+  /** Allineamento blocco logo/metadati in editing (preview WYSIWYG). */
+  logoAlign?: "left" | "center"
 }
 
 interface PosterState {
@@ -113,6 +115,7 @@ export function buildUrlPattern(bp: BadgeParams & { tmdbKey: string; lang: strin
     preRelease: bp.preRelease,
     ribbonSide: bp.ribbonSide,
     posterShape: bp.posterShape,
+    logoAlign: bp.logoAlign,
     topBadgeScale: bp.topBadgeScale,
     topBadgeOffsetX: bp.topBadgeOffsetX,
     topBadgeOffsetY: bp.topBadgeOffsetY,
@@ -225,6 +228,11 @@ export function buildPreviewUrl(ps: PosterState, bp: BadgeParams): string {
   // mapping salvato con shape diversa scavalcerebbe il toggle editor (desync
   // WYSIWYG) — vedi catena query > mapping > config > defaults.
   params.push(`shape=${bp.posterShape === "landscape" ? "landscape" : "poster"}`)
+  // Align in preview: rilevante solo per il layout landscape (i portrait
+  // restano sempre centrati per contratto).
+  if (bp.posterShape === "landscape") {
+    params.push(`align=${bp.logoAlign === "left" ? "left" : "center"}`)
+  }
   if (ps.accentColor) params.push(`ac=${encodeURIComponent(ps.accentColor)}`)
   // Fix M16: tl è inviato SOLO a calcolo completato: con topEdgeColor null
   // (colore non ancora campionato) la preview forzava tl=1 (testo chiaro)

@@ -23,7 +23,6 @@ import {
   Cloud,
   Minus,
   Circle,
-  RotateCcw,
   Save,
   Check,
   Upload,
@@ -286,7 +285,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
     <div
       role="tabpanel"
       aria-label={t("ui.badgeSection")}
-      className={`space-y-3.5 text-xs ${activeTab === "badge" ? "block" : "hidden"}`}
+      className={`space-y-3.5 text-xs ${activeTab === "badge" ? "block animate-tab-fade-in" : "hidden"}`}
     >
       {/* Badge & Provider Predefiniti */}
       <div className="bg-surface/50 border border-surface2/60 rounded-xl p-3.5 space-y-3 shadow-sm">
@@ -706,7 +705,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
     <div
       role="tabpanel"
       aria-label={t("ui.transform")}
-      className={`space-y-3.5 text-xs ${activeTab === "trasforma" ? "block" : "hidden"}`}
+      className={`space-y-3.5 text-xs ${activeTab === "trasforma" ? "block animate-tab-fade-in" : "hidden"}`}
     >
       {/* Badge Superiore Predefinito */}
       {ed.defaultRankingBadges && (
@@ -1172,7 +1171,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
     <div
       role="tabpanel"
       aria-label={t("ui.settingsTabPrefs")}
-      className={`space-y-3.5 text-xs ${activeTab === "prefs" ? "block" : "hidden"}`}
+      className={`space-y-3.5 text-xs ${activeTab === "prefs" ? "block animate-tab-fade-in" : "hidden"}`}
     >
       {/* Classifiche & Localizzazione */}
       <div className="bg-surface/50 border border-surface2/60 rounded-xl p-3.5 space-y-2.5 shadow-sm">
@@ -1265,26 +1264,50 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
         </span>
         <div className="flex items-center justify-between py-0.5">
           <span className="text-zinc-300 font-medium flex items-center gap-1.5">
-            <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-            {t("ui.autoRotateDefault")}
+            <RectangleVertical className="w-3.5 h-3.5 text-emerald-400" />
+            {t("ui.autoRotateDefaultPortrait")}
           </span>
           <Toggle
             value={ed.defaultAutoRotateClean}
             onChange={(v) => {
               ed.setDefaultAutoRotateClean(v)
             }}
-            label={t("ui.autoRotateDefault")}
+            label={t("ui.autoRotateDefaultPortrait")}
+          />
+        </div>
+        <div className="flex items-center justify-between py-0.5">
+          <span className="text-zinc-300 font-medium flex items-center gap-1.5">
+            <RectangleHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+            {t("ui.autoRotateDefaultLandscape")}
+          </span>
+          <Toggle
+            value={ed.defaultAutoRotateBackdrop}
+            onChange={(v) => {
+              ed.setDefaultAutoRotateBackdrop(v)
+            }}
+            label={t("ui.autoRotateDefaultLandscape")}
           />
         </div>
         <div className="flex items-center justify-between py-0.5">
           <span className="text-zinc-300 font-medium flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            {t("ui.logoFitEnabled")}
+            {t("ui.logoFitPortrait")}
           </span>
           <Toggle
-            value={ed.defaultLogoFitEnabled}
-            onChange={ed.setDefaultLogoFitEnabled}
-            label={t("ui.logoFitEnabled")}
+            value={ed.defaultPortraitFitEnabled}
+            onChange={ed.setDefaultPortraitFitEnabled}
+            label={t("ui.logoFitPortrait")}
+          />
+        </div>
+        <div className="flex items-center justify-between py-0.5">
+          <span className="text-zinc-300 font-medium flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            {t("ui.logoFitLandscape")}
+          </span>
+          <Toggle
+            value={ed.defaultLandscapeFitEnabled}
+            onChange={ed.setDefaultLandscapeFitEnabled}
+            label={t("ui.logoFitLandscape")}
           />
         </div>
         <div className="flex items-center justify-between py-0.5">
@@ -1303,7 +1326,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
     <div
       role="tabpanel"
       aria-label={t("ui.settingsTabData")}
-      className={`space-y-3.5 text-xs ${activeTab === "data" ? "block" : "hidden"}`}
+      className={`space-y-3.5 text-xs ${activeTab === "data" ? "block animate-tab-fade-in" : "hidden"}`}
     >
       {/* Backup & Configurazione */}
       <div className="bg-surface/50 border border-surface2/60 rounded-xl p-3.5 space-y-2.5 shadow-sm">

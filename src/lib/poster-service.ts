@@ -2,9 +2,11 @@ import sharp from "sharp"
 import type { RatingItem } from "./custom-rating/types"
 import { renderMultiRatings } from "./multi-rating-renderer"
 import { cacheGet, cacheSet } from "./cache"
-import { GENRE_FALLBACK, cinematicVignetteSVG } from "./badges"
+import { GENRE_FALLBACK, cinematicVignetteSVG, cinematicCornerGradientSVG } from "./badges"
 import { applyBlur } from "./blur"
 import {
+  STD_W,
+  STD_H,
   extractBadgeColor,
   fitBadgeToCanvas,
   fitCompositeToCanvas,
@@ -16,7 +18,7 @@ import { LAND_W, LAND_H } from "./image-utils"
 import { renderGenreBadge, renderRankingBadge, renderExtraBadge, renderQualityBadge, renderComingSoonRibbon, comingSoonRibbonLayout, renderSVG } from "./svg-badge"
 import { buildLogoScrim, logoContrast, logoInkLuminance, logoScrimStrength, posterLogoZoneLuminance } from "./logo-contrast"
 import { renderFirstMatchingNetworkLogoBadge, renderFirstMatchingNetworkRawBadge, renderFirstMatchingNetworkLogoBadgeHybrid, renderFirstMatchingNetworkRawBadgeHybrid, type NetworkCandidate } from "./network-svgs"
-import { computeLogoLayout } from "./logo-layout"
+import { computeLogoLayout, logoAlignPadX } from "./logo-layout"
 import fs from "fs"
 import path from "path"
 import { estimateTextWidth, fontFamilyFor } from "./badge-svg-shared"
@@ -160,6 +162,11 @@ export interface GenerationInput {
   /** Path sorgente del backdrop (cache image-level). Assente → niente cache. */
   backdropSrc?: string | null
   /**
+   * Allineamento orizzontale del blocco logo/metadati ("center" = classico,
+   * "left" = Cinematic). Default center (byte-identico al passato).
+   */
+  logoAlign?: "left" | "center"
+  /**
    * Effetto pre-digitale già risolto dalla route (flag `pre` ON + film
    * rilevato senza disponibilità digitale/streaming): velo scuro + badge
    * "Coming Soon". Solo film, indipendente dai toggle badges/ranking.
@@ -176,7 +183,7 @@ export interface GenerationInput {
 
 // ---- Vignette SVG cache (una entry per dimensioni canvas) ----
 const _vignetteCache = new Map<string, Promise<Buffer>>()
-async function getVignette(canvasW: number = 500, canvasH: number = 750): Promise<Buffer> {
+async function getVignette(canvasW: number = STD_W, canvasH: number = STD_H): Promise<Buffer> {
   const key = `${canvasW}x${canvasH}`
   let p = _vignetteCache.get(key)
   if (!p) {
@@ -186,9 +193,17 @@ async function getVignette(canvasW: number = 500, canvasH: number = 750): Promis
   return p
 }
 
+// ---- Landscape corner scrim (una entry: 768×432 costanti) ----
+let _landscapeScrimPromise: Promise<Buffer> | null = null
+async function getLandscapeScrim(): Promise<Buffer> {
+  if (!_landscapeScrimPromise) {
+    _landscapeScrimPromise = sharp(Buffer.from(cinematicCornerGradientSVG(LAND_W, LAND_H))).png().toBuffer()
+  }
+  return _landscapeScrimPromise
+}
 // ---- Pre-release dim overlay (uno per dimensioni canvas) ----
 const _preReleaseDimCache = new Map<string, Promise<Buffer>>()
-async function getPreReleaseDim(canvasW: number = 500, canvasH: number = 750): Promise<Buffer> {
+async function getPreReleaseDim(canvasW: number = STD_W, canvasH: number = STD_H): Promise<Buffer> {
   const key = `${canvasW}x${canvasH}`
   let p = _preReleaseDimCache.get(key)
   if (!p) {
@@ -528,20 +543,28 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     posterSrc, logoSrc, backdropSrc,
     preRelease = false,
     logoScrimDisabled,
+    logoAlign,
     shape,
   } = input
 
   // Dimensioni canvas: portrait (default, byte-identico al passato) o
   // landscape 16:9 (prova ?shape=landscape, base = backdrop TMDB).
-  const CW = shape === "landscape" ? LAND_W : 500
-  const CH = shape === "landscape" ? LAND_H : 750
+  const CW = shape === "landscape" ? LAND_W : STD_W
+  const CH = shape === "landscape" ? LAND_H : STD_H
+  // Allineamento blocco logo/metadati: in portrait è SEMPRE "center" per contratto.
+  // In landscape può essere "left" (Cinematic Left) o "center".
+  const align = shape === "landscape" && logoAlign === "left" ? "left" : "center"
+  const isLandscapeLeft = shape === "landscape" && align === "left"
   // I badge si rendono alla larghezza portrait (stessi pixel assoluti del
   // verticale): sul canvas 16:9 non devono dominare la scena. Posizioni,
   // overflow-protection e chiavi cache restano sul canvas vero (CW/CH):
   // le chiavi in particolare NON usano badgePw, altrimenti i bitmap
   // portrait (stesso pw=500) colliderebbero — fatale per gli stili `bar`
   // full-width.
-  const badgePw = shape === "landscape" ? 500 : CW
+  const badgePw = shape === "landscape" ? STD_W : CW
+  // Il badge superiore centrale (rank/extra) in landscape è reso al 120%:
+  // sul canvas 16:9 deve restare il protagonista in alto.
+  const topBadgePw = shape === "landscape" ? Math.round(badgePw * 1.2) : badgePw
 
   // -----------------------------------------------------------------------
   // 1. Backdrop composite layer
@@ -594,9 +617,12 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
             posterW: CW, posterH: CH, logoW: lw, logoH: lh,
             logoScale: uScale, logoOffsetX: uOx, logoOffsetY: uOy,
             hasBadges: hasGenreBadge,
-            // Landscape 16:9: logo contenuto (max 55% larghezza) e sollevato
-            // sopra la fascia del badge genere (margine 25% invece di 10%).
-            ...(shape === "landscape" ? { maxWidthPct: 55, bottomMarginPct: 25 } : {}),
+            align,
+            // Landscape 16:9: logo contenuto (max 40% larghezza, max 24%
+            // altezza — i loghi quadrati/multilinea non devono mangiarsi
+            // la scena) e sollevato sopra la fascia del badge genere
+            // (margine 25% invece di 10%) con calibrazione +55px su Y per compattezza.
+            ...(shape === "landscape" ? { maxWidthPct: 40, maxHeightPct: 24, bottomMarginPct: 25, topOffset: 55 } : {}),
           })
           const resized = await resizeLogoCached(logoFetch, layout.width, layout.height, logoSrc)
           const aW = resized.w
@@ -611,6 +637,11 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   // -----------------------------------------------------------------------
   const vigBuf = await getVignette(CW, CH)
   composites.push({ input: vigBuf, top: 0, left: 0 })
+  // Cinematic Left: scrim d'angolo per la leggibilità del blocco a sinistra
+  // (si somma alla fascia blur bassa, che resta controllata dall'utente).
+  if (isLandscapeLeft) {
+    composites.push({ input: await getLandscapeScrim(), top: 0, left: 0 })
+  }
   // Velo pre-digitale: sopra poster/vignetta ma sotto logo e badge (restano
   // luminosi e leggibili). Costante cachata, nessun cambio di output a flag spento.
   if (preRelease) {
@@ -792,10 +823,10 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
       ? (cacheGet<{ png: Buffer; w: number; h: number; isRank?: boolean }>(rankBadgeKey)
           || coalesceBadgeRender(rankBadgeKey, () => {
               if (topBadge!.type === "extra") {
-                return renderExtraBadge(topBadge!.label, badgePw, topLight, rankingBadgeStyle, accentColorRank, rankingBadgeStyle === "bar" ? topBadgeScale : 100)
+                return renderExtraBadge(topBadge!.label, topBadgePw, topLight, rankingBadgeStyle, accentColorRank, rankingBadgeStyle === "bar" ? topBadgeScale : 100)
                   .then((r) => { const v = { ...r, isRank: false }; cacheSet(rankBadgeKey, v, ["badge"], BADGE_CACHE_TTL); return v })
               }
-              return renderRankingBadge((topBadge as { rank: number }).rank, badgePw, topBadge!.label, topLight, rankingBadgeStyle, accentColorRank, ribbonSide, isAnimeRank, rankingBadgeStyle === "bar" ? topBadgeScale : 100)
+              return renderRankingBadge((topBadge as { rank: number }).rank, rankingBadgeStyle === "netflix" ? badgePw : topBadgePw, topBadge!.label, topLight, rankingBadgeStyle, accentColorRank, ribbonSide, isAnimeRank, rankingBadgeStyle === "bar" ? topBadgeScale : 100)
                 .then((r) => { const v = { ...r, isRank: true }; cacheSet(rankBadgeKey, v, ["badge"], BADGE_CACHE_TTL); return v })
             }))
       : Promise.resolve(null),
@@ -826,9 +857,29 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   // Tutta la matematica di posizione/overlap sotto usa già le dimensioni
   // scalate. La posizione del badge genere usa safeGenreBadgeResult.h.
   const [rankBadgeForLayout, genreBadgeForLayout, qualityBadgeForLayout, networkLogoForLayout] = await Promise.all([
-    rankBadgeResult && topBadgeScale !== 100 && rankingBadgeStyle !== "bar"
-      ? scaleBitmapForLayout(rankBadgeResult, topBadgeScale)
-      : Promise.resolve(rankBadgeResult),
+    rankBadgeResult
+      ? (async () => {
+          // Landscape: scala % + riduzione -20px in UN solo resize (prima due
+          // resize sharp in serie sullo stesso bitmap). Stesse dimensioni
+          // finali del vecchio codice (la scala % salta lo stile bar, lo
+          // shrink -20px no), un solo passaggio di ricampionamento.
+          if (shape === "landscape") {
+            const isBar = rankingBadgeStyle === "bar"
+            const scaledH = isBar ? rankBadgeResult.h : Math.max(1, Math.round(rankBadgeResult.h * topBadgeScale / 100))
+            const scaledW = isBar ? rankBadgeResult.w : Math.max(1, Math.round(rankBadgeResult.w * topBadgeScale / 100))
+            const targetH = Math.max(1, scaledH - 20)
+            const targetW = Math.max(1, Math.round(scaledW * (targetH / scaledH)))
+            if (targetH !== rankBadgeResult.h || targetW !== rankBadgeResult.w) {
+              const png = await sharp(rankBadgeResult.png).resize(targetW, targetH).toBuffer()
+              return { ...rankBadgeResult, png, w: targetW, h: targetH }
+            }
+            return rankBadgeResult
+          }
+          return topBadgeScale !== 100 && rankingBadgeStyle !== "bar"
+            ? await scaleBitmapForLayout(rankBadgeResult, topBadgeScale)
+            : rankBadgeResult
+        })()
+      : Promise.resolve(null),
     genreBadgeResult && genreBadgeScale !== 100 && badgeStyle !== "bar"
       ? scaleBitmapForLayout(genreBadgeResult, genreBadgeScale)
       : Promise.resolve(genreBadgeResult),
@@ -847,15 +898,23 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   ])
 
   if (safeGenreBadgeResult) {
+    const landscapeShiftX = shape === "landscape" ? -55 : 0
     if (badgeStyle === "bar") {
       // In landscape la barra è resa a badgePw (non full-width): centrata
-      // come lower-third invece che ancorata a sinistra.
-      const barLeft = shape === "landscape" ? Math.round((CW - safeGenreBadgeResult.w) / 2) : 0
+      // come lower-third invece che ancorata a sinistra — ma in Cinematic
+      // Left segue il logo a sinistra.
+      const barLeft = (isLandscapeLeft
+        ? logoAlignPadX(CW) + genreBadgeOffsetX
+        : shape === "landscape" ? Math.round((CW - safeGenreBadgeResult.w) / 2) : 0) + landscapeShiftX
       composites.push({ input: safeGenreBadgeResult.png, top: CH - safeGenreBadgeResult.h, left: barLeft })
     } else {
       // Offset solo stili centrati: la barra resta ancorata full-width.
+      // In Cinematic Left la riga metadati sta sotto il logo a sinistra.
       const badgeY = CH - safeGenreBadgeResult.h - Math.max(0, Math.round(targetCenter - safeGenreBadgeResult.h / 2)) + genreBadgeOffsetY
-      composites.push({ input: safeGenreBadgeResult.png, top: badgeY, left: Math.round((CW - safeGenreBadgeResult.w) / 2) + genreBadgeOffsetX })
+      const badgeLeft = (isLandscapeLeft
+        ? logoAlignPadX(CW) + genreBadgeOffsetX
+        : Math.round((CW - safeGenreBadgeResult.w) / 2) + genreBadgeOffsetX) + landscapeShiftX
+      composites.push({ input: safeGenreBadgeResult.png, top: badgeY, left: badgeLeft })
     }
   }
   if (input.ratings?.length) {
@@ -972,8 +1031,9 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
 
       if (logoResult && (isNetflixRibbon || hasComingSoonCorner)) {
         // Con logo film + nastro Netflix o Coming Soon: subito sopra il logo film
+        // (in Cinematic Left allineato a sinistra come sopratitolo, non centrato).
         top = Math.max(0, logoResult.top - fittedRaw.h - gap)
-        left = Math.round((CW - fittedRaw.w) / 2)
+        left = isLandscapeLeft ? logoResult.left : Math.round((CW - fittedRaw.w) / 2)
       } else if (!isNetflixRibbon && !logoResult) {
         // Senza logo film e senza nastro Netflix: in alto a sinistra;
         // con il nastro Coming Soon impilato sotto di esso (stesso angolo).

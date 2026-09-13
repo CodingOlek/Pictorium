@@ -42,7 +42,9 @@ export function saveDefaults(ed: PosterEditorCtx): Promise<boolean> {
     networkLogoOffsetX: ed.defaultNetworkLogoOffsetX,
     networkLogoOffsetY: ed.defaultNetworkLogoOffsetY,
     autoRotateClean: ed.defaultAutoRotateClean,
-    defaultLogoFitEnabled: ed.defaultLogoFitEnabled,
+    defaultAutoRotateBackdrop: ed.defaultAutoRotateBackdrop,
+    defaultPortraitFitEnabled: ed.defaultPortraitFitEnabled,
+    defaultLandscapeFitEnabled: ed.defaultLandscapeFitEnabled,
     defaultNetworkLogo: ed.defaultNetworkLogo,
     preRelease: ed.defaultPreRelease,
     defaultRibbonSide: ed.defaultRibbonSide,
@@ -51,6 +53,7 @@ export function saveDefaults(ed: PosterEditorCtx): Promise<boolean> {
     networkLogo: ed.defaultNetworkLogo,
     ribbonSide: ed.defaultRibbonSide,
     posterShape: ed.defaultPosterShape,
+    logoAlign: ed.defaultLogoAlign,
     episodeMetadataSource: ed.defaultEpisodeMetadataSource,
   }
   safeSetItem("badgeDefaults", JSON.stringify(d))
