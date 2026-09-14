@@ -22,6 +22,7 @@ export function saveDefaults(ed: PosterEditorCtx): Promise<boolean> {
     customRatingEndpoint: ed.defaultCustomRatingEndpoint ?? "",
     customRatingApiKeyHeader: ed.defaultCustomRatingApiKeyHeader ?? "",
     ratingSources: ed.defaultRatingSources,
+    ratingPreset: ed.defaultRatingPreset,
     badgeStyle: ed.defaultBadgeStyle,
     rankingBadgeStyle: ed.defaultRankingBadgeStyle,
     blurEnabled: ed.defaultBlurEnabled,

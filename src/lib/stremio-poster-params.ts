@@ -1,5 +1,7 @@
 import { POSTER_URL_VERSION } from "@/lib/render-version"
 import type { BadgeStyle, RankingBadgeStyle } from "@/lib/badge-styles"
+import { parseMinQuality, type StreamQuality } from "@/lib/quality-tiers"
+import { parseRatingPreset, type RatingPreset } from "@/lib/rating-weights"
 import type { PosterShape } from "@/lib/types"
 
 export interface StremioPosterParamsInput {
@@ -18,9 +20,13 @@ export interface StremioPosterParamsInput {
   readonly badgeYear?: boolean
   readonly badgeRating?: boolean
   readonly badgeQuality?: boolean
+  /** Soglia minima tier qualità (emessa come `qmin` solo quando non-SD per non invalidare la cache). */
+  readonly minQuality?: StreamQuality | null
   /** Riga rating custom provider (display). `false` emette `cr=0`. */
   readonly customRatings?: boolean
   readonly ratingSources?: string[]
+  /** Preset pesi voto (emesso come `rw` solo quando non-balanced). */
+  readonly ratingPreset?: RatingPreset | null
   readonly badgeStyle?: BadgeStyle
   readonly rankingBadgeStyle?: RankingBadgeStyle
   readonly gradientHeight?: number
@@ -120,8 +126,12 @@ export function buildStremioPosterSearchParams(input: StremioPosterParamsInput):
   if (input.badgeYear === false) params.set("by", "0")
   if (input.badgeRating === false) params.set("br", "0")
   if (input.badgeQuality === false) params.set("bq", "0")
+  const mq = parseMinQuality(input.minQuality ?? null)
+  if (mq && mq !== "SD") params.set("qmin", mq)
   if (input.customRatings === false) params.set("cr", "0")
   if (input.ratingSources && input.ratingSources.length > 0) params.set("rsrc", input.ratingSources.join(","))
+  const rw = parseRatingPreset(input.ratingPreset ?? null)
+  if (rw && rw !== "balanced") params.set("rw", rw)
   if (input.customBadge) params.set("extra", input.customBadge)
   if (input.title) params.set("title", input.title)
   if (!networkLogo) params.set("netLogo", "0")

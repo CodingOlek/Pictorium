@@ -10,6 +10,8 @@ import { effectiveMappingForShape, type Mapping, type PosterShape } from "./type
 import type { ServerDefaults } from "./server-defaults"
 import { resolveLabelFor } from "./i18n"
 import { SUPPORTED_RATING_SOURCES, DEFAULT_RATING_SOURCES } from "./ratings"
+import { parseMinQuality, type StreamQuality } from "./quality-tiers"
+import { parseRatingPreset, type RatingPreset } from "./rating-weights"
 import {
   isBadgeStyle,
   isRankingBadgeStyle,
@@ -79,6 +81,10 @@ export interface PosterRenderConfig {
   badgeYear: boolean
   badgeRating: boolean
   badgeQuality: boolean
+  /** Soglia minima tier qualità streaming — catena: query `qmin` > server defaults > "SD". Globale (nessun per-titolo). */
+  minQuality: StreamQuality
+  /** Preset pesi voto — catena: query `rw` > server defaults > "balanced". Globale (nessun per-titolo). */
+  ratingPreset: RatingPreset
   /** Riga rating custom provider (display). Default ON quando il provider è configurato. */
   customRatings: boolean
   ratingSources: string[]
@@ -233,6 +239,15 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
   const badgeYear = qBy !== null ? qBy !== "0" : (mapping?.badgeYear ?? configOverride?.badgeYear ?? sd.badgeYear ?? true)
   const badgeRating = qBr !== null ? qBr !== "0" : (mapping?.badgeRating ?? configOverride?.badgeRating ?? sd.badgeRating ?? true)
   const badgeQuality = qBq !== null ? qBq !== "0" : (mapping?.badgeQuality ?? configOverride?.badgeQuality ?? sd.badgeQuality ?? true)
+
+  // Soglia minima qualità streaming — globale: query `qmin` > server defaults
+  // > "SD" (tutto mostrato). Valori non validi → default. Nessun override
+  // per-titolo/config in Fase 1 (il mapping non ha il campo).
+  const minQuality: StreamQuality = parseMinQuality(q.get("qmin")) ?? parseMinQuality(sd.minQuality ?? null) ?? "SD"
+
+  // Preset pesi voto — globale: query `rw` > server defaults > "balanced"
+  // (= comportamento attuale). Nessun override per-titolo/config in Fase 3.
+  const ratingPreset: RatingPreset = parseRatingPreset(q.get("rw")) ?? parseRatingPreset(sd.ratingPreset ?? null) ?? "balanced"
 
   // Riga rating custom provider (display) — precedenza: query `cr` > mapping
   // salvato > config token/profilo > server defaults > true (ON di default).
@@ -413,6 +428,8 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
     badgeYear,
     badgeRating,
     badgeQuality,
+    minQuality,
+    ratingPreset,
     customRatings,
     ratingSources,
     logoScale,

@@ -11,6 +11,7 @@ import { SliderRow } from "@/components/SliderRow"
 import { Toggle } from "@/components/Toggle"
 import { BadgeStyleSelector, MenuItem } from "@/components/ui"
 import { UI_RATING_SOURCES } from "@/lib/ratings"
+import { RATING_PRESETS, type RatingPreset } from "@/lib/rating-weights"
 import { formatRating } from "@/lib/custom-rating/formatter"
 import { REGIONS } from "@/lib/regions"
 import { UI_LANGUAGES } from "@/lib/utils"
@@ -369,6 +370,25 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
                       />
                     </span>
                   </button>
+
+                  {/* Preset pesi voto (globale): ponderazione fonti nel voto medio */}
+                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5" title={t("ui.ratingPresetHint")}>
+                    <span className="text-[11px] font-semibold text-zinc-200">{t("ui.ratingPreset")}</span>
+                    <select
+                      value={ed.defaultRatingPreset ?? "balanced"}
+                      onChange={(e) => {
+                        ed.setDefaultRatingPreset(e.target.value as RatingPreset)
+                      }}
+                      aria-label={t("ui.ratingPreset")}
+                      className="max-w-[190px] truncate px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-zinc-100 border border-white/10 hover:bg-white/10 focus:outline-none focus:border-accent-orange/50 cursor-pointer"
+                    >
+                      {RATING_PRESETS.map((p) => (
+                        <option key={p} value={p} className="bg-zinc-900 text-zinc-100">
+                          {t(`ui.preset_${p}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   {sourcesOpen && (
                     <div className="space-y-2 pt-0.5 animate-fade-in">

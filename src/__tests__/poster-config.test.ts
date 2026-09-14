@@ -588,6 +588,24 @@ describe("resolvePosterRenderConfig", () => {
     expect(rConfig.ratingSources).toEqual(["letterboxd", "trakt"])
   })
 
+  it("ratingPreset defaults to balanced; query rw wins over server defaults", () => {
+    expect(resolvePosterRenderConfig(baseInput()).ratingPreset).toBe("balanced")
+
+    const rQuery = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ rw: "cinephile" }),
+      sd: { ratingPreset: "series" },
+    }))
+    expect(rQuery.ratingPreset).toBe("cinephile")
+
+    const rSd = resolvePosterRenderConfig(baseInput({ sd: { ratingPreset: "series" } }))
+    expect(rSd.ratingPreset).toBe("series")
+
+    const rInvalid = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ rw: "tarocco" }),
+    }))
+    expect(rInvalid.ratingPreset).toBe("balanced")
+  })
+
   it("posterShape: query shape wins, then mapping, then config token, then sd, then poster", () => {
     expect(resolvePosterShape(new URLSearchParams({ shape: "landscape" }), mapping({ posterShape: "poster" }), config({ posterShape: "poster" }), { posterShape: "poster" })).toBe("landscape")
     expect(resolvePosterShape(new URLSearchParams({ shape: "poster" }), mapping({ posterShape: "landscape" }), config({ posterShape: "landscape" }), { posterShape: "landscape" })).toBe("poster")

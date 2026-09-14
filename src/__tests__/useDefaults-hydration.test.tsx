@@ -52,6 +52,7 @@ const USER_SAVED = {
   customRatingEndpoint: "",
   customRatingApiKeyHeader: "",
   ratingSources: ["imdb", "tmdb"],
+  ratingPreset: "balanced",
   autoRotateClean: false,
   defaultAutoRotateBackdrop: false,
   defaultPortraitFitEnabled: true,
