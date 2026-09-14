@@ -99,9 +99,12 @@ export function buildStremioPosterUrl(input: BuildStremioPosterUrlInput): URL {
     networkLogoOffsetY: eff?.networkLogoOffsetY ?? input.defaults.networkLogoOffsetY,
     gradientHeight: eff?.gradientHeight ?? input.defaults.gradientHeight,
     blurIntensity: eff?.blurIntensity ?? input.defaults.blurIntensity,
-    blurFade: eff?.blurFade ?? input.defaults.blurFade,
+    // Default sfumatura dedicato al formato (come logoAlign): in landscape
+    // serve una transizione più lunga; il portrait resta sul default globale.
+    blurFade: eff?.blurFade ?? ((input.forceShape ?? mapping?.posterShape ?? input.defaults.posterShape) === "landscape" ? 70 : input.defaults.blurFade),
     blurDarkness: eff?.blurDarkness ?? input.defaults.blurDarkness,
     blurEnabled: eff?.blurEnabled ?? input.defaults.blurEnabled,
+    tintStrength: eff?.tintStrength ?? input.defaults.tintStrength,
     customBadge,
     title: mapping?.title ?? undefined,
     networkLogo: (input.defaults.networkLogo !== false) && (mapping?.networkLogo !== false),

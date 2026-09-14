@@ -8,6 +8,7 @@ import {
   STD_W,
   STD_H,
   extractBadgeColor,
+  extractSceneTint,
   fitBadgeToCanvas,
   fitCompositeToCanvas,
   isValidHex,
@@ -73,6 +74,8 @@ export interface GenerationInput {
   blurIntensity: number
   blurFade: number
   blurDarkness: number
+  /** Intensità tinta di scena 0-100 (default 20, convertita in frazione per applyBlur). */
+  tintStrength?: number
 
   // Badge flags
   badgesEnabled: boolean
@@ -531,6 +534,8 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     posterBuf, logoFetch, backdropFetch,
     backdropScale, backdropOffsetX, backdropOffsetY,
     blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness,
+    // Default 20 quando il chiamante non lo passa (test diretti, vecchi adapter).
+    tintStrength = 20,
     badgesEnabled, rankingEnabled, genreName, voteAverage, badgeStyle,
     rankingBadgeStyle, badgeGenre, badgeYear, badgeRating, badgeQuality, quality,
     topLight, targetCenter, ribbonSide,
@@ -546,7 +551,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     lastAirDate, seasonCount, originCountries,
     wikidataResult, tmdbKeywords, locale, t,
     qLabel, queryExtra, qNetLogo, networkLogo, sd, accentOverride, imdbTop250,
-    posterSrc, logoSrc, backdropSrc,
+    logoSrc, backdropSrc,
     preRelease = false,
     hideLogo = false,
     logoScrimDisabled,
@@ -604,17 +609,37 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   const hasGenreBadge = badgesEnabled
     && ((genreAvailable && badgeGenre) || (ratingAvailable && badgeRating) || (yearAvailable && badgeYear))
 
+  // Tinta di scena same-hue UNICA per badge + blur (coerenza dalla stessa
+  // radice). Niente crop per-zone: il bottom-40% falliva sui portrait con
+  // facce in basso (es. Silo: votava pelle/tuta #86642d invece dello
+  // smeraldo della scena). L'override `ac=` esplicito vince sempre; rete di
+  // sicurezza: fallback genere/grigio. resolveBadgeColors resta esportata e
+  // testata ma non è più sul path render.
+  const sceneTintHex = (blurEnabled || hasGenreBadge || rankingEnabled)
+    ? await extractSceneTint(posterBuf, genreName)
+    : null
+
+  const accentColorGenre = accentOverride?.genreColor ?? sceneTintHex ?? (GENRE_FALLBACK[genreName || ""] || "#555555")
+  const accentColorRank = accentOverride?.rankColor ?? sceneTintHex ?? "#555555"
+
+  // Override esplicito `ac=` vince sempre; poi tinta di scena; rete di sicurezza: fallback genere
+  const blurTintHex = accentOverride?.genreColor ?? sceneTintHex ?? accentColorGenre
+
   // Layout landscape = senza logo baked-in (vale per preview, poster e
   // banner: unica verità visiva). hideLogo esplicito copre anche il portrait.
-  // Lo spread landscape sotto è morto con lo skip: il logo non si rende mai
-  // in landscape, quindi niente vincoli maxWidthPct/maxHeightPct dedicati.
-  const [blurOverlay, badgeColors, logoResult] = await Promise.all([
-    applyBlur({ posterBuf, blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness, canvasW: CW, canvasH: CH }),
-    hasGenreBadge
-      ? (accentOverride
-          ? Promise.resolve(accentOverride)
-          : resolveBadgeColors(posterBuf, logoFetch, genreName, posterSrc, logoSrc))
-      : Promise.resolve(undefined),
+  const [blurOverlay, logoResult] = await Promise.all([
+    applyBlur({
+      posterBuf,
+      blurEnabled,
+      blurHeight,
+      blurIntensity,
+      blurFade,
+      blurDarkness,
+      tintStrength: tintStrength / 100,
+      canvasW: CW,
+      canvasH: CH,
+      accentColor: blurTintHex,
+    }),
     logoFetch && !hideLogo && shape !== "landscape"
       ? (async () => {
           const lMeta = await sharp(logoFetch).metadata()
@@ -687,8 +712,6 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   // -----------------------------------------------------------------------
   // 4. Badge computation
   // -----------------------------------------------------------------------
-  const accentColorGenre = badgeColors?.genreColor || (GENRE_FALLBACK[genreName || ""] || "#555555")
-  const accentColorRank = badgeColors?.rankColor || "#555555"
 
   const badgeInput: BadgeInput = {
     mediaType,
