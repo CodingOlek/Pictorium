@@ -1,7 +1,7 @@
 /**
- * Banner Nuvio (`hideLogo` in landscape): il logo film non viene composto e
- * il badge genere/rating va in basso a destra (a sinistra Nuvio sovrappone
- * già il suo logo). Senza hideLogo il layout resta quello storico.
+ * Layout landscape: niente logo film baked-in e badge genere/rating in basso
+ * a destra — vale per preview, poster e banner (unica verità visiva).
+ * `hideLogo` esplicito copre anche il portrait.
  *
  * Regressione pixel-level via generatePosterBuffer su canvas scuro: l'unica
  * cosa chiara (>200 su tutti i canali) è il testo dei badge + il logo bianco
@@ -10,13 +10,21 @@
 import sharp from "sharp"
 import { describe, it, expect } from "vitest"
 import { generatePosterBuffer, type GenerationInput } from "@/lib/poster-service"
-import { LAND_W, LAND_H } from "@/lib/image-utils"
+import { LAND_W, LAND_H, STD_W, STD_H } from "@/lib/image-utils"
 import type { WikidataResult } from "@/lib/awards"
 import type { ServerDefaults } from "@/lib/server-defaults"
 
 async function darkBackdrop(): Promise<Buffer> {
   return sharp({
     create: { width: LAND_W, height: LAND_H, channels: 3, background: "#101010" },
+  })
+    .jpeg()
+    .toBuffer()
+}
+
+async function darkPoster(): Promise<Buffer> {
+  return sharp({
+    create: { width: STD_W, height: STD_H, channels: 3, background: "#101010" },
   })
     .jpeg()
     .toBuffer()
@@ -129,27 +137,38 @@ async function bottomLeftmostBrightX(buf: Buffer): Promise<number> {
   return info.width
 }
 
-describe("hideLogo banner landscape", () => {
-  it("skips the film logo composite", async () => {
+describe("landscape layout", () => {
+  it("skips the film logo composite in landscape even without the flag", async () => {
     const backdrop = await darkBackdrop()
+    const poster = await darkPoster()
     const logo = await whiteLogo()
     // Badge spenti: l'unica cosa chiara può essere il logo bianco finto.
     const withLogo = await generatePosterBuffer(
-      baseInput({ posterBuf: backdrop, logoFetch: logo, badgesEnabled: false }),
+      baseInput({ posterBuf: poster, logoFetch: logo, badgesEnabled: false, shape: "poster" }),
     )
-    const hidden = await generatePosterBuffer(
-      baseInput({ posterBuf: backdrop, logoFetch: logo, badgesEnabled: false, hideLogo: true }),
+    const landscape = await generatePosterBuffer(
+      baseInput({ posterBuf: backdrop, logoFetch: logo, badgesEnabled: false, shape: "landscape" }),
     )
-    const withCount = await totalBrightCount(withLogo)
-    const hiddenCount = await totalBrightCount(hidden)
-    expect(withCount).toBeGreaterThan(3000)
-    expect(hiddenCount).toBeLessThan(withCount / 4)
+    const portraitCount = await totalBrightCount(withLogo)
+    const landscapeCount = await totalBrightCount(landscape)
+    expect(portraitCount).toBeGreaterThan(3000)
+    expect(landscapeCount).toBeLessThan(portraitCount / 4)
   }, 60000)
 
-  it("anchors the genre badge bottom-right instead of centered", async () => {
+  it("still honors explicit hideLogo in portrait", async () => {
+    const poster = await darkPoster()
+    const logo = await whiteLogo()
+    const hidden = await generatePosterBuffer(
+      baseInput({ posterBuf: poster, logoFetch: logo, badgesEnabled: false, shape: "poster", hideLogo: true }),
+    )
+    expect(await totalBrightCount(hidden)).toBeLessThan(1000)
+  }, 60000)
+
+  it("anchors the genre badge bottom-right in landscape instead of centered", async () => {
     const backdrop = await darkBackdrop()
-    const centered = await generatePosterBuffer(baseInput({ posterBuf: backdrop }))
-    const right = await generatePosterBuffer(baseInput({ posterBuf: backdrop, hideLogo: true }))
+    const poster = await darkPoster()
+    const centered = await generatePosterBuffer(baseInput({ posterBuf: poster, shape: "poster" }))
+    const right = await generatePosterBuffer(baseInput({ posterBuf: backdrop, shape: "landscape" }))
     const centeredX = await bottomLeftmostBrightX(centered)
     const rightX = await bottomLeftmostBrightX(right)
     // Badge centrato (~768/2): inizia a sinistra del centro; ancorato a

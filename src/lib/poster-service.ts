@@ -180,10 +180,9 @@ export interface GenerationInput {
    */
   shape?: "poster" | "landscape"
   /**
-   * Nasconde il logo film dal composite (banner Nuvio: Nuvio lo sovrappone
-   * già da catalogo). Il fetch resta per i colori accent; a valle tutto si
-   * comporta come "senza logo" (network top-left/accanto-nastro, badge
-   * genere in basso a destra in landscape).
+   * Nasconde il logo film dal composite (il fetch resta per i colori accent).
+   * In landscape il logo è SEMPRE nascosto (layout senza baked-in: a valle
+   * tutto si comporta come "senza logo"); in portrait serve query esplicita.
    */
   hideLogo?: boolean
 }
@@ -605,6 +604,10 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   const hasGenreBadge = badgesEnabled
     && ((genreAvailable && badgeGenre) || (ratingAvailable && badgeRating) || (yearAvailable && badgeYear))
 
+  // Layout landscape = senza logo baked-in (vale per preview, poster e
+  // banner: unica verità visiva). hideLogo esplicito copre anche il portrait.
+  // Lo spread landscape sotto è morto con lo skip: il logo non si rende mai
+  // in landscape, quindi niente vincoli maxWidthPct/maxHeightPct dedicati.
   const [blurOverlay, badgeColors, logoResult] = await Promise.all([
     applyBlur({ posterBuf, blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness, canvasW: CW, canvasH: CH }),
     hasGenreBadge
@@ -612,7 +615,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
           ? Promise.resolve(accentOverride)
           : resolveBadgeColors(posterBuf, logoFetch, genreName, posterSrc, logoSrc))
       : Promise.resolve(undefined),
-    logoFetch && !hideLogo
+    logoFetch && !hideLogo && shape !== "landscape"
       ? (async () => {
           const lMeta = await sharp(logoFetch).metadata()
           const lw = lMeta.width || 200
@@ -626,11 +629,6 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
             logoScale: uScale, logoOffsetX: uOx, logoOffsetY: uOy,
             hasBadges: hasGenreBadge,
             align,
-            // Landscape 16:9: logo contenuto (max 40% larghezza, max 24%
-            // altezza — i loghi quadrati/multilinea non devono mangiarsi
-            // la scena) e sollevato sopra la fascia del badge genere
-            // (margine 25% invece di 10%) con calibrazione +55px su Y per compattezza.
-            ...(shape === "landscape" ? { maxWidthPct: 40, maxHeightPct: 24, bottomMarginPct: 25, topOffset: 55 } : {}),
           })
           const resized = await resizeLogoCached(logoFetch, layout.width, layout.height, logoSrc)
           const aW = resized.w
@@ -907,27 +905,31 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
 
   if (safeGenreBadgeResult) {
     const landscapeShiftX = shape === "landscape" ? -55 : 0
-    // Banner Nuvio (hideLogo): badge in basso a DESTRA invece che centrato —
-    // a sinistra Nuvio sovrappone già il suo logo, il centro resta pulito.
-    // Senza hideLogo (poster/preview/Stremio) il layout resta quello storico.
-    const anchorRight = hideLogo && shape === "landscape"
+    // Landscape: badge in basso a DESTRA invece che centrato (vale per
+    // preview, poster e banner — unica verità visiva). Il portrait resta storico.
+    // Micro-calibrazione ottica dell'ancoraggio destro: +40px verso il bordo,
+    // -10px verso l'alto (clamp anti-overflow: mai fuori canvas).
+    const anchorRight = shape === "landscape"
+    const anchorShiftX = anchorRight ? 40 : 0
+    const anchorShiftY = anchorRight ? -10 : 0
     const rightPadX = Math.round(18 * CW / 380)
     if (badgeStyle === "bar") {
-      // In landscape la barra è resa a badgePw (non full-width): centrata
-      // come lower-third invece che ancorata a sinistra — ma in Cinematic
-      // Left segue il logo a sinistra. Col banner va a destra come gli altri.
+      // In landscape la barra è resa a badgePw (non full-width): col banner
+      // va a destra come gli altri stili; altrimenti (portrait) resta
+      // full-width ancorata a sinistra. (Nel ramo false shape è di certo
+      // portrait per costruzione di anchorRight: niente ternario shape.)
       const barLeft = anchorRight
-        ? Math.max(0, CW - safeGenreBadgeResult.w - rightPadX)
+        ? Math.min(CW - safeGenreBadgeResult.w, Math.max(0, CW - safeGenreBadgeResult.w - rightPadX + anchorShiftX))
         : (isLandscapeLeft
           ? logoAlignPadX(CW) + genreBadgeOffsetX
-          : shape === "landscape" ? Math.round((CW - safeGenreBadgeResult.w) / 2) : 0) + landscapeShiftX
+          : 0) + landscapeShiftX
       composites.push({ input: safeGenreBadgeResult.png, top: CH - safeGenreBadgeResult.h, left: barLeft })
     } else {
       // Offset solo stili centrati: la barra resta ancorata full-width.
       // In Cinematic Left la riga metadati sta sotto il logo a sinistra.
-      const badgeY = CH - safeGenreBadgeResult.h - Math.max(0, Math.round(targetCenter - safeGenreBadgeResult.h / 2)) + genreBadgeOffsetY
+      const badgeY = CH - safeGenreBadgeResult.h - Math.max(0, Math.round(targetCenter - safeGenreBadgeResult.h / 2)) + genreBadgeOffsetY + anchorShiftY
       const badgeLeft = anchorRight
-        ? Math.max(0, CW - safeGenreBadgeResult.w - rightPadX + genreBadgeOffsetX)
+        ? Math.min(CW - safeGenreBadgeResult.w, Math.max(0, CW - safeGenreBadgeResult.w - rightPadX + anchorShiftX + genreBadgeOffsetX))
         : (isLandscapeLeft
           ? logoAlignPadX(CW) + genreBadgeOffsetX
           : Math.round((CW - safeGenreBadgeResult.w) / 2) + genreBadgeOffsetX) + landscapeShiftX
