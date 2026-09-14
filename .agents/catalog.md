@@ -104,6 +104,10 @@ chiave d'istanza condivisa) resta valida per quel caso.
   `background` = backdrop TMDB grezzo per l'hero dettaglio. Nuvio in modalità
   orizzontale carica `banner` (non `poster`): non far mai puntare `banner` al
   backdrop grezzo o i poster Pictorium spariscono in quella modalità.
+  Il campo `logo` NON viene emesso nei cataloghi: il logo vive già dentro il
+  poster renderizzato e Nuvio lo sovrapporrebbe una seconda volta in card
+  landscape e hero (mostra il titolo come testo quando manca). Il `logo`
+  resta solo in `/meta` per la pagina dettaglio.
   Gli altri client ignorano `banner` (fuori spec Stremio).
 
 - Cache catalogo (`cacheSet`/`cacheGet` in `lib/cache.ts`): key include tipo,
