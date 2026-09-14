@@ -170,6 +170,8 @@ export interface PictoriumCtx {
   showKey: boolean
   setShowKey: React.Dispatch<React.SetStateAction<boolean>>
   setTmdbKey: (v: string) => void
+  /** True se l'istanza ha una chiave TMDB env (booleano pubblico /api/defaults). */
+  serverHasTmdbKey: boolean
   mdblistApiKey: string
   setMdblistApiKey: (v: string) => void
   tvdbApiKey: string
@@ -316,6 +318,9 @@ export function usePictorium(): PictoriumCtx {
   const [lang, setLang] = useState("it")
   const t = useMemo(() => createT(lang), [lang])
   const [tmdbKey, setTmdbKeyState] = useState("")
+  // True se l'istanza ha una chiave TMDB env (booleano pubblico da
+  // /api/defaults): la home funziona anche senza chiave nel browser.
+  const [serverHasTmdbKey, setServerHasTmdbKey] = useState(false)
   const [mdblistApiKey, setMdblistApiKey] = useState("")
   const [tvdbApiKey, setTvdbApiKey] = useState("")
   const [tmdbKeyInput, setTmdbKeyInput] = useState("")
@@ -337,9 +342,9 @@ export function usePictorium(): PictoriumCtx {
 
   const navigation = useNavigation()
   const editorCtx = usePosterEditor()
-  const trending = useTrending(tmdbKey, mdblistApiKey, editorCtx.defaultRegion)
+  const trending = useTrending(tmdbKey, mdblistApiKey, editorCtx.defaultRegion, serverHasTmdbKey)
   const tmdbLang = getRegionDef(editorCtx.defaultRegion).lang
-  const search = useSearch(tmdbKey, tmdbLang)
+  const search = useSearch(tmdbKey, tmdbLang, serverHasTmdbKey)
   const { mappings, mappingsMap, loadMappings, removeMapping, exportData, importData } = useMappingsStore()
   const {
     // Badges
@@ -584,6 +589,7 @@ export function usePictorium(): PictoriumCtx {
     fetch("/api/defaults")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
+        if (data?.hasInstanceKeys?.tmdbKey) setServerHasTmdbKey(true)
         if (!data?.serverKeys) return
         const { tmdbKey, mdblistApiKey: mdblistKey, tvdbApiKey: tvdbKey } = data.serverKeys
         if (!savedTmdb && tmdbKey) {
@@ -781,7 +787,7 @@ export function usePictorium(): PictoriumCtx {
         return
       }
     }
-    if (!navigation.selected || !tmdbKey) return
+    if (!navigation.selected || (!tmdbKey && !serverHasTmdbKey)) return
     const itemId = navigation.selected.id
     const itemType = navigation.selected.media_type
     const mdblistParam = mdblistApiKey ? "&mdblist_key=" + encodeURIComponent(mdblistApiKey) : ""
@@ -806,7 +812,7 @@ export function usePictorium(): PictoriumCtx {
 
   // --- Poster image refresh ---
   useEffect(() => {
-    if (!navigation.selected || !tmdbKey) return
+    if (!navigation.selected || (!tmdbKey && !serverHasTmdbKey)) return
     const item = navigation.selected
     const fetchId = navigation.incrementFetchId()
     // M16: riusa loadCurrentItemData così al cambio lingua si ricaricano anche
@@ -1090,9 +1096,11 @@ export function usePictorium(): PictoriumCtx {
     prefetchedRef.current.add(key)
     const rLang = getRegionDef(editorCtx.defaultRegion).lang
     const langs = `${lang},en,null`
+    // Senza chiave da nessuna parte evita prefetch destinati al 401.
+    if (!tmdbKey && !serverHasTmdbKey) return
     http(`/api/tmdb/${item.id}/details?type=${item.media_type}&language=${rLang}&api_key=${tmdbKey}`, { timeout: 15000, retries: 0 }).catch(() => null)
     http(`/api/tmdb/${item.id}/images?type=${item.media_type}&languages=${langs}&api_key=${tmdbKey}`, { timeout: 15000, retries: 0 }).catch(() => null)
-  }, [tmdbKey, lang, editorCtx.defaultRegion])
+  }, [tmdbKey, serverHasTmdbKey, lang, editorCtx.defaultRegion])
 
   return useMemo(() => ({
     selected: navigation.selected, setSelected: navigation.setSelected,
@@ -1129,6 +1137,7 @@ export function usePictorium(): PictoriumCtx {
     showLangPicker, setShowLangPicker,
     tmdbKeyInput, setTmdbKeyInput,
     showKey, setShowKey, setTmdbKey,
+    serverHasTmdbKey,
     mdblistApiKey, setMdblistApiKey: setMdblistApiKeyFn,
     tvdbApiKey, setTvdbApiKey: setTvdbApiKeyFn,
     exportData, importData, removeRecentSearch: search.removeRecentSearch, clearRecentSearches: search.clearRecentSearches,
@@ -1159,6 +1168,7 @@ export function usePictorium(): PictoriumCtx {
     mappings,
     langOpen, settingsOpen, showLangPicker,
     tmdbKeyInput, showKey, copied, mdblistApiKey, tvdbApiKey,
+    serverHasTmdbKey,
     accentColor, autoAccentColor, setAccentColor,
     topEdgeColor, autoSaveExcludedPosters, autoSaveExcludedBackdrops, prefetchTitle,
     trending.trending, trending.trendingError, trending.streamingCharts, trending.mdblistAnimeList,
