@@ -64,6 +64,7 @@ const defaultsSchema = z.object({
   customRatingApiKeyHeader: z.string().max(64).optional(),
   ratingSources: z.array(z.string()).optional(),
   ratingPreset: z.enum(RATING_PRESETS).optional(),
+  sashOrder: z.array(z.string().max(20)).optional(),
   autoRotateClean: z.boolean().optional(),
   defaultAutoRotateBackdrop: z.boolean().optional(),
   defaultLogoFitEnabled: z.boolean().optional(),

@@ -376,6 +376,7 @@ export function usePictorium(): PictoriumCtx {
     defaultBadgeQuality,
     defaultCustomRatings,
     defaultRatingPreset,
+    defaultSashOrder,
     defaultRibbonSide,
     defaultPosterShape,
     defaultLogoAlign,
@@ -1079,6 +1080,7 @@ export function usePictorium(): PictoriumCtx {
     rotationPosters, autoRotateClean, defaultAutoRotateClean, excludedPosters, accentColor, logoDisabled, setLogoDisabled,
     rotationBackdrops, autoRotateBackdrop, defaultAutoRotateBackdrop, excludedBackdrops, backdrops,
     setLogoScale, setLogoOffsetX, setLogoOffsetY, networkLogo, lang, episodeGroupId, posterShape,
+    defaultSashOrder,
   })
 
   const saveConfig = useCallback(async () => {

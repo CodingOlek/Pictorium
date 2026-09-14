@@ -6,6 +6,7 @@ import { createLogger } from "@/lib/logger"
 import type { BadgeStyle, RankingBadgeStyle } from "@/lib/badge-styles"
 import type { StreamQuality } from "@/lib/quality-tiers"
 import type { RatingPreset } from "@/lib/rating-weights"
+import type { SashBucket } from "@/lib/badge-priority"
 import { isBadgeStyle, isRankingBadgeStyle } from "@/lib/badge-styles"
 import { normalizeRegion } from "@/lib/regions"
 import { envWithFallback } from "@/lib/env-compat"
@@ -39,6 +40,8 @@ export interface ServerDefaults {
   ratingSources?: string[]
   /** Preset pesi voto (balanced = media pari attuale). Default "balanced". */
   ratingPreset?: RatingPreset
+  /** Ordine/priorità sash (sottoinsieme ammesso: non listati = spenti). Default = ordine standard. */
+  sashOrder?: SashBucket[]
   autoRotateClean?: boolean
   defaultLogoFitEnabled?: boolean
   networkLogo?: boolean
@@ -131,6 +134,14 @@ function defaultsFromEnv(): ServerDefaults {
   if (rsrcEnv && rsrcEnv.length > 0) d.ratingSources = rsrcEnv
   const rwEnv = getEnv("RATING_PRESET")?.trim().toLowerCase()
   if (rwEnv === "balanced" || rwEnv === "cinephile" || rwEnv === "series" || rwEnv === "raw") d.ratingPreset = rwEnv
+  // Ordine sash da env (stesso formato della query): token validi, dedup.
+  // Vuoto/invalido → ignorato (default). Array salvato via UI non toccato qui.
+  const sashEnv = getEnv("SASH_ORDER")?.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+  if (sashEnv && sashEnv.length > 0) {
+    const valid = sashEnv.filter((s): s is SashBucket =>
+      s === "upcoming" || s === "rank" || s === "new" || s === "award" || s === "extra")
+    if (valid.length > 0) d.sashOrder = [...new Set(valid)]
+  }
   // Soglia minima qualità (solo type-import da stream-quality: nessun ciclo
   // di dipendenze runtime). Valori non validi → ignorati (default SD).
   const qminRaw = getEnv("QUALITY_MIN")?.trim().toUpperCase()

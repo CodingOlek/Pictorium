@@ -606,6 +606,31 @@ describe("resolvePosterRenderConfig", () => {
     expect(rInvalid.ratingPreset).toBe("balanced")
   })
 
+  it("sashOrder defaults to standard order; query sash wins over server defaults", () => {
+    expect(resolvePosterRenderConfig(baseInput()).sashOrder).toEqual(
+      ["upcoming", "rank", "new", "award", "extra"],
+    )
+
+    const rQuery = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ sash: "award,rank" }),
+      sd: { sashOrder: ["new"] },
+    }))
+    expect(rQuery.sashOrder).toEqual(["award", "rank"])
+
+    const rSd = resolvePosterRenderConfig(baseInput({ sd: { sashOrder: ["rank"] } }))
+    expect(rSd.sashOrder).toEqual(["rank"])
+
+    const rEmpty = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ sash: "" }),
+    }))
+    expect(rEmpty.sashOrder).toEqual([])
+
+    const rInvalid = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ sash: "tarocco" }),
+    }))
+    expect(rInvalid.sashOrder).toEqual(["upcoming", "rank", "new", "award", "extra"])
+  })
+
   it("posterShape: query shape wins, then mapping, then config token, then sd, then poster", () => {
     expect(resolvePosterShape(new URLSearchParams({ shape: "landscape" }), mapping({ posterShape: "poster" }), config({ posterShape: "poster" }), { posterShape: "poster" })).toBe("landscape")
     expect(resolvePosterShape(new URLSearchParams({ shape: "poster" }), mapping({ posterShape: "landscape" }), config({ posterShape: "landscape" }), { posterShape: "landscape" })).toBe("poster")

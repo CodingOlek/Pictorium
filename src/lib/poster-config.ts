@@ -12,6 +12,7 @@ import { resolveLabelFor } from "./i18n"
 import { SUPPORTED_RATING_SOURCES, DEFAULT_RATING_SOURCES } from "./ratings"
 import { parseMinQuality, type StreamQuality } from "./quality-tiers"
 import { parseRatingPreset, type RatingPreset } from "./rating-weights"
+import { parseSashOrder, normalizeSashOrder, DEFAULT_SASH_ORDER, type SashBucket } from "./badge-priority"
 import {
   isBadgeStyle,
   isRankingBadgeStyle,
@@ -85,6 +86,8 @@ export interface PosterRenderConfig {
   minQuality: StreamQuality
   /** Preset pesi voto — catena: query `rw` > server defaults > "balanced". Globale (nessun per-titolo). */
   ratingPreset: RatingPreset
+  /** Ordine/priorità sash — catena: query `sash` > server defaults > default. Globale (nessun per-titolo). */
+  sashOrder: SashBucket[]
   /** Riga rating custom provider (display). Default ON quando il provider è configurato. */
   customRatings: boolean
   ratingSources: string[]
@@ -248,6 +251,11 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
   // Preset pesi voto — globale: query `rw` > server defaults > "balanced"
   // (= comportamento attuale). Nessun override per-titolo/config in Fase 3.
   const ratingPreset: RatingPreset = parseRatingPreset(q.get("rw")) ?? parseRatingPreset(sd.ratingPreset ?? null) ?? "balanced"
+
+  // Ordine sash — globale: query `sash` (sottoinsieme ordinato, non listati =
+  // spenti) > server defaults > default. Token non validi ignorati, mai garbage.
+  const sashOrder: SashBucket[] = parseSashOrder(q.get("sash"))
+    ?? normalizeSashOrder(sd.sashOrder) ?? [...DEFAULT_SASH_ORDER]
 
   // Riga rating custom provider (display) — precedenza: query `cr` > mapping
   // salvato > config token/profilo > server defaults > true (ON di default).
@@ -430,6 +438,7 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
     badgeQuality,
     minQuality,
     ratingPreset,
+    sashOrder,
     customRatings,
     ratingSources,
     logoScale,

@@ -1129,7 +1129,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       badgeStyle, rankingBadgeStyle,
       blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness, tintStrength,
       badgesEnabled, rankingEnabled,
-      badgeGenre, badgeYear, badgeRating, badgeQuality, minQuality, ratingPreset,
+      badgeGenre, badgeYear, badgeRating, badgeQuality, minQuality, ratingPreset, sashOrder,
       logoScale, logoOffsetX, logoOffsetY,
       topBadgeScale, topBadgeOffsetX, topBadgeOffsetY,
       genreBadgeScale, qualityBadgeScale, networkLogoScale,
@@ -1184,7 +1184,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         keywords: [...tmdbKeywords],
         imdbTop250: !!imdbTop250,
       }
-      const badgeComputed = computeTopBadge(badgeInput, t, locale)
+      const badgeComputed = computeTopBadge(badgeInput, t, locale, sashOrder)
       log.info("Debug mode", { mediaType, tmdbId, imdbId, imdbTop250: !!imdbTop250, badge: badgeComputed.badge?.label ?? "null", vote: voteAverage, genre: genreName, quality: finalQuality })
       completePosterRender(null)
       return Response.json({
@@ -1240,6 +1240,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
             badgeYear,
             badgeRating,
             badgeQuality,
+            sashOrder,
             customBadge: queryExtra,
           },
         },
@@ -1288,6 +1289,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness, tintStrength,
       badgesEnabled, rankingEnabled, genreName, voteAverage, badgeStyle,
       rankingBadgeStyle, badgeGenre, badgeYear, badgeRating, badgeQuality,
+      sashOrder,
       quality: finalQuality,
       topLight, targetCenter, ribbonSide,
       logoScale, logoOffsetX, logoOffsetY,

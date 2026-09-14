@@ -12,6 +12,7 @@ import { Toggle } from "@/components/Toggle"
 import { BadgeStyleSelector, MenuItem } from "@/components/ui"
 import { UI_RATING_SOURCES } from "@/lib/ratings"
 import { RATING_PRESETS, type RatingPreset } from "@/lib/rating-weights"
+import { SASH_BUCKETS, DEFAULT_SASH_ORDER, type SashBucket } from "@/lib/badge-priority"
 import { formatRating } from "@/lib/custom-rating/formatter"
 import { REGIONS } from "@/lib/regions"
 import { UI_LANGUAGES } from "@/lib/utils"
@@ -496,6 +497,34 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
               }}
               label={t("ui.badgeQuality")}
             />
+          </div>
+
+          {/* Categorie sash (priorità badge superiore): toggle ON/OFF in ordine fisso */}
+          <div className="pt-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+              {t("ui.sashTitle")}
+            </span>
+            <div className="mt-1 space-y-1.5">
+              {SASH_BUCKETS.map((b) => {
+                const sash = ed.defaultSashOrder ?? [...DEFAULT_SASH_ORDER]
+                const isOn = sash.includes(b)
+                return (
+                  <div key={b} className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">{t(`ui.sash_${b}`)}</span>
+                    <Toggle
+                      value={isOn}
+                      onChange={(v) => {
+                        const next: SashBucket[] = v
+                          ? DEFAULT_SASH_ORDER.filter((x) => x === b || sash.includes(x))
+                          : sash.filter((x) => x !== b)
+                        ed.setDefaultSashOrder(next)
+                      }}
+                      label={t(`ui.sash_${b}`)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           <div className="flex items-center justify-between" title={t("ui.customRatingsHint")}>

@@ -24,6 +24,7 @@ import fs from "fs"
 import path from "path"
 import { estimateTextWidth, fontFamilyFor, escSvg } from "./badge-svg-shared"
 import { computeTopBadge, isNetworkStudio, type BadgeInput } from "./poster-badge"
+import type { SashBucket } from "./badge-priority"
 import { PRE_RELEASE_DIM_ALPHA, PRE_RELEASE_BLUR_SIGMA } from "./pre-release"
 import type { Mapping } from "./types"
 import type { ServerDefaults } from "./server-defaults"
@@ -90,6 +91,8 @@ export interface GenerationInput {
   badgeRating: boolean
   badgeQuality?: boolean
   quality?: string | null
+  /** Ordine/priorità sash (sottoinsieme = resto spento). Default = ordine standard. */
+  sashOrder?: readonly SashBucket[] | null
   topLight: boolean
   targetCenter: number
   /** Modalità layout nastro Netflix + logo network: "left" (Nuvio, default) o "right" (Stremio). */
@@ -548,6 +551,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     tintStrength = 20,
     badgesEnabled, rankingEnabled, genreName, voteAverage, badgeStyle,
     rankingBadgeStyle, badgeGenre, badgeYear, badgeRating, badgeQuality, quality,
+    sashOrder,
     topLight, targetCenter, ribbonSide,
     logoScale, logoOffsetX, logoOffsetY,
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY,
@@ -742,7 +746,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     keywords: [...tmdbKeywords],
     imdbTop250: !!imdbTop250,
   }
-  const computed = computeTopBadge(badgeInput, t, locale)
+  const computed = computeTopBadge(badgeInput, t, locale, sashOrder ?? null)
   const studioBadge = computed.studioBadge
   const isNetStudio = isNetworkStudio(studioBadge)
 

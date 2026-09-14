@@ -137,6 +137,7 @@ export const posterQuerySchema = z.object({
   lang: boundedQueryString(20),
   rsrc: boundedQueryString(200),
   rw: boundedQueryString(12),
+  sash: boundedQueryString(64),
   imdbId: z.string().regex(/^tt\d{1,20}$/).optional(),
   rank: intQueryString(7),
   animerank: intQueryString(7),
