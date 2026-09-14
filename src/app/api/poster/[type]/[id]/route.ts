@@ -62,6 +62,7 @@ import { generatePosterBuffer, type GenerationInput } from "@/lib/poster-service
 import { computeTopBadge } from "@/lib/poster-badge"
 
 import { resolveImdbToTmdb } from "@/lib/imdb-resolver"
+import { getTvdbArtworks, getTvdbMovieId, getTvdbSeriesId, pickTvdbPoster } from "@/lib/tvdb"
 import { validatePosterQuery } from "@/lib/validation"
 import { decodeConfig } from "@/lib/config-token"
 import { createLogger } from "@/lib/logger"
@@ -244,6 +245,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // api_key non influisce sul rendering: rimuoverla evita frammentazione della
   // cache per utente e segreti in memoria nelle chiavi.
   cacheParams.delete("api_key")
+  // B1: la chiave TVDB non entra mai in chiaro nella cache key (segreto in
+  // memoria); il flag `tvdb=1` separa le entry con rescue attivo da quelle
+  // senza (output diverso a parità di altri parametri).
+  cacheParams.delete("tvdb_key")
+  // Il flag è server-side: un `tvdb=` in query viene ignorato (solo la
+  // presenza della chiave abilita il rescue).
+  cacheParams.delete("tvdb")
+  // Chiave TVDB per il rescue poster (B1): query `tvdb_key` > fallback
+  // d'istanza (stessa precedenza della route meta). Senza chiave il rescue
+  // è spento e il comportamento resta quello storico.
+  const tvdbApiKey = req.nextUrl.searchParams.get("tvdb_key")
+    || envWithFallback("TVDB_API_KEY") || process.env.TVDB_API_KEY || undefined
+  if (tvdbApiKey) cacheParams.set("tvdb", "1")
   if (typeof cacheParams.sort === "function") cacheParams.sort()
   const cachedRank = mapping?.trendRank ?? null
   const rotateKey = isRotating
@@ -716,16 +730,43 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           posterPath = fallbackPoster.file_path
         }
       } else {
-        // Nessun clean disponibile: il poster in lingua ha già il titolo
-        // stampato → mai sovrapporre il logo (stesso invariante del client:
-        // buildPreviewUrl emette `logo=` solo con poster clean, e il mapping
-        // forza logoPath=null sui non-clean).
-        const langPoster = images.posters.find((p: TMDBImage) => p.iso_639_1 === preferredLanguage)
-        const origPoster = details.original_language ? images.posters.find((p: TMDBImage) => p.iso_639_1 === details.original_language) : undefined
-        const chosen = langPoster || origPoster || images.posters[0]
-        if (chosen) posterPath = chosen.file_path
-        logoPath = null
-        logoPathBuffer = null
+        // B1: TVDB rescue — solo senza clean TMDB, con logo e chiave TVDB
+        // (gating fail-fast: niente chiave → costo zero). Il poster textless
+        // TVDB salva il logo che altrimenti verrebbe droppato col fallback
+        // in lingua. Solo portrait (il landscape ha già la base backdrop).
+        // Fail-open: qualsiasi errore → fallback in lingua sotto.
+        let tvdbRescue: string | null = null
+        if (!isLandscape && logoPath && tvdbApiKey) {
+          try {
+            const remoteTvdbId = extIds.tvdb_id
+              ?? (imdbId
+                ? (mediaType === "movie"
+                  ? await getTvdbMovieId(imdbId, tvdbApiKey)
+                  : await getTvdbSeriesId(imdbId, tvdbApiKey))
+                : null)
+            if (remoteTvdbId) {
+              const arts = await getTvdbArtworks(mediaType, remoteTvdbId, tvdbApiKey)
+              tvdbRescue = pickTvdbPoster(arts, preferredLanguage)?.image ?? null
+            }
+          } catch {
+            // Fallthrough al fallback in lingua.
+          }
+        }
+        if (tvdbRescue) {
+          log.info("TVDB poster rescue", { mediaType, tmdbId, poster: tvdbRescue })
+          posterPath = tvdbRescue
+        } else {
+          // Nessun clean disponibile: il poster in lingua ha già il titolo
+          // stampato → mai sovrapporre il logo (stesso invariante del client:
+          // buildPreviewUrl emette `logo=` solo con poster clean, e il mapping
+          // forza logoPath=null sui non-clean).
+          const langPoster = images.posters.find((p: TMDBImage) => p.iso_639_1 === preferredLanguage)
+          const origPoster = details.original_language ? images.posters.find((p: TMDBImage) => p.iso_639_1 === details.original_language) : undefined
+          const chosen = langPoster || origPoster || images.posters[0]
+          if (chosen) posterPath = chosen.file_path
+          logoPath = null
+          logoPathBuffer = null
+        }
       }
     } catch (e) {
       autoFetchFailed = true
