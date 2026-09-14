@@ -104,10 +104,6 @@ describe("GET /catalog/[type]/[id]", () => {
     // Il poster resta portrait per i client verticali (nessun mapping salvato).
     expect(body.metas[0].poster).not.toContain("shape=landscape")
     expect(body.metas[0].posterShape).toBe("poster")
-    // Niente overlay doppio su Nuvio: il logo vive già dentro il poster
-    // renderizzato, quindi il campo `logo` non viene emesso (Nuvio ripiega
-    // sul titolo come testo in card landscape e hero).
-    expect(body.metas[0].logo).toBeUndefined()
   })
 
   it("serves legacy posterium-* catalog IDs as aliases of pictorium-*", async () => {

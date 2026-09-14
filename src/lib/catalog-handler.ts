@@ -7,7 +7,7 @@ import { getServerDefaults } from "@/lib/server-defaults"
 import { POSTER_URL_VERSION } from "@/lib/render-version"
 import { getById } from "@/lib/store"
 import { decodeConfig, type PictoriumUserConfig } from "@/lib/config-token"
-import { getDetails, getDetailsWithExternalIds, getGenreList, personMovieCredits, personTvCredits, posterUrlOriginal, resolveRequestApiKey, searchMovies, searchPerson, searchTV, tmdbFindByImdb, type TMDBDetails } from "@/lib/tmdb"
+import { getDetails, getDetailsWithExternalIds, getGenreList, getImages, personMovieCredits, personTvCredits, posterUrlOriginal, resolveRequestApiKey, searchMovies, searchPerson, searchTV, tmdbFindByImdb, type TMDBDetails } from "@/lib/tmdb"
 import { resolveImdbId } from "@/lib/imdb-cache"
 import { fetchMDBList } from "@/lib/mdblist"
 import { fetchUnifiedCatalogItems } from "@/lib/custom-catalog-providers"
@@ -305,6 +305,42 @@ function genreNamesFromIds(genreIds: number[] | undefined, genreNames: Map<numbe
   return names.length > 0 ? names : undefined
 }
 
+async function catalogLogo(mediaType: "movie" | "tv", tmdbId: number, apiKey?: string, tmdbLang = "it-IT"): Promise<string | undefined> {
+  // A5: memo 24h (hit) / 1h (miss). Il logo in catalogo è richiesto per ogni
+  // item a ogni catalogo freddo (fino a 3N upstream con details+externalIds):
+  // i path TMDB sono immutabili, quindi l'hit vale 24h; il miss solo 1h così
+  // un logo aggiunto su TMDB viene scoperto entro l'ora. Wrapper oggetto
+  // perché cacheGet segnala il miss con null (un null cachato sarebbe
+  // indistinguibile). La chiave esclude l'api_key (non influisce sul payload).
+  // Solo gli esiti certi vanno in memo: su eccezione (timeout/rate-limit) non
+  // si cacha, così un errore transient non oscura il logo per un'ora.
+  const primary = tmdbLang.slice(0, 2).toLowerCase()
+  const memoKey = `catalog:logo:${mediaType}:${tmdbId}:${primary}`
+  const memo = cacheGet<{ logo: string | null }>(memoKey)
+  if (memo) return memo.logo ?? undefined
+  try {
+    // D4: tetto 1500ms (prima 2500). Il logo in catalogo è guarnizione: su
+    // cold catalog 20 loghi × coda/concorrenza 5 valgono secondi di route
+    // (maxDuration 60). Oltre il tetto → undefined, il poster resta completo.
+    const signal = typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(1500) : undefined
+    const images = await getImages(mediaType, tmdbId, `${primary},en,null`, apiKey, signal)
+    if (images?.logos && images.logos.length > 0) {
+      const itLogo = images.logos.find((l) => l.iso_639_1 === primary) || images.logos[0]
+      if (itLogo?.file_path) {
+        const logoUrl = posterUrlOriginal(itLogo.file_path)
+        cacheSet(memoKey, { logo: logoUrl }, ["catalog", "tmdb"], 24 * 60 * 60 * 1000)
+        return logoUrl
+      }
+    }
+    cacheSet(memoKey, { logo: null }, ["catalog", "tmdb"], 60 * 60 * 1000)
+  } catch {
+    // logo opzionale — ignora errori (rate limit, 404, timeout)
+  }
+  return undefined
+}
+
+
+
 /**
  * ID del catalogo Stremio: esponendo l'id provider (`tmdb:<id>`), Stremio
  * interroga direttamente Pictorium per la risorsa `meta` invece di delegare a Cinemeta,
@@ -592,9 +628,10 @@ export async function pictoriumCatalog(
         }, 5)
         const validResults = results.filter((r): r is NonNullable<typeof r> => r !== null)
         metas = await concurrentMap(validResults, async (r) => {
-          const [imdbId, posterAndShape] = await Promise.all([
+          const [imdbId, posterAndShape, logo] = await Promise.all([
             r.imdb ? Promise.resolve(r.imdb) : resolveImdbId(stType === "movie" ? "movie" : "tv", r.tmdbId, apiKey),
             pictoriumPosterAndShape(req, stType, r.tmdbId, configParam, userParam, r.rank, posterLang, region.code),
+            apiKey ? catalogLogo(stType === "movie" ? "movie" : "tv", r.tmdbId, apiKey, tmdbLang) : Promise.resolve(undefined),
           ])
           const { poster, banner, posterShape } = posterAndShape
           const background = catalogBackground(r.backdropPath)
@@ -606,6 +643,7 @@ export async function pictoriumCatalog(
             posterShape,
             background,
             banner,
+            logo,
             releaseInfo: r.releaseInfo,
             imdbRating: r.voteAverage ? r.voteAverage.toFixed(1) : undefined,
             genres: r.genres,
@@ -653,9 +691,10 @@ export async function pictoriumCatalog(
       }, 5)
       const validResults = results.filter((r): r is { d: TMDBDetails; tmdbId: number; imdbId: string | null } => r !== null)
       metas = await concurrentMap(validResults, async (r) => {
-        const [imdbId, posterAndShape] = await Promise.all([
+        const [imdbId, posterAndShape, logo] = await Promise.all([
           r.imdbId || r.d.external_ids?.imdb_id || null,
           pictoriumPosterAndShape(req, stType, r.tmdbId, configParam, userParam, undefined, posterLang, region.code),
+          apiKey ? catalogLogo(stType === "movie" ? "movie" : "tv", r.tmdbId, apiKey, tmdbLang) : Promise.resolve(undefined),
         ])
         const { poster, banner, posterShape } = posterAndShape
         const background = catalogBackground(r.d.backdrop_path)
@@ -667,6 +706,7 @@ export async function pictoriumCatalog(
           posterShape,
           background,
           banner,
+          logo,
           releaseInfo: (r.d.release_date || r.d.first_air_date || "").slice(0, 4) || undefined,
           imdbRating: r.d.vote_average ? r.d.vote_average.toFixed(1) : undefined,
           genres: (r.d.genres || []).map((g) => g.name).filter(Boolean),
@@ -712,9 +752,10 @@ export async function pictoriumCatalog(
       }, 5)
       const validResults = results.filter((r): r is NonNullable<typeof r> => r !== null).slice(0, 20)
       metas = await concurrentMap(validResults, async (r) => {
-        const [imdbId, posterAndShape] = await Promise.all([
+        const [imdbId, posterAndShape, logo] = await Promise.all([
           r.imdb ? Promise.resolve(r.imdb) : resolveImdbId(mediaType, r.tmdbId, apiKey),
           pictoriumPosterAndShape(req, stType, r.tmdbId, configParam, userParam, r.rank, posterLang, region.code),
+          apiKey ? catalogLogo(mediaType, r.tmdbId, apiKey, tmdbLang) : Promise.resolve(undefined),
         ])
         const { poster, banner, posterShape } = posterAndShape
         const background = catalogBackground(r.backdropPath)
@@ -726,6 +767,7 @@ export async function pictoriumCatalog(
           posterShape,
           background,
           banner,
+          logo,
           releaseInfo: r.releaseInfo,
           imdbRating: r.voteAverage ? r.voteAverage.toFixed(1) : undefined,
           genres: r.genres,
@@ -804,9 +846,10 @@ export async function pictoriumCatalog(
           }, 5)
           const validResults = results.filter((r) => r.title.length > 0)
           metas = await concurrentMap(validResults, async (r) => {
-            const [imdbId, posterAndShape] = await Promise.all([
+            const [imdbId, posterAndShape, logo] = await Promise.all([
               r.imdbId || r.externalImdbId || null,
               pictoriumPosterAndShape(req, stType, r.tmdbId, configParam, userParam, undefined, posterLang, region.code),
+              apiKey ? catalogLogo(stType === "movie" ? "movie" : "tv", r.tmdbId, apiKey, tmdbLang) : Promise.resolve(undefined),
             ])
             const { poster, banner, posterShape } = posterAndShape
             const background = catalogBackground(r.backdropPath)
@@ -818,6 +861,7 @@ export async function pictoriumCatalog(
               posterShape,
               background,
               banner,
+              logo,
               releaseInfo: r.releaseInfo,
               imdbRating: r.voteAverage ? r.voteAverage.toFixed(1) : undefined,
               genres: r.genres,
@@ -840,10 +884,11 @@ export async function pictoriumCatalog(
             const itemsWithTmdb = allWithTmdb.slice(skipForPlatform, skipForPlatform + 10)
 
             metas = await concurrentMap(itemsWithTmdb, async (item) => {
-              const [imdbId, details, posterAndShape] = await Promise.all([
+              const [imdbId, details, posterAndShape, logo] = await Promise.all([
                 resolveImdbId(stType === "movie" ? "movie" : "tv", item.tmdbId, apiKey),
                 getDetails(stType === "movie" ? "movie" : "tv", item.tmdbId, tmdbLang, apiKey).catch(() => null),
                 pictoriumPosterAndShape(req, stType, item.tmdbId, configParam, userParam, undefined, posterLang, region.code),
+                catalogLogo(stType === "movie" ? "movie" : "tv", item.tmdbId, apiKey, tmdbLang),
               ])
               const { poster, banner, posterShape } = posterAndShape
               const italianTitle = details?.title || details?.name || item.title
@@ -856,6 +901,7 @@ export async function pictoriumCatalog(
                 posterShape,
                 background,
                 banner,
+                logo,
                 releaseInfo: (details?.release_date || details?.first_air_date || item.releaseDate)?.slice(0, 4) || undefined,
                 imdbRating: details?.vote_average ? details.vote_average.toFixed(1) : undefined,
                 genres: (details?.genres || []).map((g) => g.name).filter(Boolean),

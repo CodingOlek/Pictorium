@@ -49,15 +49,8 @@ function tmdbShowResponse(tmdbId: number, name: string): Response {
   })
 }
 
-// Prepara una fase con titolo diverso: reset delle cache interne (JW + TMDB)
-// così la nuova risposta mock viene davvero consumata. Due fetch per fase:
-// JustWatch + dettagli TMDB (il catalogo non fa più getImages per il logo).
-function mockPhase(tmdbId: number, name: string) {
-  __resetJWRankingsCache()
-  __clearTMDBCache()
-  vi.spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(justWatchResponse(tmdbId))
-    .mockResolvedValueOnce(tmdbShowResponse(tmdbId, name))
+function emptyImagesResponse(): Response {
+  return Response.json({ posters: [], logos: [], backdrops: [] })
 }
 
 function catalogRequest() {
@@ -65,6 +58,17 @@ function catalogRequest() {
 }
 
 const PARAMS = { params: Promise.resolve({ type: "series", id: "pictorium-jw-series.json" }) }
+
+// Prepara una fase con titolo diverso: reset delle cache interne (JW + TMDB)
+// così la nuova risposta mock viene davvero consumata.
+function mockPhase(tmdbId: number, name: string) {
+  __resetJWRankingsCache()
+  __clearTMDBCache()
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(justWatchResponse(tmdbId))
+    .mockResolvedValueOnce(tmdbShowResponse(tmdbId, name))
+    .mockResolvedValueOnce(emptyImagesResponse())
+}
 
 async function catalogName(): Promise<string> {
   const res = await GET(catalogRequest(), PARAMS)
