@@ -74,7 +74,7 @@ import { resolvePosterRenderConfig, resolvePosterShape } from "@/lib/poster-conf
 import { selectBestLogo, logoBestLogoFallbackReason } from "@/lib/logo-selection"
 import { resolveStreamQuality } from "@/lib/stream-quality"
 import { applyMinQuality, type StreamQuality } from "@/lib/quality-tiers"
-import { computeVote, parseRatingPreset } from "@/lib/rating-weights"
+import { computeVote } from "@/lib/rating-weights"
 import { combineAbortSignals } from "@/lib/abort-signal"
 import { createHash } from "node:crypto"
 import { fetchCustomRatings, resolveCustomRatingConfig, type RatingItem } from "@/lib/custom-rating"
@@ -499,11 +499,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const reqRatingSources = qRsrc !== null
     ? qRsrc.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
     : (configOverride?.ratingSources ?? undefined)
-  // Preset pesi voto per il calcolo pre-config (stessa catena di poster-config:
-  // query `rw` > server defaults > "balanced"). Come badgeQualityEarly.
-  const reqRatingPreset = parseRatingPreset(req.nextUrl.searchParams.get("rw"))
-    ?? parseRatingPreset(sd.ratingPreset ?? null)
-    ?? "balanced"
   const t = createT(req.nextUrl.searchParams.get("lang") || mapping?.language || "it")
 
   if (queryPoster) {
@@ -1102,7 +1097,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         ratings.push({ id: "imdb", name: "IMDb", value: imdbRating, format: "decimal" })
       }
       if (!multiRatingOnly) {
-        const avgVote = computeVote(aggregated, reqRatingPreset, reqRatingSources)
+        const avgVote = computeVote(aggregated, reqRatingSources)
         if (typeof avgVote === "number" && avgVote > 0) voteAverage = avgVote
       }
       ratingAbort?.abort()
@@ -1215,7 +1210,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       badgeStyle, rankingBadgeStyle,
       blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness, tintStrength,
       badgesEnabled, rankingEnabled,
-      badgeGenre, badgeYear, badgeRating, badgeQuality, minQuality, ratingPreset, sashOrder,
+      badgeGenre, badgeYear, badgeRating, badgeQuality, minQuality, sashOrder,
       logoScale, logoOffsetX, logoOffsetY,
       topBadgeScale, topBadgeOffsetX, topBadgeOffsetY,
       genreBadgeScale, qualityBadgeScale, networkLogoScale,
@@ -1290,7 +1285,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           backdrop: backdropPath,
         },
         genre: { name: genreName, year: releaseDate?.slice(0, 4) },
-        vote: { average: voteAverage, preset: ratingPreset },
+        vote: { average: voteAverage },
         quality: finalQuality,
         minQuality,
         preRelease: { enabled: preRelease, detected: preReleaseDetected, applied: applyPreRelease, jwAvailable: preJw, digitalDate: preDigital, theatricalDate: releaseDate ?? mapping?.releaseDate ?? null },
