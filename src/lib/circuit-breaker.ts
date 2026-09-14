@@ -31,6 +31,19 @@ export interface CircuitBreaker {
 }
 
 /**
+ * Retry-After (seconds) → ms for a breaker's custom backoff. Cap 5min: the
+ * value is upstream-controlled and must never freeze a provider for hours.
+ * Returns undefined when absent/unparseable (use the default backoff).
+ */
+export function parseRetryAfterMs(getHeader: (name: string) => string | null): number | undefined {
+  const raw = getHeader("Retry-After")
+  if (!raw) return undefined
+  const s = parseInt(raw, 10)
+  if (!Number.isFinite(s) || s < 0) return undefined
+  return Math.min(s * 1000, 300_000)
+}
+
+/**
  * Generic fail-open circuit breaker with half-open trial (extracted from
  * awards.ts — the Wikidata SPARQL breaker, the battle-tested reference).
  *

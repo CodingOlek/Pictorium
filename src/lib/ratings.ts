@@ -2,7 +2,7 @@ import crypto from "node:crypto"
 import { cacheGet, cacheSet } from "./cache"
 import { createLogger } from "@/lib/logger"
 import { envWithFallback } from "@/lib/env-compat"
-import { createCircuitBreaker } from "@/lib/circuit-breaker"
+import { createCircuitBreaker, parseRetryAfterMs } from "@/lib/circuit-breaker"
 
 const log = createLogger("ratings")
 
@@ -26,16 +26,6 @@ const mdblistBreaker = createCircuitBreaker({ name: "mdblist", failureThreshold:
 /** Solo per i test: azzera lo stato del breaker MDBList. */
 export function __resetMdblistBreaker(): void {
   mdblistBreaker.reset()
-}
-
-// Retry-After (secondi) → ms per il backoff custom del breaker. Cap a 5min:
-// il valore è controllato dall'upstream, non deve mai congelare i rating per ore.
-function retryAfterMs(res: Response): number | undefined {
-  const raw = res.headers.get("Retry-After")
-  if (!raw) return undefined
-  const s = parseInt(raw, 10)
-  if (!Number.isFinite(s) || s < 0) return undefined
-  return Math.min(s * 1000, 300_000)
 }
 
 export const SUPPORTED_RATING_SOURCES = [
@@ -166,7 +156,7 @@ export async function fetchAggregatedRating(
     if (res.status === 429 || res.status >= 500) {
       // Rate limit o server error (500, 502, 503): la finestra segue
       // l'eventuale Retry-After upstream, oppure il default 30s.
-      mdblistBreaker.recordFailure(retryAfterMs(res))
+      mdblistBreaker.recordFailure(parseRetryAfterMs((n) => res.headers.get(n)))
       return null
     }
     // Altri non-OK (404 miss genuina, 401 chiave invalida): fail veloce
