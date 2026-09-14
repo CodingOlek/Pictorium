@@ -158,4 +158,20 @@ describe("buildStremioPosterUrl", () => {
     expect(forced.searchParams.get("gradHeight")).toBe("15")
     expect(forced.searchParams.get("shape")).toBe("landscape")
   })
+
+  it("emits hideLogo only for the Nuvio banner (never for poster)", () => {
+    const base = {
+      origin: "http://localhost:3000",
+      type: "movie" as const,
+      id: 42,
+      defaults: {},
+      mapping: mapping("2026-07-16T10:15:30.000Z"),
+    }
+    const poster = buildStremioPosterUrl(base)
+    expect(poster.searchParams.has("hideLogo")).toBe(false)
+
+    const banner = buildStremioPosterUrl({ ...base, forceShape: "landscape", hideLogo: true })
+    expect(banner.searchParams.get("hideLogo")).toBe("1")
+    expect(banner.searchParams.get("shape")).toBe("landscape")
+  })
 })

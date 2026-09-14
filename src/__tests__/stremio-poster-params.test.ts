@@ -62,6 +62,12 @@ describe("buildStremioPosterSearchParams", () => {
     expect(buildStremioPosterSearchParams({ posterShape: "landscape" }).get("shape")).toBe("landscape")
   })
 
+  it("emits hideLogo=1 only when set (Nuvio banner vehicle)", () => {
+    expect(buildStremioPosterSearchParams({}).has("hideLogo")).toBe(false)
+    expect(buildStremioPosterSearchParams({ hideLogo: false }).has("hideLogo")).toBe(false)
+    expect(buildStremioPosterSearchParams({ hideLogo: true }).get("hideLogo")).toBe("1")
+  })
+
   it("serializes ribbonSide left and right explicitly", () => {
     const leftParams = buildStremioPosterSearchParams({ ribbonSide: "left" })
     expect(leftParams.get("side")).toBe("left")

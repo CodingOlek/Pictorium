@@ -111,6 +111,12 @@ export interface PosterRenderConfig {
   /** Formato canvas (query `shape` > mapping > config > defaults > "poster"). */
   posterShape: PosterShape
   /**
+   * Nasconde il logo film dal composite (solo query `hideLogo`, default false).
+   * Veicolo del banner Nuvio: Nuvio sovrappone già il logo da catalogo, il
+   * baked-in creerebbe un doppione. Il fetch resta per i colori accent.
+   */
+  hideLogo: boolean
+  /**
    * Allineamento blocco logo/metadati — precedenza: query `align` > server
    * defaults > default di formato (landscape "left", poster "center").
    * Globale: nessun override per-titolo (il mapping non ha il campo).
@@ -371,6 +377,11 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
   const qPre = q.get("pre")
   const preRelease = qPre !== null ? qPre !== "0" : (configOverride?.preRelease ?? sd.preRelease ?? false)
 
+  // Nascondi logo film: solo query `hideLogo=1` (banner Nuvio), default false.
+  // Nessuna catena mapping/config: non esiste il concetto per-titolo/globale.
+  const qHideLogo = q.get("hideLogo")
+  const hideLogo = qHideLogo !== null ? qHideLogo !== "0" : false
+
   return {
     badgeStyle,
     rankingBadgeStyle,
@@ -409,5 +420,6 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
     preRelease,
     posterShape,
     logoAlign,
+    hideLogo,
   }
 }

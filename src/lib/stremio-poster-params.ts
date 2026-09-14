@@ -51,6 +51,8 @@ export interface StremioPosterParamsInput {
   readonly networkLogoOffsetY?: number
   /** Effetto pre-digitale (darken + Coming Soon, solo film). Default OFF. */
   readonly preRelease?: boolean
+  /** Nasconde il logo film dal composite (banner Nuvio: Nuvio lo sovrappone già). Default OFF. */
+  readonly hideLogo?: boolean
   readonly ribbonSide?: "left" | "right"
   /** Formato canvas: emesso come `shape=landscape` solo quando landscape
    *  (il portrait è il default e resta omesso per non invalidare la cache). */
@@ -121,6 +123,7 @@ export function buildStremioPosterSearchParams(input: StremioPosterParamsInput):
   if (input.title) params.set("title", input.title)
   if (!networkLogo) params.set("netLogo", "0")
   if (input.preRelease) params.set("pre", "1")
+  if (input.hideLogo) params.set("hideLogo", "1")
   if (input.ribbonSide === "right") params.set("side", "right")
   else if (input.ribbonSide === "left") params.set("side", "left")
   if (input.posterShape === "landscape") {

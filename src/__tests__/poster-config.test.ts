@@ -215,6 +215,12 @@ describe("resolvePosterRenderConfig", () => {
     expect(resolvePosterRenderConfig(baseInput()).networkLogo).toBe(true)
   })
 
+  it("hideLogo: only explicit query hides the film logo (default false, no mapping/config chain)", () => {
+    expect(resolvePosterRenderConfig(baseInput()).hideLogo).toBe(false)
+    expect(resolvePosterRenderConfig(baseInput({ searchParams: new URLSearchParams({ hideLogo: "1" }) })).hideLogo).toBe(true)
+    expect(resolvePosterRenderConfig(baseInput({ searchParams: new URLSearchParams({ hideLogo: "0" }) })).hideLogo).toBe(false)
+  })
+
   it("queryExtra picks up extra param or config customBadge", () => {
     expect(resolvePosterRenderConfig(baseInput({ searchParams: new URLSearchParams({ extra: "Oggi" }) })).queryExtra).toBe("Oggi")
     expect(resolvePosterRenderConfig(baseInput({ configOverride: config({ customBadge: "Cult" }) })).queryExtra).toBe("Cult")

@@ -27,6 +27,12 @@ export interface BuildStremioPosterUrlInput {
    * Pictorium invece del backdrop TMDB grezzo.
    */
   readonly forceShape?: PosterShape
+  /**
+   * Nasconde il logo film dal composite. Usato dal banner Nuvio insieme a
+   * forceShape (vedi sopra): senza, il baked-in duplicherebbe l'overlay logo
+   * che Nuvio applica da catalogo.
+   */
+  readonly hideLogo?: boolean
 }
 
 export function mappingVersionParam(mapping: Mapping | null | undefined): string | null {
@@ -100,6 +106,9 @@ export function buildStremioPosterUrl(input: BuildStremioPosterUrlInput): URL {
     title: mapping?.title ?? undefined,
     networkLogo: (input.defaults.networkLogo !== false) && (mapping?.networkLogo !== false),
     preRelease: input.defaults.preRelease,
+    // hideLogo viaggia solo sul banner (il chiamante lo imposta insieme a
+    // forceShape): poster/preview/Stremio non lo vedono mai.
+    hideLogo: input.hideLogo,
     // ribbonSide solo globale: i mapping storici con valore salvato lo ignorano.
     ribbonSide: input.defaults.ribbonSide,
     // Formato canvas: per-titolo vince sul default globale (come gli altri

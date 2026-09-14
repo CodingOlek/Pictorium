@@ -1129,7 +1129,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY,
       networkLogoOffsetX, networkLogoOffsetY,
       queryExtra, qNetLogo, networkLogo, ribbonSide,
-      preRelease, posterShape, logoAlign,
+      preRelease, posterShape, logoAlign, hideLogo,
     } = renderConfig
 
     // Il rilevamento (`preReleaseDetected`) cambia nel tempo: non entra nella
@@ -1293,6 +1293,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       accentOverride, imdbTop250, preRelease: applyPreRelease,
       shape: posterShape,
       logoAlign,
+      hideLogo,
       posterSrc: isLandscape ? backdropPath : posterPath,
       logoSrc: logoPath,
       backdropSrc: isLandscape ? null : backdropPath,
