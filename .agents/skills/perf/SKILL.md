@@ -31,6 +31,7 @@ or auditing it for speed, preserve them. They were established in the
 | Auto-fit **fetch** (logo + candidates, I/O) | 5000 ms | `PICTORIUM_AUTO_FIT_FETCH_TIMEOUT_MS` | 1000–15000 |
 | Wikidata awards | 2500 ms | `WIKIDATA_TIMEOUT` | – |
 | Rating wait (TMDB+IMDb upgrade) | 1500 ms | `PICTORIUM_RATING_WAIT_MS` | 300–10000 |
+| MDBList aggregated rating (internal fetch) | 1500 ms | `PICTORIUM_MDBLIST_TIMEOUT_MS` | 300–10000 |
 
 The auto-fit **scoring** cap is the CPU bound (metrics, not product). The
 auto-fit **fetch** cap is separate network I/O to TMDB: when both shared
