@@ -54,8 +54,28 @@ the right origin. Mock server provides deterministic TMDB/JustWatch/Wikidata.
   By design for the bench flow (refresh rewrites fresh first).
 - SWR `staleHits == 100` assumes the 100-serve burst completes before the
   ~300ms background render; soften only on observed flake.
-- Jitter uniformity (peak 9.3% vs 10% limit) is deterministic on sequential
-  test IDs (worst case for FNV mod clustering); real keys carry hashes.
+- Jitter uniformity (peak 7.3–9.3% vs 15% limit) is deterministic on sequential
+  test IDs (worst case for FNV mod clustering, prefix-sensitive); real keys
+  carry hashes and sit ~5%.
 - Unprefixed bench envs (`MAX_CONCURRENT_RENDERS=`, …) are never read by the
   app — `env-compat` honors only `PICTORIUM_*`/`POSTERIUM_*`. The script
   forwards both spellings with identical values.
+
+## 5. Milestone D — Artwork Funnel Audit (2026-09-15, live, 400 titoli)
+
+Dataset congelato `scripts/fixtures/artwork-funnel-dataset.json` (150
+popular-movies, 100 popular-series, 100 niche, 50 anime-world JP; metodo nel
+campo `meta`). Run: `node scripts/audit-artwork-funnel.mjs` (~8 min, 0 errori).
+
+| Strato | TMDB Clean | TVDB Rescue | Lang | Crop | 404 |
+|---|---|---|---|---|---|
+| popular-movies (150) | 84.7% | 2.0% | 6.0% | 7.3% | 0.0% |
+| popular-series (100) | 77.0% | 3.0% | 11.0% | 7.0% | 2.0% |
+| niche (100) | 79.0% | 2.0% | 8.0% | 9.0% | 2.0% |
+| anime-world (50) | 90.0% | 0.0% | 6.0% | 2.0% | 2.0% |
+| **TOTALE (400)** | **82.0%** | **2.0%** | **7.8%** | **7.0%** | **1.3%** |
+
+TVDB deep-dive: 8 rescue, di cui 1 con ≥2 textless eterogenei (12.5%).
+Gate (≥5.0% AND ≥30%): **NO-OP** — entrambe le condizioni falliscono.
+`pickTvdbPoster` resta com'è; candidate scoring scartato come over-engineering
+per regola pre-registrata. B2 crop da solo salva il 7% dei titoli (28 ex-404).
