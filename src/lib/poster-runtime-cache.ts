@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server"
 import { cacheGet, cacheGetStale, cacheSet } from "@/lib/cache"
 import { createLogger } from "@/lib/logger"
 import { envWithFallback } from "@/lib/env-compat"
+import { isBadgeStyle, isRankingBadgeStyle } from "@/lib/badge-styles"
 
 const log = createLogger("poster-cache")
 
@@ -85,6 +86,28 @@ export function normalizePosterCacheParams(searchParams: URLSearchParams): URLSe
   params.delete("rv")
   params.delete("v")
   params.delete(POSTER_REFRESH_PARAM)
+
+  const ac = params.get("ac")
+  if (ac !== null && !/^#([0-9A-Fa-f]{3}){1,2}$/.test(ac)) {
+    params.delete("ac")
+  }
+  const tl = params.get("tl")
+  if (tl !== null && tl !== "1" && tl !== "0" && tl !== "true" && tl !== "false") {
+    params.delete("tl")
+  }
+  const bl = params.get("bl")
+  if (bl !== null && bl !== "1" && bl !== "0" && bl !== "true" && bl !== "false") {
+    params.delete("bl")
+  }
+  const bs = params.get("bs")
+  if (bs !== null && !isBadgeStyle(bs)) {
+    params.delete("bs")
+  }
+  const rs = params.get("rs")
+  if (rs !== null && !isRankingBadgeStyle(rs)) {
+    params.delete("rs")
+  }
+
   return params
 }
 

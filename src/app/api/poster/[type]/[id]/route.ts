@@ -22,6 +22,7 @@ import { getTMDBSessionCache, setTMDBSessionCache } from "@/lib/tmdb-session-cac
 import { mappingVersionParam } from "@/lib/stremio-poster-url"
 import { RENDER_VERSION } from "@/lib/render-version"
 import { envWithFallback } from "@/lib/env-compat"
+import { TOP_LIGHT_LUMINANCE } from "@/lib/constants"
 import {
   RENDER_SLOT_WAIT_MS,
   acquirePosterRenderSlot,
@@ -1202,7 +1203,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         : Promise.resolve(),
     ])
 
-    const topLight = (qTopLight === "1" || qTopLight === "true") ? true : (qTopLight === "0" || qTopLight === "false") ? false : (topLum ?? 0.5) > 0.60
+    const topLight = (qTopLight === "1" || qTopLight === "true") ? true : (qTopLight === "0" || qTopLight === "false") ? false : (topLum ?? 0.5) > TOP_LIGHT_LUMINANCE
 
     // 7. Parse blur / badge / logo config from query
     const renderConfig = resolvePosterRenderConfig({

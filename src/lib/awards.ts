@@ -270,7 +270,8 @@ export function matchDirectorName(name: string | null): string | null {
 /** Etichetta localizzata a render-time dal nome canonico (mai dalla cache). */
 export function directorBadgeLabel(name: string | null, t?: (key: string, params?: Record<string, string | number>) => string): string | null {
   if (!name) return null
-  return t ? t("badge.director", { name }) : `Di ${name}`
+  const canonical = matchDirectorName(name) ?? name
+  return t ? t("badge.director", { name: canonical }) : `Di ${canonical}`
 }
 
 const WIKIDATA_CACHE_TTL = 24 * 60 * 60 * 1000
@@ -282,7 +283,7 @@ export async function fetchAllWikidata(
   // watchdog come zombie anche dopo il 503.
   signal?: AbortSignal,
 ): Promise<WikidataResult> {
-  const cacheKey = `wikidata:${mediaType}:${tmdbId}`
+  const cacheKey = `wikidata:v2:${mediaType}:${tmdbId}`
 
   // Check shared cache first (typed, with TTL). L1 + L2 KV cross-istanza:
   // la prima istanza che riesce condivide con tutte (prima ogni istanza

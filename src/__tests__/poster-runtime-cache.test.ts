@@ -8,6 +8,7 @@ import {
   dynamicPosterTtlSec,
   getPendingPoster,
   isImmutablePosterRequest,
+  normalizePosterCacheParams,
   posterHeaders,
   posterNotModifiedHeaders,
   posterResponse,
@@ -351,5 +352,50 @@ describe("dynamic TTL jitter (Milestone A, anti thundering-herd)", () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+describe("normalizePosterCacheParams", () => {
+  it("removes version, refresh, and non-canonical parameters", () => {
+    const sp = new URLSearchParams({
+      rv: "123",
+      v: "456",
+      __poster_refresh: "1",
+      title: "Inception",
+      ac: "invalid-color",
+      tl: "foo",
+      bl: "bar",
+      bs: "non-existent-style",
+      rs: "not-a-rank-style",
+    })
+
+    const normalized = normalizePosterCacheParams(sp)
+    expect(normalized.has("rv")).toBe(false)
+    expect(normalized.has("v")).toBe(false)
+    expect(normalized.has("__poster_refresh")).toBe(false)
+    expect(normalized.has("ac")).toBe(false)
+    expect(normalized.has("tl")).toBe(false)
+    expect(normalized.has("bl")).toBe(false)
+    expect(normalized.has("bs")).toBe(false)
+    expect(normalized.has("rs")).toBe(false)
+    expect(normalized.get("title")).toBe("Inception")
+  })
+
+  it("retains valid canonical parameters", () => {
+    const sp = new URLSearchParams({
+      title: "Inception",
+      ac: "#ff0000",
+      tl: "1",
+      bl: "0",
+      bs: "pill",
+      rs: "netflix",
+    })
+
+    const normalized = normalizePosterCacheParams(sp)
+    expect(normalized.get("ac")).toBe("#ff0000")
+    expect(normalized.get("tl")).toBe("1")
+    expect(normalized.get("bl")).toBe("0")
+    expect(normalized.get("bs")).toBe("pill")
+    expect(normalized.get("rs")).toBe("netflix")
   })
 })

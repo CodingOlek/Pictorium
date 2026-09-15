@@ -19,7 +19,7 @@ import { useNavigation } from "./useNavigation"
 import { useMappingsStore } from "./useMappingsStore"
 import { usePosterEditor, PosterEditorProvider } from "./contexts/PosterEditorContext"
 import { usePosterSave } from "./usePosterSave"
-import { defaultGradientHeightForPoster } from "./gradient-defaults"
+import { defaultGradientHeightForPoster, defaultBlurFadeForPoster } from "./gradient-defaults"
 import { computeLogoOffsetBounds } from "./logo-layout"
 import { LAND_W, LAND_H } from "./constants"
 import { useOutsideDismiss } from "./useOutsideDismiss"
@@ -850,16 +850,19 @@ export function usePictorium(): PictoriumCtx {
             if (autoLogo) {
               navigation.setPreviewPoster({ file_path: clean.file_path, iso_639_1: null, vote_average: 0, width: 0, height: 0 })
               setGradientHeight(defaultGradientHeightForPoster(clean))
+              setBlurFade(defaultBlurFadeForPoster(clean))
             } else {
               const enPoster = data.posters?.find((p: TMDBImage) => p.iso_639_1 === "en")
               const nextPoster = langPoster || enPoster || firstPoster || navigation.previewPoster
               navigation.setPreviewPoster(nextPoster)
               setGradientHeight(defaultGradientHeightForPoster(nextPoster))
+              setBlurFade(defaultBlurFadeForPoster(nextPoster))
             }
           } else {
             const nextPoster = langPoster || firstPoster || navigation.previewPoster
             navigation.setPreviewPoster(nextPoster)
             setGradientHeight(defaultGradientHeightForPoster(nextPoster))
+            setBlurFade(defaultBlurFadeForPoster(nextPoster))
           }
         }
       }
@@ -1047,7 +1050,10 @@ export function usePictorium(): PictoriumCtx {
           }
         }
         loadDefaultsToState()
-        if (chosenPoster) setGradientHeight(defaultGradientHeightForPoster(chosenPoster))
+        if (chosenPoster) {
+          setGradientHeight(defaultGradientHeightForPoster(chosenPoster))
+          setBlurFade(defaultBlurFadeForPoster(chosenPoster))
+        }
       }
     } finally {
       setLoadingImages(false)
@@ -1078,7 +1084,7 @@ export function usePictorium(): PictoriumCtx {
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale,
     genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY,
     networkLogoOffsetX, networkLogoOffsetY,
-    setGradientHeight,
+    setGradientHeight, setBlurFade,
     rotationPosters, autoRotateClean, defaultAutoRotateClean, excludedPosters, accentColor, autoAccentColor, logoDisabled, setLogoDisabled,
     rotationBackdrops, autoRotateBackdrop, defaultAutoRotateBackdrop, excludedBackdrops, backdrops,
     setLogoScale, setLogoOffsetX, setLogoOffsetY, networkLogo, lang, episodeGroupId, posterShape,

@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { fetchAllWikidata, directorBadgeLabel, __resetCircuitBreaker } from "@/lib/awards"
-import { cacheClear } from "@/lib/cache"
+import { cacheClear, cacheSet } from "@/lib/cache"
 
 function sparqlOk(bindings: unknown[]) {
   return new Response(JSON.stringify({ results: { bindings } }), {
@@ -129,5 +129,23 @@ describe("fetchAllWikidata director sitelink fallback", () => {
     expect(directorBadgeLabel(second.director, tEn)).toBe("By Christopher Nolan")
     expect(directorBadgeLabel(null, tEn)).toBeNull()
     expect(directorBadgeLabel("Christopher Nolan")).toBe("Di Christopher Nolan")
+    // Idempotenza: non raddoppia prefissi già presenti
+    expect(directorBadgeLabel("Di Christopher Nolan", tIt)).toBe("Di Christopher Nolan")
+    expect(directorBadgeLabel("By Christopher Nolan", tEn)).toBe("By Christopher Nolan")
+    expect(directorBadgeLabel("Di Christopher Nolan", tEn)).toBe("By Christopher Nolan")
+  })
+
+  it("ignores unversioned wikidata cache entries and uses wikidata:v2 key", async () => {
+    cacheSet("wikidata:movie:907", {
+      awards: [],
+      nominations: [],
+      studios: [],
+      director: "Di Christopher Nolan",
+    })
+    mockFetch(
+      [{ directorLabel: { value: "Christopher Nolan", type: "literal" } }]
+    )
+    const res = await fetchAllWikidata(907, "movie")
+    expect(res.director).toBe("Christopher Nolan")
   })
 })

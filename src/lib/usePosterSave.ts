@@ -5,7 +5,7 @@ import type { SearchResult, TMDBImage, Mapping, PosterShape } from "./types"
 import { titleOf } from "./utils"
 import { computeTopBadge, type BadgeInput } from "./poster-badge"
 import type { SashBucket } from "./badge-priority"
-import { defaultGradientHeightForPoster } from "./gradient-defaults"
+import { defaultGradientHeightForPoster, defaultBlurFadeForPoster } from "./gradient-defaults"
 import { logoDefaultScale } from "./logo-selection"
 import { t } from "./i18n"
 import { isManualAccent } from "./accent-color"
@@ -57,6 +57,7 @@ interface PosterSaveDeps {
   tintStrength: number
   gradientHeight: number
   setGradientHeight: (v: number) => void
+  setBlurFade: (v: number) => void
   topBadgeScale: number
   topBadgeOffsetX: number
   topBadgeOffsetY: number
@@ -114,7 +115,7 @@ export function usePosterSave(deps: PosterSaveDeps) {
     globalBadges, rankingBadges, customBadge, badgeStyle, rankingBadgeStyle,
     badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings,
     defaultBadgeStyle, defaultRankingBadgeStyle,
-    blurEnabled, blurIntensity, blurFade, blurDarkness, tintStrength, gradientHeight, setGradientHeight,
+    blurEnabled, blurIntensity, blurFade, blurDarkness, tintStrength, gradientHeight, setGradientHeight, setBlurFade,
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale,
     genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY,
     networkLogoOffsetX, networkLogoOffsetY,
@@ -128,6 +129,7 @@ export function usePosterSave(deps: PosterSaveDeps) {
     if (!selected) return
     setPreviewPoster(image)
     setGradientHeight(defaultGradientHeightForPoster(image))
+    setBlurFade(defaultBlurFadeForPoster(image))
     setPreviewId(`${selected.media_type}:${selected.id}`)
   }, [selected]) // eslint-disable-line react-hooks/exhaustive-deps -- setter refs are stable
 
@@ -397,7 +399,7 @@ export function usePosterSave(deps: PosterSaveDeps) {
       if (!overrides.silent) import("sonner").then(({ toast }) => toast(t("ui.saveError")))
       if (overrides.silent) throw error
     }
-  }, [selected, previewPoster, selectedLogo, metaInfo, logoScale, logoOffsetX, logoOffsetY, trendRank, globalBadges, rankingBadges, badgeGenre, badgeYear, badgeRating, badgeQuality, mdblistAnimeList, loadMappings, customBadge, badgeStyle, rankingBadgeStyle, blurEnabled, blurIntensity, blurFade, blurDarkness, tintStrength, gradientHeight, topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale, genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY, networkLogoOffsetX, networkLogoOffsetY, rotationPosters, autoRotateClean, defaultAutoRotateClean, excludedPosters, rotationBackdrops, autoRotateBackdrop, defaultAutoRotateBackdrop, excludedBackdrops, backdrops, defaultBadgeStyle, defaultRankingBadgeStyle, posters, mappingsMap, accentColor, backdropOffsetX, backdropOffsetY, backdropScale, selectedBackdrop, networkLogo, episodeGroupId, posterShape]) // eslint-disable-line react-hooks/exhaustive-deps -- intentionally complete to save all poster state
+  }, [selected, previewPoster, selectedLogo, metaInfo, logoScale, logoOffsetX, logoOffsetY, trendRank, globalBadges, rankingBadges, badgeGenre, badgeYear, badgeRating, badgeQuality, mdblistAnimeList, loadMappings, customBadge, badgeStyle, rankingBadgeStyle, blurEnabled, blurIntensity, blurFade, blurDarkness, tintStrength, gradientHeight, topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale, genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY, networkLogoOffsetX, networkLogoOffsetY, rotationPosters, autoRotateClean, defaultAutoRotateClean, excludedPosters, rotationBackdrops, autoRotateBackdrop, defaultAutoRotateBackdrop, excludedBackdrops, backdrops, defaultBadgeStyle, defaultRankingBadgeStyle, posters, mappingsMap, accentColor, autoAccentColor, backdropOffsetX, backdropOffsetY, backdropScale, selectedBackdrop, networkLogo, episodeGroupId, posterShape]) // eslint-disable-line react-hooks/exhaustive-deps -- intentionally complete to save all poster state
 
   return { selectPoster, selectLogo, removeLogo, selectBackdrop, removeBackdrop, saveConfig }
 }
