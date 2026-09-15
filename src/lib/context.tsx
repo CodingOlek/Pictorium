@@ -185,6 +185,7 @@ export interface PictoriumCtx {
   autoAccentColor: string | null
   setAccentColor: (v: string | null) => void
   topEdgeColor: string | null
+  bottomEdgeColor: string | null
   autoSaveExcludedPosters: (nextExcluded: string[], nextRotationPosters?: string[], nextPreviewPoster?: TMDBImage) => Promise<void>
   autoSaveExcludedBackdrops: (nextExcluded: string[], nextRotationBackdrops?: string[]) => Promise<void>
   /** Scalda le cache details/images per un titolo (hover risultati). */
@@ -473,6 +474,7 @@ export function usePictorium(): PictoriumCtx {
     else root.style.removeProperty("--color-accent")
   }, [uiAccent, accentColor])
   const [topEdgeColor, setTopEdgeColor] = useState<string | null>(null)
+  const [bottomEdgeColor, setBottomEdgeColor] = useState<string | null>(null)
   const [serviceErrors, setServiceErrors] = useState<Record<string, boolean>>({})
 
   const [loadingImages, setLoadingImages] = useState(false)
@@ -692,7 +694,7 @@ export function usePictorium(): PictoriumCtx {
         logoScale, logoOffsetX, logoOffsetY,
         backdropScale, backdropOffsetX, backdropOffsetY,
         metaInfo, trendRank, mdblistAnimeList: trending.mdblistAnimeList,
-        topEdgeColor, accentColor, autoAccentColor, lang, tmdbKey,
+        topEdgeColor, bottomEdgeColor, accentColor, autoAccentColor, lang, tmdbKey,
         region: editorCtx.defaultRegion,
       },
       { globalBadges, rankingBadges, badgeStyle, rankingBadgeStyle, badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources, customBadge, gradientHeight, blurIntensity, blurFade, blurDarkness, blurEnabled, tintStrength, networkLogo, preRelease, ribbonSide, posterShape, logoAlign, topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale, genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY, networkLogoOffsetX, networkLogoOffsetY }
@@ -700,7 +702,7 @@ export function usePictorium(): PictoriumCtx {
     setPreviewUrl(url)
   }, [navigation.selected, navigation.previewPoster, navigation.selectedLogo, selectedBackdrop,
     logoScale, logoOffsetX, logoOffsetY, backdropScale, backdropOffsetX, backdropOffsetY,
-    metaInfo, trendRank, trending.mdblistAnimeList, topEdgeColor, accentColor, autoAccentColor, lang, tmdbKey,
+    metaInfo, trendRank, trending.mdblistAnimeList, topEdgeColor, bottomEdgeColor, accentColor, autoAccentColor, lang, tmdbKey,
     editorCtx.defaultRegion,
     globalBadges, rankingBadges, badgeStyle, rankingBadgeStyle, badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources, customBadge, gradientHeight, blurIntensity, blurFade, blurDarkness, blurEnabled, tintStrength, networkLogo, preRelease, ribbonSide, posterShape, logoAlign, topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale, genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY, networkLogoOffsetX, networkLogoOffsetY])
 
@@ -731,7 +733,7 @@ export function usePictorium(): PictoriumCtx {
     landscapePreview ? (selectedBackdrop ?? navigation.previewPoster) : navigation.previewPoster,
     metaInfo.genres[0]?.name,
     posterUrl,
-    { setAccentColor, setAutoAccentColor, setTopEdgeColor },
+    { setAccentColor, setAutoAccentColor, setTopEdgeColor, setBottomEdgeColor },
     landscapePreview ? "w780" : "w342",
   )
 
@@ -1163,7 +1165,7 @@ export function usePictorium(): PictoriumCtx {
     exportData, importData, removeRecentSearch: search.removeRecentSearch, clearRecentSearches: search.clearRecentSearches,
     copyUrl, copied,
     accentColor, autoAccentColor, setAccentColor,
-    topEdgeColor,
+    topEdgeColor, bottomEdgeColor,
     autoSaveExcludedPosters,
     autoSaveExcludedBackdrops,
     prefetchTitle,
@@ -1190,7 +1192,7 @@ export function usePictorium(): PictoriumCtx {
     tmdbKeyInput, showKey, copied, mdblistApiKey, tvdbApiKey,
     serverHasTmdbKey,
     accentColor, autoAccentColor, setAccentColor,
-    topEdgeColor, autoSaveExcludedPosters, autoSaveExcludedBackdrops, prefetchTitle,
+    topEdgeColor, bottomEdgeColor, autoSaveExcludedPosters, autoSaveExcludedBackdrops, prefetchTitle,
     trending.trending, trending.trendingError, trending.streamingCharts, trending.mdblistAnimeList,
     trending.refreshLists,
     theme, uiAccent, serviceErrors, hasNetflixRank,

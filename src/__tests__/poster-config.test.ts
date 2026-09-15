@@ -141,6 +141,17 @@ describe("resolvePosterRenderConfig", () => {
     expect(withoutRank.rankingBadgeStyle).toBe("colored")
   })
 
+  it("bordo/vetro ranking styles flow from query and server defaults", () => {
+    const fromQuery = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ rs: "vetro" }),
+    }))
+    expect(fromQuery.rankingBadgeStyle).toBe("vetro")
+    const fromDefaults = resolvePosterRenderConfig(baseInput({
+      sd: { rankingBadgeStyle: "bordo" },
+    }))
+    expect(fromDefaults.rankingBadgeStyle).toBe("bordo")
+  })
+
   it("clamps out-of-range blur/gradient query values", () => {
     const r = resolvePosterRenderConfig(baseInput({
       searchParams: new URLSearchParams({ blur: "999", bf: "-5", bd: "250", gradHeight: "0" }),

@@ -303,7 +303,7 @@ export function BadgeControls() {
           <label className="text-[11px] text-muted font-medium block">{t("ui.styleRankingExtra")}</label>
           <BadgeStyleSelector
             value={ed.rankingBadgeStyle}
-            options={["default", "colored", "pill"]}
+            options={["default", "pill", "colored", "bordo", "vetro"]}
             onChange={ed.setRankingBadgeStyle}
             t={t}
             accentColor={accentColor}

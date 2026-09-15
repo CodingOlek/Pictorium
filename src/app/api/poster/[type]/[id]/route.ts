@@ -60,7 +60,9 @@ import {
   imgSrc,
   isValidHex,
   topLuminance,
+  bottomLuminance,
 } from "@/lib/poster-render-helpers"
+import { computeBottomLight } from "@/lib/accent-color"
 import { LAND_W, LAND_H, landscapeBackdropUrl, pillarboxLandscapeBase, cropBackdropToPortrait } from "@/lib/image-utils"
 import { generatePosterBuffer, type GenerationInput } from "@/lib/poster-service"
 import { computeTopBadge } from "@/lib/poster-badge"
@@ -1139,6 +1141,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           : await pillarboxLandscapeBase(baseBuf))
       : await sharp(baseBuf).resize(STD_W, STD_H, { fit: 'cover', position: 'centre' }).toBuffer()
     const qTopLight = req.nextUrl.searchParams.get("tl")
+    const qBottomLight = req.nextUrl.searchParams.get("bl")
 
     // Apply mapping TV metadata (synchronous — no race, no side-effects in parallel closures)
     if (mapping?.tvType) tvType = mapping.tvType
@@ -1147,11 +1150,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     if (mapping?.firstAirDate) firstAirDate = mapping.firstAirDate
 
     // Luminance + optional TV details fetch (parallel, independent)
-    const [customRatings, topLum] = await Promise.all([
+    const [customRatings, topLum, bottomLum] = await Promise.all([
       customRatingConfig.enabled ? fetchCustomRatings(imdbId, customRatingConfig, renderAbort.signal) : Promise.resolve([]),
       (async (): Promise<number | null> => {
         if (qTopLight === "1" || qTopLight === "0" || qTopLight === "true" || qTopLight === "false") return null
         return await topLuminance(posterBuf)
+      })(),
+      (async (): Promise<number | null> => {
+        if (qBottomLight === "1" || qBottomLight === "0" || qBottomLight === "true" || qBottomLight === "false") return null
+        return await bottomLuminance(posterBuf)
       })(),
       (tmdbNetworks.length === 0 && productionCompanies.length === 0)
         ? (async () => {
@@ -1219,6 +1226,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       queryExtra, qNetLogo, networkLogo, ribbonSide,
       preRelease, posterShape, logoAlign, hideLogo,
     } = renderConfig
+
+    // Polarità del badge genere in basso: speculare a topLight, ma corretta per
+    // la banda blur (che scurisce il fondo) — vedi computeBottomLight. `bl`
+    // esplicito vince (preview WYSIWYG), altrimenti decide il server.
+    const bottomLight = (qBottomLight === "1" || qBottomLight === "true") ? true : (qBottomLight === "0" || qBottomLight === "false") ? false : (computeBottomLight(bottomLum, blurDarkness, blurEnabled) ?? topLight)
 
     // Il rilevamento (`preReleaseDetected`) cambia nel tempo: non entra nella
     // cache key (verrebbe letta prima del fetch), il ritorno al poster normale
@@ -1327,6 +1339,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         },
         appearance: {
           topLight,
+          bottomLight,
           blurEnabled,
           blurHeight,
           blurIntensity,
@@ -1372,7 +1385,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       rankingBadgeStyle, badgeGenre, badgeYear, badgeRating, badgeQuality,
       sashOrder,
       quality: finalQuality,
-      topLight, targetCenter, ribbonSide,
+      topLight, bottomLight, targetCenter, ribbonSide,
       logoScale, logoOffsetX, logoOffsetY,
       topBadgeScale, topBadgeOffsetX, topBadgeOffsetY,
       genreBadgeScale, qualityBadgeScale, networkLogoScale,

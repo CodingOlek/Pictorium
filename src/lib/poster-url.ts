@@ -5,6 +5,7 @@ import { buildStremioPosterSearchParams } from "./stremio-poster-params"
 import { isManualAccent } from "./accent-color"
 import { RENDER_VERSION } from "./render-version"
 import { TOP_LIGHT_LUMINANCE } from "./constants"
+import { hexLuminance, computeBottomLight } from "./accent-color"
 import type { SearchResult, TMDBImage } from "./types"
 import type { EnrichedAnimeItem } from "./validation"
 import type { BadgeStyle, RankingBadgeStyle } from "./badge-styles"
@@ -89,6 +90,7 @@ interface PosterState {
   trendRank: number | null
   mdblistAnimeList: EnrichedAnimeItem[]
   topEdgeColor: string | null
+  bottomEdgeColor?: string | null
   accentColor?: string | null
   /** Colore auto-rilevato dal thumb client: se coincide con accentColor, `ac=` non si emette. */
   autoAccentColor?: string | null
@@ -250,6 +252,11 @@ export function buildPreviewUrl(ps: PosterState, bp: BadgeParams): string {
   // anche quando il server avrebbe calcolato scuro — ora il server decide.
   const topLight = computeTopLight(ps.topEdgeColor)
   if (topLight !== null) params.push(`tl=${topLight ? "1" : "0"}`)
+  // bl come tl (regola M16): solo a calcolo completato, altrimenti decide il
+  // server. Senza, la preview forzava la polarità del badge genere sul top
+  // anche con fondo scuro. La correzione blur viaggia nei stessi bp del render.
+  const bottomLight = computeBottomLight(hexLuminance(ps.bottomEdgeColor ?? null), bp.blurDarkness, bp.blurEnabled)
+  if (bottomLight !== null) params.push(`bl=${bottomLight ? "1" : "0"}`)
   if (bp.rankingBadges) {
     const badgeParams = computeBadgeParams(ps, bp)
     params.push(...badgeParams)
