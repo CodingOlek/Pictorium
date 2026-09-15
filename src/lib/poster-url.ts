@@ -2,6 +2,7 @@ import { getDomain } from "./utils"
 import { resolveLabel, isRankKey, t as tFn } from "./i18n"
 import { getPosterPublicBaseUrl } from "./poster-public-url"
 import { buildStremioPosterSearchParams } from "./stremio-poster-params"
+import { isManualAccent } from "./accent-color"
 import { RENDER_VERSION } from "./render-version"
 import { TOP_LIGHT_LUMINANCE } from "./constants"
 import type { SearchResult, TMDBImage } from "./types"
@@ -89,6 +90,8 @@ interface PosterState {
   mdblistAnimeList: EnrichedAnimeItem[]
   topEdgeColor: string | null
   accentColor?: string | null
+  /** Colore auto-rilevato dal thumb client: se coincide con accentColor, `ac=` non si emette. */
+  autoAccentColor?: string | null
   lang: string
   region?: string
   tmdbKey: string
@@ -237,7 +240,11 @@ export function buildPreviewUrl(ps: PosterState, bp: BadgeParams): string {
   if (bp.posterShape === "landscape") {
     params.push(`align=${bp.logoAlign === "left" ? "left" : "center"}`)
   }
-  if (ps.accentColor) params.push(`ac=${encodeURIComponent(ps.accentColor)}`)
+  // `ac=` solo su scelta manuale: l'auto-rilevamento scrive lo stesso valore
+  // in accentColor a ogni cambio poster, e un override sempre presente
+  // scavalcerebbe il calcolo server (tinta di scena) nella preview.
+  const manualAccent = isManualAccent(ps.accentColor, ps.autoAccentColor) ? ps.accentColor : null
+  if (manualAccent) params.push(`ac=${encodeURIComponent(manualAccent)}`)
   // Fix M16: tl è inviato SOLO a calcolo completato: con topEdgeColor null
   // (colore non ancora campionato) la preview forzava tl=1 (testo chiaro)
   // anche quando il server avrebbe calcolato scuro — ora il server decide.

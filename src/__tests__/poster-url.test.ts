@@ -322,6 +322,22 @@ describe("buildPreviewUrl", () => {
     expect(url).not.toContain("ac=")
   })
 
+  it("does not include ac param when accentColor equals the auto-detected color", () => {
+    const url = buildPreviewUrl(
+      { ...basePosterState, accentColor: "#aabbcc", autoAccentColor: "#AABBCC" },
+      baseBadgeParams,
+    )
+    expect(url).not.toContain("ac=")
+  })
+
+  it("includes ac param when accentColor differs from the auto-detected color", () => {
+    const url = buildPreviewUrl(
+      { ...basePosterState, accentColor: "#ff0000", autoAccentColor: "#aabbcc" },
+      baseBadgeParams,
+    )
+    expect(url).toContain("ac=%23ff0000")
+  })
+
   it("includes badges=1 when globalBadges is true", () => {
     const url = buildPreviewUrl(basePosterState, { ...baseBadgeParams, globalBadges: true })
     expect(url).toContain("badges=1")

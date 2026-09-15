@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect } from "vitest"
 import sharp from "sharp"
-import { findSceneTint, findAccentColor } from "@/lib/accent-color"
+import { findSceneTint, findAccentColor, isManualAccent } from "@/lib/accent-color"
 import { extractSceneTint } from "@/lib/poster-render-helpers"
 import { GENRE_FALLBACK } from "@/lib/badges"
 
@@ -145,5 +145,25 @@ describe("extractSceneTint (poster-render-helpers)", () => {
     const b = parseInt(hex.slice(5, 7), 16)
     expect(g).toBeGreaterThan(r + 10)
     expect(g).toBeGreaterThan(b - 10)
+  })
+})
+
+describe("isManualAccent (manual vs auto-detected accent)", () => {
+  it("false when no accent is set", () => {
+    expect(isManualAccent(null, "#aabbcc")).toBe(false)
+    expect(isManualAccent(undefined, undefined)).toBe(false)
+  })
+
+  it("true when set with no auto reference", () => {
+    expect(isManualAccent("#ff0000", null)).toBe(true)
+    expect(isManualAccent("#ff0000", undefined)).toBe(true)
+  })
+
+  it("false when the accent equals the auto-detected color (case-insensitive)", () => {
+    expect(isManualAccent("#aabbcc", "#AABBCC")).toBe(false)
+  })
+
+  it("true when the accent differs from the auto-detected color", () => {
+    expect(isManualAccent("#ff0000", "#aabbcc")).toBe(true)
   })
 })

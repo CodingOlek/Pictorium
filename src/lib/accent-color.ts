@@ -376,3 +376,19 @@ export function topEdgeAverage(pixels: Uint8ClampedArray | Buffer, width: number
   }
   return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) }
 }
+
+/**
+ * Vero solo quando l'utente ha scelto un colore diverso da quello
+ * auto-rilevato: l'auto-rilevamento scrive lo stesso valore in entrambi gli
+ * stati a ogni cambio poster, quindi un `ac=` emesso sempre scavalcerebbe il
+ * calcolo server anche quando l'utente non ha toccato nulla (preview e
+ * mapping salvato congelerebbero il thumb client invece della tinta di scena).
+ */
+export function isManualAccent(
+  accentColor: string | null | undefined,
+  autoAccentColor: string | null | undefined,
+): boolean {
+  if (!accentColor) return false
+  if (!autoAccentColor) return true
+  return accentColor.toLowerCase() !== autoAccentColor.toLowerCase()
+}

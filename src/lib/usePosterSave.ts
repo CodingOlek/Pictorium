@@ -8,6 +8,7 @@ import type { SashBucket } from "./badge-priority"
 import { defaultGradientHeightForPoster } from "./gradient-defaults"
 import { logoDefaultScale } from "./logo-selection"
 import { t } from "./i18n"
+import { isManualAccent } from "./accent-color"
 import type { EnrichedAnimeItem } from "./validation"
 import { http } from "./http"
 
@@ -78,6 +79,8 @@ interface PosterSaveDeps {
   excludedBackdrops: string[]
   backdrops: TMDBImage[]
   accentColor: string | null
+  /** Auto-rilevato: se coincide con accentColor, il mapping non congela alcun override. */
+  autoAccentColor?: string | null
   logoDisabled: boolean
   setLogoDisabled: (v: boolean) => void
   setLogoScale: (v: number) => void
@@ -115,7 +118,7 @@ export function usePosterSave(deps: PosterSaveDeps) {
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale,
     genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY,
     networkLogoOffsetX, networkLogoOffsetY,
-    rotationPosters, autoRotateClean, defaultAutoRotateClean, excludedPosters, accentColor, logoDisabled, setLogoDisabled,
+    rotationPosters, autoRotateClean, defaultAutoRotateClean, excludedPosters, accentColor, autoAccentColor, logoDisabled, setLogoDisabled,
     rotationBackdrops, autoRotateBackdrop, defaultAutoRotateBackdrop, excludedBackdrops, backdrops,
     setLogoScale, setLogoOffsetX, setLogoOffsetY,     networkLogo, lang, episodeGroupId, posterShape,
     defaultSashOrder,
@@ -322,7 +325,10 @@ export function usePosterSave(deps: PosterSaveDeps) {
           imdbId: metaInfo.imdb_id || null,
           trendRank: trendRank ?? undefined,
           trendPeriod: "day",
-          accentColor: accentColor !== '#ffffff' ? accentColor : undefined,
+          // Solo scelta manuale: l'auto-rilevato coincide con autoAccentColor e
+          // non deve congelarsi nel mapping, altrimenti il calcolo server non
+          // girerebbe più per questo titolo (né in preview né su Stremio).
+          accentColor: accentColor !== '#ffffff' && isManualAccent(accentColor, autoAccentColor) ? accentColor : undefined,
           showBadges: globalBadges,
           rankingBadges,
           // Snapshot esplicito per-titolo (freeze): valori pieni, mai
