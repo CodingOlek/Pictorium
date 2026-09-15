@@ -29,6 +29,7 @@ import { PRE_RELEASE_DIM_ALPHA, PRE_RELEASE_BLUR_SIGMA } from "./pre-release"
 import type { Mapping } from "./types"
 import type { ServerDefaults } from "./server-defaults"
 import type { WikidataResult } from "./awards"
+import { directorBadgeLabel } from "./awards"
 import type { BadgeT } from "./poster-badge"
 import type { BadgeStyle, RankingBadgeStyle } from "./badge-styles"
 import type { PosterImageFormat } from "@/lib/poster-runtime-cache"
@@ -754,7 +755,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     awards: wikidataResult.awards,
     nominations: wikidataResult.nominations,
     studios: wikidataResult.studios,
-    director: wikidataResult.director,
+    director: directorBadgeLabel(wikidataResult.director, t),
     tvType: tvType ?? null,
     tvStatus,
     keywords: [...tmdbKeywords],

@@ -11,7 +11,7 @@ import { getRegionDef, normalizeRegion, parseRegion, defaultRegionForLang } from
 import { BEST_FIT_GLOBAL } from "@/lib/best-fit-config"
 import { warmFonts } from "@/lib/svg-badge"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
-import { fetchAllWikidata, matchTMDBStudios } from "@/lib/awards"
+import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel } from "@/lib/awards"
 import { createT } from "@/lib/i18n"
 import type { EnrichedAnimeItem } from "@/lib/validation"
 import { fetchMDBList, type MDBListEntry } from "@/lib/mdblist"
@@ -48,6 +48,7 @@ import {
   recordPosterCoalescedHit,
   recordTvdbRescue,
   recordBackdropCropRescue,
+  serverTimingValue,
   resolveImageFormat,
   type PosterCachePayload,
   type PosterErrorStatus,
@@ -347,7 +348,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     if (!cachedPoster.stale) {
       log.debug("Poster cache: fresh hit", { mediaType, tmdbId, ms: Date.now() - startTime })
       if (outputFormat === "webp") return serveWebpVariant(cachedPoster.payload)
-      return posterResponse(cachedPoster.payload, immutablePoster, isPreview, dynamicPoster, outputFormat, dynamicTtlSec)
+      return posterResponse(cachedPoster.payload, immutablePoster, isPreview, dynamicPoster, outputFormat, dynamicTtlSec,
+        serverTimingValue([{ name: "cache", desc: "HIT" }, { name: "total", durMs: Date.now() - startTime }]))
     }
     if (!refreshRequest) {
       recordPosterStaleHit()
@@ -1039,7 +1041,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           })
           const result = await Promise.race([
             rankingEnabledEarly
-              ? fetchAllWikidata(tmdbId, mediaType, t, combineAbortSignals(renderAbort.signal, wdAbort.signal)).catch(() => emptyWikidata)
+              ? fetchAllWikidata(tmdbId, mediaType, combineAbortSignals(renderAbort.signal, wdAbort.signal)).catch(() => emptyWikidata)
               : Promise.resolve(emptyWikidata),
             wikidataTimeout,
           ])
@@ -1131,6 +1133,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     const qRank = req.nextUrl.searchParams.get("rank")
     const qLabel = req.nextUrl.searchParams.get("label")
     const finalRank = qRank !== null ? (parseInt(qRank, 10) >= 0 ? parseInt(qRank, 10) : rankingRank) : rankingRank
+
+    // Fase 6 (observability): fine della fase fetch (mapping/defaults + TMDB +
+    // JW + wikidata + immagini + selezione logo). Da qui in poi solo CPU locale.
+    const tFetchMs = Date.now() - startTime
 
     // 6. Resize poster + compute luminance
     // Landscape: base = sfondo TMDB ritagliato sul canvas 16:9, oppure
@@ -1271,7 +1277,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         awards: wikidataResult.awards,
         nominations: wikidataResult.nominations,
         studios: tmdbStudios.length ? [...tmdbStudios] : [...productionCompanies, ...tmdbNetworks],
-        director: wikidataResult.director,
+        director: directorBadgeLabel(wikidataResult.director, t),
         tvType: tvType ?? null,
         tvStatus,
         keywords: [...tmdbKeywords],
@@ -1313,6 +1319,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           nominations: wikidataResult.nominations,
           studios: wikidataResult.studios,
           director: wikidataResult.director,
+          directorLabel: directorBadgeLabel(wikidataResult.director, t),
         },
         keywords: [...tmdbKeywords],
         badge: {
@@ -1336,6 +1343,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
             sashOrder,
             customBadge: queryExtra,
           },
+        },
+        timings: {
+          fetchMs: tFetchMs,
+          prepMs: Date.now() - startTime - tFetchMs,
+          totalMs: Date.now() - startTime,
         },
         appearance: {
           topLight,
@@ -1412,6 +1424,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     if (renderAbort.signal.aborted) {
       throw new Error("Render deadline exceeded before poster compositing")
     }
+    // Fine della fase prep (resize, config, accent): da qui solo composite CPU.
+    const tCompositeStart = Date.now()
     const composited = await generatePosterBuffer(genInput)
     if (customRatingConfig.enabled) {
       etag = `${etag.slice(0, -1)}:cr${hashKey(JSON.stringify(genInput.ratings))}"`
@@ -1432,10 +1446,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     if (customRatingConfig.enabled && !isPreview && req.headers.get("If-None-Match") === responseEtag) {
       return new Response(null, { status: 304, headers: posterNotModifiedHeaders(responseEtag, immutablePoster, dynamicPoster, dynamicTtlSec) })
     }
-    log.info("Poster rendered", { mediaType, tmdbId, ms: Date.now() - startTime, bytes: composited.byteLength, cached: !!mappingTag, format: outputFormat })
+    log.info("Poster rendered", { mediaType, tmdbId, ms: Date.now() - startTime, bytes: composited.byteLength, cached: !!mappingTag, format: outputFormat, fetchMs: tFetchMs, prepMs: tCompositeStart - startTime - tFetchMs, compositeMs: Date.now() - tCompositeStart })
     // C3: il webp è variante di risposta (convertita + cachata), non un render.
     if (outputFormat === "webp") return serveWebpVariant(payload)
-    return new Response(new Uint8Array(composited), { headers: posterHeaders(etag, immutablePoster, isPreview, dynamicPoster, outputFormat, dynamicTtlSec) })
+    const renderHeaders = {
+      ...posterHeaders(etag, immutablePoster, isPreview, dynamicPoster, outputFormat, dynamicTtlSec),
+      "Server-Timing": serverTimingValue([
+        { name: "fetch", durMs: tFetchMs },
+        { name: "prep", durMs: tCompositeStart - startTime - tFetchMs },
+        { name: "composite", durMs: Date.now() - tCompositeStart },
+        { name: "total", durMs: Date.now() - startTime },
+      ]),
+    }
+    return new Response(new Uint8Array(composited), { headers: renderHeaders })
   } catch (e) {
     completePosterRender(null)
     recordPosterError()

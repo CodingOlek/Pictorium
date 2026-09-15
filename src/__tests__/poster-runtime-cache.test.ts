@@ -10,8 +10,10 @@ import {
   isImmutablePosterRequest,
   posterHeaders,
   posterNotModifiedHeaders,
+  posterResponse,
   readPosterError,
   resolveImageFormat,
+  serverTimingValue,
   variantEtagFor,
   writeCachedPoster,
   writePosterError,
@@ -80,6 +82,35 @@ describe("poster CDN headers", () => {
       isRotating: false,
       mappingVersionMatches: false,
     })).toBe(false)
+  })
+})
+
+describe("Server-Timing diagnostics (Fase 6)", () => {
+  it("formats render phases as name;dur pairs", () => {
+    expect(serverTimingValue([
+      { name: "fetch", durMs: 123.4 },
+      { name: "prep", durMs: 45 },
+      { name: "composite", durMs: 300 },
+      { name: "total", durMs: 468 },
+    ])).toBe("fetch;dur=123, prep;dur=45, composite;dur=300, total;dur=468")
+  })
+
+  it("supports desc-only entries for cache hits", () => {
+    expect(serverTimingValue([{ name: "cache", desc: "HIT" }, { name: "total", durMs: 4 }]))
+      .toBe('cache;desc="HIT", total;dur=4')
+  })
+
+  it("clamps negative durations to zero", () => {
+    expect(serverTimingValue([{ name: "prep", durMs: -3 }])).toBe("prep;dur=0")
+  })
+
+  it("posterResponse carries Server-Timing only when provided", async () => {
+    const payload = { buffer: Buffer.from([1, 2, 3]), etag: '"x"' }
+    const plain = posterResponse(payload, false)
+    expect(plain.headers.get("Server-Timing")).toBeNull()
+    const timed = posterResponse(payload, false, false, false, "jpeg", undefined, 'cache;desc="HIT", total;dur=4')
+    expect(timed.headers.get("Server-Timing")).toBe('cache;desc="HIT", total;dur=4')
+    expect(timed.headers.get("ETag")).toBe('"x"')
   })
 })
 
