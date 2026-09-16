@@ -42,7 +42,6 @@ vi.mock("@/lib/poster-auto-fit", () => ({
 }))
 
 vi.mock("@/lib/svg-badge", () => ({
-  warmFonts: vi.fn(),
   renderGenreBadge: vi.fn(async () => null),
   renderRankingBadge: vi.fn(async () => null),
   renderExtraBadge: vi.fn(async () => null),

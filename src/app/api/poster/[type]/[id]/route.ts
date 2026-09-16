@@ -9,7 +9,6 @@ import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
 import { getServerDefaults } from "@/lib/server-defaults"
 import { getRegionDef, normalizeRegion, parseRegion, defaultRegionForLang } from "@/lib/regions"
 import { BEST_FIT_GLOBAL } from "@/lib/best-fit-config"
-import { warmFonts } from "@/lib/svg-badge"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
 import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel } from "@/lib/awards"
 import { createT } from "@/lib/i18n"
@@ -149,7 +148,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const startTime = Date.now()
   initSharp()
   const rl = await rateLimit(rateLimitKey(req), "poster")
-  warmFonts()
   if (!rl.ok) return rateLimitResponse(rl.retAfter)
   const { type, id } = await params
   const mediaType = (["series", "tv", "show", "tvshow"].includes(type?.toLowerCase() || "")) ? "tv" : "movie"
