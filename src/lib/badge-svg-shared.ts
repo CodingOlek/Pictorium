@@ -178,18 +178,20 @@ function buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX, y, parts
   return t
 }
 
-export function buildGenreBarSvg(genreName: string, voteStr: string, yearStr: string, pw: number, fs: number, textColor: string, topLight: boolean, textOffsetX = 0, parts?: GenreParts) {
+export function buildGenreBarSvg(genreName: string, voteStr: string, yearStr: string, pw: number, fs: number, textColor: string, bottomLight: boolean, textOffsetX = 0, parts?: GenreParts) {
   const barH = badgeBoxHeight(fs)
   const barR = Math.round(fs * 0.7)
-  const barShadowOff = Math.max(Math.round(barH * 0.2), 3)
-  const barShadowBlur = Math.max(Math.round(barH * 0.5), 8)
   const textParts = buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX: pw / 2 + textOffsetX, y: barH / 2, parts })
   const pathD = `M 0,${barH} L 0,${barR} A ${barR},${barR} 0 0,1 ${barR},0 L ${pw - barR},0 A ${barR},${barR} 0 0,1 ${pw},${barR} L ${pw},${barH} Z`
-  const defs = `<defs>${STAR_GRADIENT_DEF}<filter id="sh" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="-${barShadowOff}" stdDeviation="${barShadowBlur / 2}" flood-color="rgba(0,0,0,0.3)"/></filter></defs>`
+  // Finitura quality-badge: gradiente satinato polarizzato sul fondo (stessa
+  // polarità della pill genere), niente alone d'ombra, bordo adattivo 1.5px
+  // sul profilo. La metà esterna dello stroke sui bordi full-bleed viene
+  // tagliata dal viewport (0.75px, sub-visibile a scala poster).
+  const stroke = bottomLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
+  const defs = `<defs>${STAR_GRADIENT_DEF}<linearGradient id="gbg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(bottomLight)}</linearGradient></defs>`
   const textEl = `<g fill="${textColor}">${textParts}</g>`
-  const borderLine = `<line x1="0" y1="0" x2="${pw}" y2="0" stroke="rgba(0,0,0,0.10)" stroke-width="1"/>`
-  const inner = `<path d="${pathD}" fill="rgba(255,255,255,0.80)" filter="url(#sh)"/>`
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${barH}">${defs}${inner}${borderLine}${textEl}</svg>`, w: pw, h: barH }
+  const inner = `<path d="${pathD}" fill="url(#gbg)" stroke="${stroke}" stroke-width="1.5"/>`
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${barH}">${defs}${inner}${textEl}</svg>`, w: pw, h: barH }
 }
 
 export function buildGenrePillSvg(
@@ -290,19 +292,6 @@ export function satinPillStops(topLight: boolean): string {
     : `<stop offset="0%" stop-color="rgba(255,255,255,0.95)"/><stop offset="30%" stop-color="rgba(255,255,255,0.82)"/><stop offset="62%" stop-color="rgba(255,255,255,0.66)"/><stop offset="100%" stop-color="rgba(255,255,255,0.50)"/>`
 }
 
-export function buildRankingBarSvg(fullText: string, pw: number, fs: number, textColor: string, bg: string) {
-  const barH = badgeBoxHeight(fs)
-  const textW = estimateTextWidth(fullText, fs)
-  const r = Math.round(fs * 0.7)
-  const shadowBlur = Math.round(fs * 0.6)
-  const shadowOff = Math.round(fs * 0.2)
-  const pathD = `M 0,0 L ${pw},0 L ${pw},${barH - r} A ${r},${r} 0 0,1 ${pw - r},${barH} L ${r},${barH} A ${r},${r} 0 0,1 0,${barH - r} Z`
-  const defs = `<defs><filter id="ds" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="${shadowOff}" stdDeviation="${shadowBlur / 2}" flood-color="rgba(0,0,0,0.3)"/></filter></defs>`
-  const textEl = `<text x="${pw / 2}" y="${barH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(fullText)}" font-weight="${RANKING_FONT_WEIGHT}" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(fullText)}</text>`
-  const inner = `<path d="${pathD}" fill="${bg}" filter="url(#ds)"/>`
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${barH}">${defs}${inner}${textEl}</svg>`, w: pw, h: barH }
-}
-
 export function buildRankingDefaultSvg(fullText: string, fs: number, textColor: string, _bg: string, topLight = false, flatBg?: string, detached = false) {
   const px = Math.round(fs * BADGE_BOX_PAD_X_FACTOR)
   const textW = estimateTextWidth(fullText, fs)
@@ -365,19 +354,6 @@ export function buildRankingBorderedSvg(fullText: string, fs: number, textColor:
   const textEl = `<text x="${totalW / 2}" y="${boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(fullText)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(fullText)}</text>`
   const bgEl = `<rect x="${borderW / 2}" y="${borderW / 2}" width="${totalW - borderW}" height="${boxH - borderW}" rx="${r}" fill="${bgFill}" stroke="${borderColor}" stroke-width="${borderW}"/>`
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${boxH}">${bgEl}${textEl}</svg>`, w: totalW, h: boxH }
-}
-
-export function buildExtraBarSvg(label: string, pw: number, fs: number, textColor: string, bg: string) {
-  const barH = badgeBoxHeight(fs)
-  const textW = Math.max(estimateTextWidth(label, fs), fs)
-  const r = Math.round(fs * 0.7)
-  const shadowBlur = Math.round(fs * 0.6)
-  const shadowOff = Math.round(fs * 0.2)
-  const pathD = `M 0,0 L ${pw},0 L ${pw},${barH - r} A ${r},${r} 0 0,1 ${pw - r},${barH} L ${r},${barH} A ${r},${r} 0 0,1 0,${barH - r} Z`
-  const defs = `<defs><filter id="ds" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="${shadowOff}" stdDeviation="${shadowBlur / 2}" flood-color="rgba(0,0,0,0.3)"/></filter></defs>`
-  const textEl = `<text x="${pw / 2}" y="${barH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(label)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(label)}</text>`
-  const inner = `<path d="${pathD}" fill="${bg}" filter="url(#ds)"/>`
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${barH}">${defs}${inner}${textEl}</svg>`, w: pw, h: barH }
 }
 
 export function buildExtraDefaultSvg(label: string, fs: number, textColor: string, _bg: string, detached = false, topLight = false, flatBg?: string) {

@@ -1,6 +1,6 @@
 import sharp from "sharp"
 import { describe, expect, it } from "vitest"
-import { buildGenrePillSvg, buildGenreTextSvg, buildRankingDefaultSvg, buildExtraDefaultSvg, buildQualityBadgeSvg, glassStops, satinPillStops, buildGenreGlassSvg, buildGenreBorderedSvg, buildRankingGlassSvg, buildRankingBorderedSvg, buildExtraBorderedSvg } from "@/lib/badge-svg-shared"
+import { buildGenrePillSvg, buildGenreTextSvg, buildGenreBarSvg, buildRankingDefaultSvg, buildExtraDefaultSvg, buildQualityBadgeSvg, glassStops, satinPillStops, buildGenreGlassSvg, buildGenreBorderedSvg, buildRankingGlassSvg, buildRankingBorderedSvg, buildExtraBorderedSvg } from "@/lib/badge-svg-shared"
 import { buildGenreBadgeSVG, buildRankingBadgeSVG, buildExtraBadgeSVG, buildNetflixRankBadgeSVG, renderComingSoonRibbon, comingSoonRibbonLayout } from "@/lib/svg-badge"
 
 async function alphaBounds(png: Buffer) {
@@ -158,6 +158,19 @@ describe("buildGenreBadgeSVG", () => {
     expect(badge).not.toBeNull()
     expect(badge!.w).toBe(1000)
   })
+
+  it("renders genre bar with satin gradient, no shadow, adaptive 1.5px stroke", async () => {
+    const { svg } = buildGenreBarSvg("Dramma", "8.5", "2023", 380, 28, "rgba(0,0,0,0.88)", false)
+    expect(svg).toContain('fill="url(#gbg)"')
+    expect(svg).toContain('stop-color="rgba(255,255,255,0.95)"')
+    expect(svg).toContain('stroke="rgba(255,255,255,0.22)"')
+    expect(svg).toContain('stroke-width="1.5"')
+    expect(svg).not.toContain("feDropShadow")
+    expect(svg).not.toContain("<line ")
+    const light = buildGenreBarSvg("Dramma", "8.5", "2023", 380, 28, "rgba(255,255,255,0.95)", true)
+    expect(light.svg).toContain('stroke="rgba(0,0,0,0.12)"')
+    expect(light.svg).toContain('stop-color="rgba(0,0,0,0.88)"')
+  })
 })
 
 describe("GenreParts combinations", () => {
@@ -236,10 +249,12 @@ describe("buildRankingBadgeSVG", () => {
     expect(badge!.w).toBeLessThan(600)
   })
 
-  it("renders bar ranking badge full-width", async () => {
-    const badge = await buildRankingBadgeSVG(5, 1000, "Oggi", false, "bar", "#555555")
+  it("falls back to default plaque for the removed bar style", async () => {
+    // "bar" rimosso da RANKING_BADGE_STYLES: il renderer non lo distingue più
+    // dal default (il degrade query ?rs=bar→default vive in poster-config).
+    const badge = await buildRankingBadgeSVG(5, 1000, "Oggi", false, "bar" as never, "#555555")
     expect(badge).not.toBeNull()
-    expect(badge!.w).toBe(1000)
+    expect(badge!.w).toBeLessThan(600)
   })
 
   it("renders colored ranking badge", async () => {
@@ -377,10 +392,10 @@ describe("buildExtraBadgeSVG", () => {
     expect(badge!.w).toBeLessThan(600)
   })
 
-  it("renders bar extra badge full-width", async () => {
-    const badge = await buildExtraBadgeSVG("Vincitore Oscar", 1000, false, "bar", "#555555")
+  it("falls back to default plaque for the removed bar style", async () => {
+    const badge = await buildExtraBadgeSVG("Vincitore Oscar", 1000, false, "bar" as never, "#555555")
     expect(badge).not.toBeNull()
-    expect(badge!.w).toBe(1000)
+    expect(badge!.w).toBeLessThan(600)
   })
 
   it("handles long extra label with overflow protection", async () => {
