@@ -1164,8 +1164,12 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     const isComingSoonRight = showComingSoon && ribbonSide === "right" && !!ribbonLayout
     const isRightRibbonCorner = (isNetflixRight && !!finalRankBadge) || isComingSoonRight
 
-    let top = netBaseTop
-    let left = isRightRibbonCorner ? netPadX : Math.round(CW - safeQualityBadgeResult.w - netPadX)
+    // Ancoraggio base spostato di misura fissa da editor: +10px X, -10px Y
+    // (era -20, alzato di 10 dalla situazione precedente).
+    // Lo stacking sotto il logo network resta invariato (lì conta non
+    // sovrapporsi, non la misura).
+    let top = netBaseTop - 10
+    let left = (isRightRibbonCorner ? netPadX : Math.round(CW - safeQualityBadgeResult.w - netPadX)) + 10
     let finalQualityBadge = safeQualityBadgeResult
 
     if (isRightRibbonCorner) {
