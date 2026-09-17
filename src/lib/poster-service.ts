@@ -1018,6 +1018,18 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     // Offset X/Y solo sui centrati: il nastro resta ancorato (per scelta
     // utente esplicita gli offset non lo toccano).
     const isCentered = !isNetflixRibbon
+    // La pill centrale allinea il suo fondo al fondo del badge qualità
+    // (posizione standard: top netBaseTop, altezza piena): così le due placche
+    // stanno sulla stessa linea. Senza badge qualità, gap standard da bordo.
+    // Stima anti-circolare: se la qualità poi si rimpicciolisce per overlap
+    // (raro), l'allineamento resta quello standard. Solo pill.
+    const pillTopGap = (() => {
+      if (rankingBadgeStyle !== "pill") return 0
+      if (safeQualityBadgeResult) {
+        return Math.max(0, Math.round(18 * CH / 570) + safeQualityBadgeResult.h - safeRankBadgeResult.h)
+      }
+      return Math.round(18 * CH / 570)
+    })()
     let left: number
     if (isNetflixRibbon && isRightRibbon) {
       left = Math.round(CW - safeRankBadgeResult.w) // nastro Netflix a destra (Stremio)
@@ -1030,7 +1042,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     }
     finalRankBadge = safeRankBadgeResult
     finalRankLeft = left
-    finalRankTop = isCentered ? topBadgeOffsetY : 0
+    finalRankTop = isCentered ? topBadgeOffsetY + pillTopGap : 0
 
     // Il badge centrale resta invariato — la gestione overlap vive nei blocchi
     // network/qualità qui sotto (shrink dei laterali).

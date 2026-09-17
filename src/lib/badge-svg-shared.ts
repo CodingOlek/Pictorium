@@ -278,6 +278,22 @@ export function glassStops(topLight: boolean): string {
 }
 
 /**
+ * Ombra 3D singola per i badge centrali superiori (default/pill ranking ed
+ * extra, colored incluso via builder): stessa ricetta del nastro Netflix
+ * (dx=3, dy=3, blur 3.5, 0.65), canvas = box esatta come il nastro — la coda
+ * oltre il viewport viene tagliata, come lì. Solo sul contenitore, mai sul testo.
+ */
+const TOP_SHADOW_FILTER = `<filter id="tds" x="-20%" y="-20%" width="180%" height="180%"><feDropShadow dx="3" dy="3" stdDeviation="3.5" flood-color="#000000" flood-opacity="0.65"/></filter>`
+
+/**
+ * Padding per la coda dell'ombra 3D (dx=3, dy=3, blur 3.5 → ~14px): senza,
+ * il viewport taglia di netto l'alone e gli angoli sembrano quadrati.
+ * Solo lati e basso: in alto la placca resta a filo del bordo poster (l'ombra
+ * cade verso il basso, la coda superiore tagliata è invisibile).
+ */
+export const TOP_SHADOW_PAD = 14
+
+/**
  * Gradiente satinato per i badge a convenzione "pill" (pill chiara + testo
  * scuro su poster scuro, pill scura + testo chiaro su poster chiaro):
  * ranking-default, nastro netflix, qualità.
@@ -298,9 +314,9 @@ export function buildRankingDefaultSvg(fullText: string, fs: number, textColor: 
   const totalW = textW + px * 2
   const boxH = badgeBoxHeight(fs)
   const r = Math.round(fs * 0.7)
-  // Finitura quality-badge: niente ombra esterna (sporca il satinato
-  // semitrasparente), canvas = box esatta, bordo sagomato polarizzato 1.5px.
-  const ox = 0
+  const renderW = totalW + TOP_SHADOW_PAD * 2
+  const renderH = boxH + TOP_SHADOW_PAD
+  const ox = TOP_SHADOW_PAD
   const oy = 0
   const pathD = detached
     ? `M ${ox + r},${oy} L ${ox + totalW - r},${oy} A ${r},${r} 0 0,1 ${ox + totalW},${oy + r} L ${ox + totalW},${oy + boxH - r} A ${r},${r} 0 0,1 ${ox + totalW - r},${oy + boxH} L ${ox + r},${oy + boxH} A ${r},${r} 0 0,1 ${ox},${oy + boxH - r} L ${ox},${oy + r} A ${r},${r} 0 0,1 ${ox + r},${oy} Z`
@@ -308,10 +324,10 @@ export function buildRankingDefaultSvg(fullText: string, fs: number, textColor: 
   const centerX = ox + totalW / 2
   const centerY = oy + boxH / 2
   const stroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
-  const defs = `<defs><linearGradient id="rdg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient></defs>`
+  const defs = `<defs><linearGradient id="rdg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>${TOP_SHADOW_FILTER}</defs>`
   const textEl = `<text x="${centerX}" y="${centerY}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(fullText)}" font-weight="${RANKING_FONT_WEIGHT}" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(fullText)}</text>`
   // colored: tinta accent piatta (contratto storico); default: gradiente satinato.
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${boxH}">${defs}<path d="${pathD}" fill="${flatBg ?? "url(#rdg)"}" stroke="${stroke}" stroke-width="1.5"/>${textEl}</svg>`, w: totalW, h: boxH }
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}<path d="${pathD}" fill="${flatBg ?? "url(#rdg)"}" stroke="${stroke}" stroke-width="1.5" filter="url(#tds)"/>${textEl}</svg>`, w: renderW, h: renderH }
 }
 
 export function buildRankingPillSvg(fullText: string, fs: number, textColor: string, bg: string, topLight = false, useSatin = true) {
@@ -320,12 +336,17 @@ export function buildRankingPillSvg(fullText: string, fs: number, textColor: str
   const totalW = textW + px * 2
   const boxH = badgeBoxHeight(fs)
   const r = boxH / 2
+  const renderW = totalW + TOP_SHADOW_PAD * 2
+  const renderH = boxH + TOP_SHADOW_PAD
+  const ox = TOP_SHADOW_PAD
+  const oy = 0
   const gradDef = useSatin ? `<linearGradient id="rpg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>` : ""
   const fill = useSatin ? "url(#rpg)" : bg
-  const defs = gradDef ? `<defs>${gradDef}</defs>` : ""
-  const textEl = `<text x="${totalW / 2}" y="${boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(fullText)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(fullText)}</text>`
-  const bgEl = `<rect x="0" y="0" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>`
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${boxH}">${defs}${bgEl}${textEl}</svg>`, w: totalW, h: boxH }
+  const defs = gradDef ? `<defs>${gradDef}${TOP_SHADOW_FILTER}</defs>` : ""
+  const filterAttr = useSatin ? ' filter="url(#tds)"' : ""
+  const textEl = `<text x="${ox + totalW / 2}" y="${oy + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(fullText)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(fullText)}</text>`
+  const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1"${filterAttr}/>`
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}${bgEl}${textEl}</svg>`, w: renderW, h: renderH }
 }
 
 export function buildRankingGlassSvg(fullText: string, fs: number, textColor: string, _bg: string, topLight: boolean) {
@@ -362,10 +383,13 @@ export function buildExtraDefaultSvg(label: string, fs: number, textColor: strin
   const totalW = textW + px * 2
   const boxH = badgeBoxHeight(fs)
   const r = Math.round(fs * 0.7)
-  // Come il ranking default: niente ombra esterna, canvas = box esatta,
-  // bordo sagomato polarizzato 1.5px. I nuovi parametri restano in coda per
-  // non rompere le chiamate posizionali esistenti.
-  const ox = 0
+  // Come il ranking default: canvas = box + padding per la coda dell'ombra
+  // (solo lati/basso: in alto la placca resta a filo), bordo sagomato
+  // polarizzato 1.5px. I nuovi parametri restano in coda per non rompere le
+  // chiamate posizionali esistenti.
+  const renderW = totalW + TOP_SHADOW_PAD * 2
+  const renderH = boxH + TOP_SHADOW_PAD
+  const ox = TOP_SHADOW_PAD
   const oy = 0
   const pathD = detached
     ? `M ${ox + r},${oy} L ${ox + totalW - r},${oy} A ${r},${r} 0 0,1 ${ox + totalW},${oy + r} L ${ox + totalW},${oy + boxH - r} A ${r},${r} 0 0,1 ${ox + totalW - r},${oy + boxH} L ${ox + r},${oy + boxH} A ${r},${r} 0 0,1 ${ox},${oy + boxH - r} L ${ox},${oy + r} A ${r},${r} 0 0,1 ${ox + r},${oy} Z`
@@ -373,10 +397,10 @@ export function buildExtraDefaultSvg(label: string, fs: number, textColor: strin
   const centerX = ox + totalW / 2
   const centerY = oy + boxH / 2
   const stroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
-  const defs = `<defs><linearGradient id="edg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient></defs>`
+  const defs = `<defs><linearGradient id="edg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>${TOP_SHADOW_FILTER}</defs>`
   const textEl = `<text x="${centerX}" y="${centerY}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(label)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(label)}</text>`
   // colored: tinta accent piatta (contratto storico); default: gradiente satinato.
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${boxH}">${defs}<path d="${pathD}" fill="${flatBg ?? "url(#edg)"}" stroke="${stroke}" stroke-width="1.5"/>${textEl}</svg>`, w: totalW, h: boxH }
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}<path d="${pathD}" fill="${flatBg ?? "url(#edg)"}" stroke="${stroke}" stroke-width="1.5" filter="url(#tds)"/>${textEl}</svg>`, w: renderW, h: renderH }
 }
 
 export function buildExtraPillSvg(label: string, fs: number, textColor: string, bg: string, topLight = false, useSatin = true) {
@@ -385,12 +409,17 @@ export function buildExtraPillSvg(label: string, fs: number, textColor: string, 
   const totalW = textW + px * 2
   const boxH = badgeBoxHeight(fs)
   const r = boxH / 2
+  const renderW = totalW + TOP_SHADOW_PAD * 2
+  const renderH = boxH + TOP_SHADOW_PAD
+  const ox = TOP_SHADOW_PAD
+  const oy = 0
   const gradDef = useSatin ? `<linearGradient id="epg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>` : ""
   const fill = useSatin ? "url(#epg)" : bg
-  const defs = gradDef ? `<defs>${gradDef}</defs>` : ""
-  const textEl = `<text x="${totalW / 2}" y="${boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(label)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(label)}</text>`
-  const bgEl = `<rect x="0" y="0" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>`
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${boxH}">${defs}${bgEl}${textEl}</svg>`, w: totalW, h: boxH }
+  const defs = gradDef ? `<defs>${gradDef}${TOP_SHADOW_FILTER}</defs>` : ""
+  const filterAttr = useSatin ? ' filter="url(#tds)"' : ""
+  const textEl = `<text x="${ox + totalW / 2}" y="${oy + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(label)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(label)}</text>`
+  const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1"${filterAttr}/>`
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}${bgEl}${textEl}</svg>`, w: renderW, h: renderH }
 }
 
 export function buildExtraGlassSvg(label: string, fs: number, textColor: string, _bg: string, topLight: boolean) {

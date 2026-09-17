@@ -23,16 +23,19 @@ async function ink(png: Buffer) {
 }
 
 /** Solo l'inchiostro scuro del testo (su pill chiara), misurato nell'interno
- *  (margine 12px, coordinate relative all'interno): dal finish senza ombra il
- *  fondo copre l'intero canvas, e con l'ombra 3D i bordi hanno pixel scuri di
- *  alone — in entrambi i casi i bound full-canvas non dicono nulla sul testo.
- *  Il testo ha comunque padding ≥16px, quindi l'interno lo contiene tutto. */
-async function textInk(png: Buffer, margin = 12) {
+ *  (margine 24px ai lati, sopra il fondo box in verticale — coordinate
+ *  relative all'interno): fondo e alone 3D coprono i bordi e la striscia
+ *  d'ombra sotto il box, quindi i bound full-canvas non dicono nulla sul
+ *  testo. Il testo ha comunque padding ≥16px oltre il padding ombra, quindi
+ *  l'interno lo contiene tutto. */
+async function textInk(png: Buffer, margin = 24) {
+  const { TOP_SHADOW_PAD } = await import("@/lib/badge-svg-shared")
   const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const yMax = info.height - TOP_SHADOW_PAD
   let count = 0
   let minX = info.width
   let maxX = -1
-  for (let y = 0; y < info.height; y++) {
+  for (let y = 0; y < yMax; y++) {
     for (let x = margin; x < info.width - margin; x++) {
       const i = (y * info.width + x) * 4
       if (data[i + 3] > 10 && data[i] < 120 && data[i + 1] < 120 && data[i + 2] < 120) {
