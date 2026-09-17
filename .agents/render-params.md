@@ -43,9 +43,9 @@ When you modify a visual render parameter in one file, update its server counter
 | Padding X | `px = round(finalFontSize * 0.75)` (unificato con genre badges) |
 | Altezza scatola | `boxH = badgeBoxHeight(fs) = fs + round(fs * 0.40) * 2` (unificato con genre badges) |
 | Border radius | `r = round(finalFontSize * 0.7)` per default/bar, `boxH / 2` per pill |
-| Ombra | `badgeShadowBox(boxH)`: `blur = max(round(boxH * 0.20), 4)`, `off = max(round(boxH * 0.10), 2)` |
-| Sfondo | `default`/`netflix` — gradiente satinato traslucido a polarità pill (`satinPillStops(topLight)`: pill chiara su top scuro, grafite su top chiaro); `pill` — satinato come default + stroke 1px (testo adattivo invariato); `bar`/`colored` — flat `topLight ? "rgba(0,0,0,0.80)" : "rgba(255,255,255,0.80)"` |
-| Testo | `topLight ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)"` (default/bar/pill); `vetro`/`bordo` traslucidi: adattivo inverso (`topLight ? dark : #e5e7eb`, come qualità/netflix ma sul vetro) |
+| Ombra | `default`/extra-default: **nessuna ombra esterna** (finitura quality-badge; `badgeShadowBox` resta per `bar`/stime overflow) — `blur = max(round(boxH * 0.20), 4)`, `off = max(round(boxH * 0.10), 2)` dove ancora usato |
+| Sfondo | `default`/extra-default — gradiente satinato `satinPillStops(topLight)` + bordo sagomato polarizzato 1.5px (`topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"`), canvas = box esatta (`totalW × boxH`, zero padding ombra); `netflix` — nastro invariato; `pill` — satinato come default + stroke 1px (testo adattivo invariato); `bar`/`colored` — flat `topLight ? "rgba(0,0,0,0.80)" : "rgba(255,255,255,0.80)"` (colored resta tinta accent piatta + `textColorForBg`) |
+| Testo | `topLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)"` (default/bar/pill, come badge qualità); `colored` = `textColorForBg`; `vetro`/`bordo` traslucidi: adattivo inverso (`topLight ? dark : #e5e7eb`, come qualità/netflix ma sul vetro) |
 | Stabilizzazione testo | `textLength` + `lengthAdjust="spacingAndGlyphs"` sul `<text>` per evitare differenze metriche tra Windows/local e Linux/HF |
 | Overflow protection | Stessa formula con `pw - 20`, fattori `3.55` (ranking, include shadow) e `3.2` (extra); extra compatti cappati al 65% di `pw` (solo label oltre il cap si rimpiccioliscono) |
 | Posizione | Composito a `top: 0, left: round((pw - w) / 2)` (default/bar/pill/colored); nastro Netflix a `left: 0` (Nuvio) o `left: STD_W - w` specchiato (Stremio, `side=right`); logo network segue a destra del nastro (`w + 10`) o a sinistra (`STD_W - w - 10 - logoW`) |

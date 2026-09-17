@@ -22,6 +22,27 @@ async function ink(png: Buffer) {
   return { count, minX, maxX, width: info.width }
 }
 
+/** Solo l'inchiostro scuro del testo (su pill chiara): dal finish senza ombra
+ *  il fondo satinato copre l'intero canvas, quindi i bound di `ink` sono
+ *  sempre full-box e non dicono più nulla sul testo. */
+async function textInk(png: Buffer) {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  let count = 0
+  let minX = info.width
+  let maxX = -1
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      const i = (y * info.width + x) * 4
+      if (data[i + 3] > 10 && data[i] < 120 && data[i + 1] < 120 && data[i + 2] < 120) {
+        count++
+        minX = Math.min(minX, x)
+        maxX = Math.max(maxX, x)
+      }
+    }
+  }
+  return { count, minX, maxX, width: info.width }
+}
+
 describe("fontFamilyFor", () => {
   it("keeps Inter for Latin text so the SVG stays byte-identical", () => {
     expect(fontFamilyFor("New season")).toBe("Inter")
@@ -49,9 +70,12 @@ describe("Hebrew badge rasterisation", () => {
     expect(he).not.toBeNull()
     const bounds = await ink(he!.png)
     expect(bounds.count).toBeGreaterThan(0)
-    // Il testo sta dentro la pill e non è schiacciato su un bordo.
-    expect(bounds.minX).toBeGreaterThan(0)
-    expect(bounds.maxX).toBeLessThan(bounds.width - 1)
+    // Il testo (inchiostro scuro) sta dentro la pill e non è schiacciato su
+    // un bordo — i bound del fondo non contano più (copre tutto il canvas).
+    const text = await textInk(he!.png)
+    expect(text.count).toBeGreaterThan(0)
+    expect(text.minX).toBeGreaterThan(0)
+    expect(text.maxX).toBeLessThan(text.width - 1)
   })
 
   it("renders a Hebrew genre name next to Latin rating and year", async () => {
@@ -69,8 +93,9 @@ describe("Hebrew badge rasterisation", () => {
   it("sizes a Hebrew pill from its own advance widths, not the Latin default", async () => {
     // charWidthFactor tratta l'ebraico a 0.55: col vecchio default 0.62 la
     // stima sforava e `lengthAdjust="spacingAndGlyphs"` allargava i glifi.
+    // Misura sull'inchiostro del testo: il fondo copre tutta la pill.
     const he = await buildExtraBadgeSVG("עונה חדשה", 380, false, "default", "#D4A574")
-    const bounds = await ink(he!.png)
+    const bounds = await textInk(he!.png)
     const inkWidth = bounds.maxX - bounds.minX + 1
     expect(inkWidth).toBeGreaterThan(bounds.width * 0.5)
     expect(inkWidth).toBeLessThan(bounds.width)

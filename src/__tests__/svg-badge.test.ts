@@ -478,6 +478,22 @@ describe("buildRankingDefaultSvg", () => {
     expect(svg).toContain('stop-color="rgba(255,255,255,0.95)"')
   })
 
+  it("has no drop-shadow filter and exact box geometry (quality-badge finish)", () => {
+    const { svg, w, h } = buildRankingDefaultSvg("#1 Oggi", 60, "rgba(0,0,0,0.80)", "rgba(255,255,255,0.80)", false)
+    expect(svg).not.toContain("feDropShadow")
+    expect(svg).not.toContain('id="ds"')
+    expect(svg).toContain('stroke-width="1.5"')
+    // Canvas = box esatta, senza padding ombra.
+    expect(svg).toContain(`width="${w}" height="${h}"`)
+  })
+
+  it("uses polarized 1.5px stroke (light on dark tops, dark on light tops)", () => {
+    const dark = buildRankingDefaultSvg("#1 Oggi", 60, "rgba(0,0,0,0.80)", "rgba(255,255,255,0.80)", false)
+    expect(dark.svg).toContain('stroke="rgba(255,255,255,0.22)"')
+    const light = buildRankingDefaultSvg("#1 Oggi", 60, "rgba(0,0,0,0.80)", "rgba(255,255,255,0.80)", true)
+    expect(light.svg).toContain('stroke="rgba(0,0,0,0.12)"')
+  })
+
   it("keeps the accent flat fill for rs=colored (no satin override)", () => {
     const { svg } = buildRankingDefaultSvg("#2 Film", 60, "#ffffff", "#ff6430", false, "#ff6430")
     expect(svg).toContain('fill="#ff6430"')
@@ -502,6 +518,20 @@ describe("buildExtraDefaultSvg", () => {
   it("locks text to the measured badge width", () => {
     const { svg } = buildExtraDefaultSvg("Vincitore Golden Globe", 60, "rgba(0,0,0,0.80)", "rgba(255,255,255,0.80)")
     expect(svg).toContain('lengthAdjust="spacingAndGlyphs"')
+  })
+
+  it("uses satin gradient with polarized stroke and no shadow by default", () => {
+    const { svg } = buildExtraDefaultSvg("Vincitore Golden Globe", 60, "rgba(0,0,0,0.80)", "rgba(255,255,255,0.80)", false, false)
+    expect(svg).toContain('fill="url(#edg)"')
+    expect(svg).toContain('stroke="rgba(255,255,255,0.22)"')
+    expect(svg).toContain('stroke-width="1.5"')
+    expect(svg).not.toContain("feDropShadow")
+  })
+
+  it("keeps the accent flat fill for colored (no satin override)", () => {
+    const { svg } = buildExtraDefaultSvg("Premio", 60, "#ffffff", "#ff6430", false, false, "#ff6430")
+    expect(svg).toContain('fill="#ff6430"')
+    expect(svg).not.toContain('fill="url(#edg)"')
   })
 })
 

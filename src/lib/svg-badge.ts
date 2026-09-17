@@ -84,7 +84,7 @@ export async function buildExtraBadgeSVG(
     ? textColorForBg(accentColor || "")
     : (isGlass || s === "bordo")
       ? (topLight ? "rgba(0,0,0,0.80)" : TRANSLUCENT_BADGE_TEXT)
-      : (topLight ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)")
+      : (topLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)")
 
   let result: { svg: string; w: number; h: number }
   if (s === "bar") {
@@ -96,7 +96,8 @@ export async function buildExtraBadgeSVG(
   } else if (s === "bordo") {
     result = buildExtraBorderedSvg(label, fs, fg, !!topLight)
   } else {
-    result = buildExtraDefaultSvg(label, fs, fg, bg, detached)
+    // colored: passa la tinta accent come flatBg (resta piatta); default: gradiente satinato.
+    result = buildExtraDefaultSvg(label, fs, fg, bg, detached, !!topLight, isColored ? bg : undefined)
   }
   const png = await renderSVG(result.svg, result.w)
   return { png, w: result.w, h: result.h }
@@ -332,7 +333,7 @@ export async function buildRankingBadgeSVG(
     ? textColorForBg(accentColor || "")
     : (s === "vetro" || s === "bordo")
       ? (topLight ? "rgba(0,0,0,0.80)" : TRANSLUCENT_BADGE_TEXT)
-      : (topLight ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)")
+      : (topLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)")
 
   let result: { svg: string; w: number; h: number }
   if (isNetflix) {
