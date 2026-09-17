@@ -76,7 +76,8 @@ describe("buildGenreBadgeSVG", () => {
 
     const badge = await buildGenreBadgeSVG("Sci-Fi & Fantasy", 8.2, 1000, "2019", "pill", "#555555", false)
     expect(badge).not.toBeNull()
-    expect(badge!.w).toBeLessThan(800)
+    // 800 di contenuto + 28 di padding ombra.
+    expect(badge!.w).toBeLessThan(830)
   })
 
   it("keeps long shadow genre badge within aesthetic width", async () => {
@@ -159,17 +160,27 @@ describe("buildGenreBadgeSVG", () => {
     expect(badge!.w).toBe(1000)
   })
 
-  it("renders genre bar with satin gradient, no shadow, adaptive 1.5px stroke", async () => {
+  it("renders genre bar with satin gradient, 3D shadow, adaptive 1.5px stroke", async () => {
     const { svg } = buildGenreBarSvg("Dramma", "8.5", "2023", 380, 28, "rgba(0,0,0,0.88)", false)
     expect(svg).toContain('fill="url(#gbg)"')
     expect(svg).toContain('stop-color="rgba(255,255,255,0.95)"')
     expect(svg).toContain('stroke="rgba(255,255,255,0.22)"')
     expect(svg).toContain('stroke-width="1.5"')
-    expect(svg).not.toContain("feDropShadow")
+    expect(svg).toContain('filter="url(#tds)"')
     expect(svg).not.toContain("<line ")
     const light = buildGenreBarSvg("Dramma", "8.5", "2023", 380, 28, "rgba(255,255,255,0.95)", true)
     expect(light.svg).toContain('stroke="rgba(0,0,0,0.12)"')
     expect(light.svg).toContain('stop-color="rgba(0,0,0,0.88)"')
+  })
+
+  it("renders genre pill and quality badge with 3D shadow (satin and colored)", () => {
+    const pill = buildGenrePillSvg("Dramma", "8.5", "2023", 28, "rgba(255,255,255,0.80)", "rgba(0,0,0,0.80)")
+    expect(pill.svg).toContain('filter="url(#tds)"')
+    const colored = buildGenrePillSvg("Dramma", "8.5", "2023", 28, "#ff6430", "#ffffff", 0, undefined, false, false)
+    expect(colored.svg).toContain('fill="#ff6430"')
+    expect(colored.svg).toContain('filter="url(#tds)"')
+    const quality = buildQualityBadgeSvg("4K", 20, "", "", false)
+    expect(quality.svg).toContain('filter="url(#tds)"')
   })
 })
 

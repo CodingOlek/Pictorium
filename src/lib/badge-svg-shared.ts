@@ -188,9 +188,11 @@ export function buildGenreBarSvg(genreName: string, voteStr: string, yearStr: st
   // sul profilo. La metà esterna dello stroke sui bordi full-bleed viene
   // tagliata dal viewport (0.75px, sub-visibile a scala poster).
   const stroke = bottomLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
-  const defs = `<defs>${STAR_GRADIENT_DEF}<linearGradient id="gbg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(bottomLight)}</linearGradient></defs>`
+  // Ombra 3D sul path: la barra è full-bleed, canvas esatta — le code
+  // laterali/bassa tagliate coincidono col bordo poster (invisibili).
+  const defs = `<defs>${STAR_GRADIENT_DEF}<linearGradient id="gbg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(bottomLight)}</linearGradient>${TOP_SHADOW_FILTER}</defs>`
   const textEl = `<g fill="${textColor}">${textParts}</g>`
-  const inner = `<path d="${pathD}" fill="url(#gbg)" stroke="${stroke}" stroke-width="1.5"/>`
+  const inner = `<path d="${pathD}" fill="url(#gbg)" stroke="${stroke}" stroke-width="1.5" filter="url(#tds)"/>`
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${barH}">${defs}${inner}${textEl}</svg>`, w: pw, h: barH }
 }
 
@@ -211,12 +213,18 @@ export function buildGenrePillSvg(
   const pillW = dims.textContentW + padX * 2
   const pillH = badgeBoxHeight(fs)
   const pillR = pillH / 2
-  const textParts = buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX: pillW / 2 + textOffsetX, y: pillH / 2, parts })
+  // Padding simmetrico per la coda dell'ombra (la pill sta in basso, mai a
+  // filo bordo). Vale anche per colored (tinta piatta + ombra).
+  const renderW = pillW + TOP_SHADOW_PAD * 2
+  const renderH = pillH + TOP_SHADOW_PAD * 2
+  const ox = TOP_SHADOW_PAD
+  const oy = TOP_SHADOW_PAD
+  const textParts = buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX: ox + pillW / 2 + textOffsetX, y: oy + pillH / 2, parts })
   const gradDef = useSatin ? `<linearGradient id="gpg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>` : ""
   const fill = useSatin ? "url(#gpg)" : bgColor
-  const defs = `<defs>${STAR_GRADIENT_DEF}${gradDef}</defs>`
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pillW}" height="${pillH}">${defs}<rect width="${pillW}" height="${pillH}" rx="${pillR}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1"/><g fill="${textColor}">${textParts}</g></svg>`
-  return { svg, w: pillW, h: pillH }
+  const defs = `<defs>${STAR_GRADIENT_DEF}${gradDef}${TOP_SHADOW_FILTER}</defs>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}<rect x="${ox}" y="${oy}" width="${pillW}" height="${pillH}" rx="${pillR}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1" filter="url(#tds)"/><g fill="${textColor}">${textParts}</g></svg>`
+  return { svg, w: renderW, h: renderH }
 }
 
 export function buildGenreTextSvg(genreName: string, voteStr: string, yearStr: string, fs: number, textColor: string, style: string, textOffsetX = 0, parts?: GenreParts) {
@@ -471,9 +479,13 @@ export function buildQualityBadgeSvg(quality: string, fs: number, _textColor: st
   const r = Math.round(boxH / 2)
   const stroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
   const fg = topLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)"
-  const textEl = `<text x="${totalW / 2}" y="${boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(quality)}" font-weight="700" font-size="${fs}" fill="${fg}"${textFitAttrs(textW)}>${escSvg(quality)}</text>`
-  const defs = `<defs><linearGradient id="qg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient></defs>`
-  const bgEl = `<rect width="${totalW}" height="${boxH}" rx="${r}" fill="url(#qg)" stroke="${stroke}" stroke-width="1.5"/>`
-  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${boxH}">${defs}${bgEl}${textEl}</svg>`, w: totalW, h: boxH }
+  const renderW = totalW + TOP_SHADOW_PAD * 2
+  const renderH = boxH + TOP_SHADOW_PAD * 2
+  const ox = TOP_SHADOW_PAD
+  const oy = TOP_SHADOW_PAD
+  const textEl = `<text x="${ox + totalW / 2}" y="${oy + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(quality)}" font-weight="700" font-size="${fs}" fill="${fg}"${textFitAttrs(textW)}>${escSvg(quality)}</text>`
+  const defs = `<defs><linearGradient id="qg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>${TOP_SHADOW_FILTER}</defs>`
+  const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="url(#qg)" stroke="${stroke}" stroke-width="1.5" filter="url(#tds)"/>`
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}${bgEl}${textEl}</svg>`, w: renderW, h: renderH }
 }
 
