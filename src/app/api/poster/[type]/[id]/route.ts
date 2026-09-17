@@ -75,7 +75,7 @@ import { decodeConfig } from "@/lib/config-token"
 import { createLogger } from "@/lib/logger"
 import { resolvePosterRenderConfig, resolvePosterShape } from "@/lib/poster-config"
 import { selectBestLogo, logoBestLogoFallbackReason } from "@/lib/logo-selection"
-import { resolveStreamQuality } from "@/lib/stream-quality"
+import { resolveStreamQuality, type StreamQualityResult } from "@/lib/stream-quality"
 import { applyMinQuality, type StreamQuality } from "@/lib/quality-tiers"
 import { computeVote } from "@/lib/rating-weights"
 import { combineAbortSignals } from "@/lib/abort-signal"
@@ -122,6 +122,24 @@ const RATING_WAIT_MS = (() => {
   const n = raw ? parseInt(raw, 10) : 1500
   return Number.isFinite(n) && n >= 300 && n <= 10000 ? n : 1500
 })()
+
+// TTL effimero (s) per i render degradati da timeout/errore upstream sulla
+// qualità: il poster senza badge resta in cache 2 minuti invece di 6h/24h, così
+// Stremio riprova poco dopo senza avvelenare la CDN per mezza giornata.
+// Solo storage+header di QUESTO render: resolved-null (esito negativo
+// accertato) mantiene il TTL pieno.
+const QUALITY_EPHEMERAL_TTL_SEC = 120
+
+/**
+ * Normalizza il risultato qualità in StreamQualityResult. Accetta il legacy
+ * `StreamQuality | null` (mock dei test, override `?quality=`) come
+ * resolved: preserva il caching pieno storico per quei path.
+ */
+function normalizeQualityResult(raw: StreamQualityResult | StreamQuality | string | null | undefined): StreamQualityResult {
+  if (raw !== null && typeof raw === "object" && "status" in raw) return raw as StreamQualityResult
+  if (typeof raw === "string") return { quality: raw as StreamQuality, status: "resolved", source: "none" }
+  return { quality: (raw ?? null) as StreamQuality | null, status: "resolved", source: "none" }
+}
 
 type RouteParams = { type: string; id: string }
 
@@ -305,15 +323,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const variantTtlSec = dynamicPoster && outputFormat === "webp" ? dynamicPosterTtlSec(variantKey) : undefined
 
   // C3: risposta webp da payload canonico jpeg (cache variante o conversione).
-  const serveWebpVariant = async (canonical: PosterCachePayload): Promise<Response> => {
+  // opts (ttlMs/immutable) dal fresh render effimero; sulle HIT riuso record.
+  const serveWebpVariant = async (canonical: PosterCachePayload, opts?: { ttlMs?: number; immutable?: boolean }): Promise<Response> => {
     const variantHit = readCachedPoster(variantKey)
     if (variantHit.payload) {
-      return posterResponse(variantHit.payload, immutablePoster, isPreview, dynamicPoster, outputFormat, variantTtlSec)
+      return posterResponse(variantHit.payload, variantHit.immutable ?? immutablePoster, isPreview, dynamicPoster, outputFormat, variantHit.ttlSec ?? variantTtlSec)
     }
     const converted = await convertPosterFormat(canonical.buffer)
     const variant: PosterCachePayload = { buffer: converted, etag: variantEtagFor(canonical.etag) }
-    writeCachedPoster(variantKey, variant, mappingTag)
-    return posterResponse(variant, immutablePoster, isPreview, dynamicPoster, outputFormat, variantTtlSec)
+    writeCachedPoster(variantKey, variant, mappingTag, opts)
+    const freshVariantTtl = opts?.ttlMs !== undefined ? Math.max(1, Math.round(opts.ttlMs / 1000)) : variantTtlSec
+    return posterResponse(variant, opts?.immutable ?? immutablePoster, isPreview, dynamicPoster, outputFormat, freshVariantTtl)
   }
 
   // 3. Memory cache check
@@ -326,16 +346,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       if (!isPreview && req.headers.get("If-None-Match") === variantHit.payload.etag) {
         if (variantHit.stale) recordPosterStaleHit()
         log.debug("Poster cache: 304 (variant)", { mediaType, tmdbId, ms: Date.now() - startTime })
-        return new Response(null, { status: 304, headers: posterNotModifiedHeaders(variantHit.payload.etag, immutablePoster, dynamicPoster, variantTtlSec) })
+        return new Response(null, { status: 304, headers: posterNotModifiedHeaders(variantHit.payload.etag, variantHit.immutable ?? immutablePoster, dynamicPoster, variantHit.ttlSec ?? variantTtlSec) })
       }
       if (!variantHit.stale) {
         log.debug("Poster cache: fresh variant hit", { mediaType, tmdbId, ms: Date.now() - startTime })
-        return posterResponse(variantHit.payload, immutablePoster, isPreview, dynamicPoster, outputFormat, variantTtlSec)
+        return posterResponse(variantHit.payload, variantHit.immutable ?? immutablePoster, isPreview, dynamicPoster, outputFormat, variantHit.ttlSec ?? variantTtlSec)
       }
       recordPosterStaleHit()
       schedulePosterRefresh(req, isPreview)
       log.debug("Poster cache: stale variant hit (refresh scheduled)", { mediaType, tmdbId, ms: Date.now() - startTime })
-      return posterResponse(variantHit.payload, immutablePoster, isPreview, dynamicPoster, outputFormat)
+      return posterResponse(variantHit.payload, variantHit.immutable ?? immutablePoster, isPreview, dynamicPoster, outputFormat)
     }
   }
   const cachedPoster = readCachedPoster(cacheKey)
@@ -344,12 +364,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     if (!isPreview && outputFormat !== "webp" && req.headers.get("If-None-Match") === cachedPoster.payload.etag) {
       if (cachedPoster.stale) recordPosterStaleHit()
       log.debug("Poster cache: 304", { mediaType, tmdbId, ms: Date.now() - startTime })
-        return new Response(null, { status: 304, headers: posterNotModifiedHeaders(cachedPoster.payload.etag, immutablePoster, dynamicPoster, dynamicTtlSec) })
+        return new Response(null, { status: 304, headers: posterNotModifiedHeaders(cachedPoster.payload.etag, cachedPoster.immutable ?? immutablePoster, dynamicPoster, cachedPoster.ttlSec ?? dynamicTtlSec) })
     }
     if (!cachedPoster.stale) {
       log.debug("Poster cache: fresh hit", { mediaType, tmdbId, ms: Date.now() - startTime })
       if (outputFormat === "webp") return serveWebpVariant(cachedPoster.payload)
-      return posterResponse(cachedPoster.payload, immutablePoster, isPreview, dynamicPoster, outputFormat, dynamicTtlSec,
+      return posterResponse(cachedPoster.payload, cachedPoster.immutable ?? immutablePoster, isPreview, dynamicPoster, outputFormat, cachedPoster.ttlSec ?? dynamicTtlSec,
         serverTimingValue([{ name: "cache", desc: "HIT" }, { name: "total", durMs: Date.now() - startTime }]))
     }
     if (!refreshRequest) {
@@ -357,7 +377,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       schedulePosterRefresh(req, isPreview)
       log.debug("Poster cache: stale hit (refresh scheduled)", { mediaType, tmdbId, ms: Date.now() - startTime })
       if (outputFormat === "webp") return serveWebpVariant(cachedPoster.payload)
-      return posterResponse(cachedPoster.payload, immutablePoster, isPreview, dynamicPoster, outputFormat, dynamicTtlSec)
+      return posterResponse(cachedPoster.payload, cachedPoster.immutable ?? immutablePoster, isPreview, dynamicPoster, outputFormat, cachedPoster.ttlSec ?? dynamicTtlSec)
     }
   }
 
@@ -448,6 +468,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // Block A fa il fetch normale.
   let logoPathBuffer: Buffer | null = null
   let logoPath: string | null = null
+  // Lingua richiesta per artwork/logo (ramo non-mappato; default "it"):
+  // serve al blocco debug=1 fuori dallo scope del ramo.
+  let posterRequestedLang = "it"
+  // Selezione logo per debug=1: iso scelto + motivo del fallback (null = logo
+  // esplicito da query/mapping, nessun fallback applicato).
+  let logoChosenIso: string | null = null
+  let logoFallbackReason: string | null = null
   let backdropPath: string | null = null
   // Sfondi TMDB del ramo automatico (details.backdrop_path o primo backdrops
   // di getImages): fallback per la base landscape quando query/mapping non
@@ -578,6 +605,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     }
   } else {
     const preferredLanguage = req.nextUrl.searchParams.get("lang") || "it"
+    posterRequestedLang = preferredLanguage
     const apiKey = resolveRequestApiKey(req)
     try {
       // F6: session cache editor — i tick di preview sullo stesso titolo
@@ -677,7 +705,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         if (reason === "origLang") log.info("Logo fallback to original_language", { lang: details.original_language, mediaType, tmdbId })
         else if (reason === "any") log.info("Logo fallback to any (first available)", { mediaType, tmdbId })
         else if (reason === "none") log.info("No logo available", { mediaType, tmdbId })
-        if (chosenLogo) logoPath = chosenLogo.file_path
+        logoFallbackReason = reason
+        if (chosenLogo) { logoPath = chosenLogo.file_path; logoChosenIso = chosenLogo.iso_639_1 ?? null }
       }
 
       const clean = images.posters.find((p: TMDBImage) => p.iso_639_1 === null)
@@ -918,7 +947,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     const emptyWikidata = { awards: [], nominations: [], studios: [], director: null }
     const WIKIDATA_TIMEOUT = Number(process.env.WIKIDATA_TIMEOUT) || 2500
     const [
-      [originalBuf, logoFetch, backdropFetch, rankingResult, animeRankResult, liveQualityResult, preReleaseDetected],
+      [originalBuf, logoFetch, backdropFetch, rankingResult, animeRankResult, rawLiveQuality, preReleaseDetected],
       [wikidataResult, tmdbKeywords, imdbTop250],
     ] = await Promise.all([
       // Block A: images + ranking data + quality
@@ -1094,6 +1123,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       ]),
     ])
 
+    // Normalizza il risultato qualità (oggetto statusato oppure legacy string /
+    // null da `?quality=` e dai mock): da qui in poi solo StreamQualityResult.
+    // Nota: la decisione effimera (TTL) sta dopo resolvePosterRenderConfig e
+    // usa il badgeQuality FINALE, non l'early (stessa catena, ma l'autorevole
+    // è quello — un futuro disallineamento non deve rompere la cache).
+    const liveQualityResult = normalizeQualityResult(rawLiveQuality as StreamQualityResult | StreamQuality | string | null)
+    const liveQuality = liveQualityResult.quality
+
     // A1: upgrade del voto con la media TMDB+IMDb, ma con tetto breve: oltre
     // RATING_WAIT_MS si usa il voto TMDB già impostato (niente blocco lungo).
     // Dopo la race, se il fetch è ancora in corso viene abortito (no-op se ha
@@ -1243,6 +1280,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       preRelease, posterShape, logoAlign, hideLogo,
     } = renderConfig
 
+    // Render degradato per timeout/errore upstream sulla qualità (solo se il
+    // badge FINALE è attivo e senza override esplicito): TTL effimero 120s
+    // invece di 6h/24h + niente header immutable, così Stremio riprova poco
+    // dopo. Early resta solo per il gating del fetch (Block A).
+    const qualityEphemeral = badgeQuality && !qQualityParam && liveQualityResult.status !== "resolved"
+    const effectiveTtlSec = qualityEphemeral ? QUALITY_EPHEMERAL_TTL_SEC : dynamicTtlSec
+    const effectiveImmutable = immutablePoster && !qualityEphemeral
+
     // Polarità del badge genere in basso: speculare a topLight, ma corretta per
     // la banda blur (che scurisce il fondo) — vedi computeBottomLight. `bl`
     // esplicito vince (preview WYSIWYG), altrimenti decide il server.
@@ -1256,7 +1301,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     // Soglia minima qualità all'uscita: la cache upstream (`resolveStreamQuality`)
     // tiene sempre il raw — qui si sopprime solo il badge sotto soglia.
     const finalQuality = applyMinQuality(
-      (qQualityParam || liveQualityResult || null) as StreamQuality | null,
+      (qQualityParam || liveQuality || null) as StreamQuality | null,
       minQuality,
     )
 
@@ -1306,15 +1351,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           imdbTop250: !!imdbTop250,
           renderVersion: RENDER_VERSION,
           shape: isLandscape ? "landscape" : "poster",
+          mappingId: mapping ? `${mediaType}:${tmdbId}` : null,
         },
         images: {
           poster: posterPath,
           logo: logoPath,
           backdrop: backdropPath,
         },
+        logoSelection: {
+          requestedLang: posterRequestedLang,
+          usedLang: logoChosenIso,
+          fallbackReason: logoFallbackReason,
+        },
+        cache: {
+          hit: !!cachedPoster.payload,
+          stale: !!cachedPoster.payload && cachedPoster.stale,
+        },
         genre: { name: genreName, year: releaseDate?.slice(0, 4) },
         vote: { average: voteAverage },
-        quality: finalQuality,
+        quality: {
+          value: finalQuality,
+          source: liveQualityResult.source,
+          status: liveQualityResult.status,
+          rawTokens: liveQualityResult.rawTokens ?? [],
+        },
         minQuality,
         preRelease: { enabled: preRelease, detected: preReleaseDetected, applied: applyPreRelease, jwAvailable: preJw, digitalDate: preDigital, theatricalDate: releaseDate ?? mapping?.releaseDate ?? null },
         rankings: {
@@ -1448,19 +1508,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
 
     // 11. Cache + response
     const payload = { buffer: composited, etag }
-    writeCachedPoster(cacheKey, payload, mappingTag)
+    // Qualità effimera (timeout/errore upstream): storage 120s + niente
+    // immutable, così il degradato non avvelena CDN per 6h/24h. Resolved
+    // (anche null) → TTL pieno invariato.
+    writeCachedPoster(cacheKey, payload, mappingTag, qualityEphemeral
+      ? { ttlMs: QUALITY_EPHEMERAL_TTL_SEC * 1000, immutable: false }
+      : { immutable: immutablePoster })
     completePosterRender(payload)
     recordPosterRequest(false, outputFormat)
     // Enabled enrichment must revalidate against the final state, including [].
     const responseEtag = outputFormat === "webp" ? variantEtagFor(etag) : etag
     if (customRatingConfig.enabled && !isPreview && req.headers.get("If-None-Match") === responseEtag) {
-      return new Response(null, { status: 304, headers: posterNotModifiedHeaders(responseEtag, immutablePoster, dynamicPoster, dynamicTtlSec) })
+      return new Response(null, { status: 304, headers: posterNotModifiedHeaders(responseEtag, effectiveImmutable, dynamicPoster, effectiveTtlSec) })
     }
     log.info("Poster rendered", { mediaType, tmdbId, ms: Date.now() - startTime, bytes: composited.byteLength, cached: !!mappingTag, format: outputFormat, fetchMs: tFetchMs, prepMs: tCompositeStart - startTime - tFetchMs, compositeMs: Date.now() - tCompositeStart })
     // C3: il webp è variante di risposta (convertita + cachata), non un render.
-    if (outputFormat === "webp") return serveWebpVariant(payload)
+    if (outputFormat === "webp") return serveWebpVariant(payload, qualityEphemeral ? { ttlMs: QUALITY_EPHEMERAL_TTL_SEC * 1000, immutable: false } : { immutable: immutablePoster })
     const renderHeaders = {
-      ...posterHeaders(etag, immutablePoster, isPreview, dynamicPoster, outputFormat, dynamicTtlSec),
+      ...posterHeaders(etag, effectiveImmutable, isPreview, dynamicPoster, outputFormat, effectiveTtlSec),
       "Server-Timing": serverTimingValue([
         { name: "fetch", durMs: tFetchMs },
         { name: "prep", durMs: tCompositeStart - startTime - tFetchMs },
