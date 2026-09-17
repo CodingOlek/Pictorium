@@ -493,10 +493,10 @@ describe("buildRankingDefaultSvg", () => {
     expect(svg).toContain('stop-color="rgba(255,255,255,0.95)"')
   })
 
-  it("has a single 3D drop shadow and exact box geometry (ribbon-style finish)", () => {
+  it("has no drop-shadow filter and exact box geometry (clean satin finish)", () => {
     const { svg, w, h } = buildRankingDefaultSvg("#1 Oggi", 60, "rgba(0,0,0,0.80)", "rgba(255,255,255,0.80)", false)
-    expect(svg).toContain("feDropShadow")
-    expect(svg).toContain('filter="url(#tds)"')
+    expect(svg).not.toContain("feDropShadow")
+    expect(svg).not.toContain('filter="url(#tds)"')
     expect(svg).toContain('stroke-width="1.5"')
     // Canvas = box esatta, senza padding ombra.
     expect(svg).toContain(`width="${w}" height="${h}"`)
@@ -535,12 +535,13 @@ describe("buildExtraDefaultSvg", () => {
     expect(svg).toContain('lengthAdjust="spacingAndGlyphs"')
   })
 
-  it("uses satin gradient with polarized stroke and 3D shadow by default", () => {
+  it("uses satin gradient with polarized stroke and no shadow by default", () => {
     const { svg } = buildExtraDefaultSvg("Vincitore Golden Globe", 60, "rgba(0,0,0,0.80)", "rgba(255,255,255,0.80)", false, false)
     expect(svg).toContain('fill="url(#edg)"')
     expect(svg).toContain('stroke="rgba(255,255,255,0.22)"')
     expect(svg).toContain('stroke-width="1.5"')
-    expect(svg).toContain('filter="url(#tds)"')
+    expect(svg).not.toContain("feDropShadow")
+    expect(svg).not.toContain('filter="url(#tds)"')
   })
 
   it("keeps the accent flat fill for colored (no satin override)", () => {
