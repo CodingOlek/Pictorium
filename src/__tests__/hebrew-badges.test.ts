@@ -22,25 +22,27 @@ async function ink(png: Buffer) {
   return { count, minX, maxX, width: info.width }
 }
 
-/** Solo l'inchiostro scuro del testo (su pill chiara): dal finish senza ombra
- *  il fondo satinato copre l'intero canvas, quindi i bound di `ink` sono
- *  sempre full-box e non dicono più nulla sul testo. */
-async function textInk(png: Buffer) {
+/** Solo l'inchiostro scuro del testo (su pill chiara), misurato nell'interno
+ *  (margine 12px, coordinate relative all'interno): dal finish senza ombra il
+ *  fondo copre l'intero canvas, e con l'ombra 3D i bordi hanno pixel scuri di
+ *  alone — in entrambi i casi i bound full-canvas non dicono nulla sul testo.
+ *  Il testo ha comunque padding ≥16px, quindi l'interno lo contiene tutto. */
+async function textInk(png: Buffer, margin = 12) {
   const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   let count = 0
   let minX = info.width
   let maxX = -1
   for (let y = 0; y < info.height; y++) {
-    for (let x = 0; x < info.width; x++) {
+    for (let x = margin; x < info.width - margin; x++) {
       const i = (y * info.width + x) * 4
       if (data[i + 3] > 10 && data[i] < 120 && data[i + 1] < 120 && data[i + 2] < 120) {
         count++
-        minX = Math.min(minX, x)
-        maxX = Math.max(maxX, x)
+        minX = Math.min(minX, x - margin)
+        maxX = Math.max(maxX, x - margin)
       }
     }
   }
-  return { count, minX, maxX, width: info.width }
+  return { count, minX, maxX, width: info.width - margin * 2 }
 }
 
 describe("fontFamilyFor", () => {
@@ -70,8 +72,9 @@ describe("Hebrew badge rasterisation", () => {
     expect(he).not.toBeNull()
     const bounds = await ink(he!.png)
     expect(bounds.count).toBeGreaterThan(0)
-    // Il testo (inchiostro scuro) sta dentro la pill e non è schiacciato su
-    // un bordo — i bound del fondo non contano più (copre tutto il canvas).
+    // Il testo (inchiostro scuro, interno) sta dentro la pill e non è
+    // schiacciato su un bordo — i bound del fondo non contano più (copre
+    // tutto il canvas) e l'alone 3D vive ai bordi.
     const text = await textInk(he!.png)
     expect(text.count).toBeGreaterThan(0)
     expect(text.minX).toBeGreaterThan(0)
