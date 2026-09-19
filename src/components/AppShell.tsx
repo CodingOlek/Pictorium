@@ -143,10 +143,9 @@ export function AppShell() {
       requestUserUnlock(id)
       return
     }
-    setSettingsOpen(true)
-    // Tab richiesta consumata dal pannello al mount (deterministica) +
-    // evento per il pannello già aperto + scroll alla sezione.
+    // Tab richiesta impostata PRIMA di aprire (consumata al mount in modo deterministico).
     requestSettingsTab("spazio")
+    setSettingsOpen(true)
     let tries = 0
     const tick = () => {
       window.dispatchEvent(new CustomEvent("pictorium:settings-space-tab"))

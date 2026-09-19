@@ -71,10 +71,11 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
   const { t } = useT()
   const ed = usePosterEditor()
 
-  const [activeTab, setActiveTab] = useState<"badge" | "trasforma" | "prefs" | "data" | "spazio">("badge")
+  const [activeTab, setActiveTab] = useState<"badge" | "trasforma" | "prefs" | "data" | "spazio">(
+    () => consumeSettingsTab() ?? "badge",
+  )
   useEffect(() => {
-    // Tab richiesta dalla toolbar prima dell'apertura (il pannello monta in
-    // async dopo il click): consumata qui, deterministica, niente race.
+    // Se la tab arriva quando il componente è già montato
     const requested: SettingsTabId | null = consumeSettingsTab()
     if (requested) setActiveTab(requested)
   }, [])
