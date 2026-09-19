@@ -1,12 +1,15 @@
 import { NextRequest } from "next/server"
 import sharp from "sharp"
 import { initSharp } from "@/lib/sharp-config"
-import { getImages, getDetails, getDetailsWithExternalIds, getExternalIds, getKeywords, getReleaseDates, resolveRequestApiKey, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
+import { getImages, getDetails, getDetailsWithExternalIds, getExternalIds, getKeywords, getReleaseDates, resolveUserApiKeys, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
 import { getJWRankings, hasJWOffers } from "@/lib/justwatch"
 import { extractDigitalReleaseDate, isDigitalPreRelease } from "@/lib/pre-release"
 import { getById } from "@/lib/store"
+import { getScopedUserId } from "@/lib/user-auth"
+import { userRateLimitKey } from "@/lib/user-auth"
+import { touchUserActivity } from "@/lib/user-activity"
 import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
-import { getServerDefaults } from "@/lib/server-defaults"
+import { getServerDefaults, getServerDefaultsForUser } from "@/lib/server-defaults"
 import { getRegionDef, normalizeRegion, parseRegion, defaultRegionForLang } from "@/lib/regions"
 import { BEST_FIT_GLOBAL } from "@/lib/best-fit-config"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
@@ -53,6 +56,7 @@ import {
   type PosterCachePayload,
   type PosterErrorStatus,
 } from "@/lib/poster-runtime-cache"
+import { hashUserFragment, userTagFragment } from "@/lib/cache"
 import {
   STD_H,
   STD_W,
@@ -167,10 +171,24 @@ function posterErrorResponse(status: PosterErrorStatus): Response {
 export async function GET(req: NextRequest, { params }: { params: Promise<RouteParams> }) {
   const startTime = Date.now()
   initSharp()
-  const rl = await rateLimit(rateLimitKey(req), "poster")
-  if (!rl.ok) return rateLimitResponse(rl.retAfter)
   const { type, id } = await params
   const mediaType = (["series", "tv", "show", "tvshow"].includes(type?.toLowerCase() || "")) ? "tv" : "movie"
+
+  // Namespace utente (multi-user): null con flag OFF o senza `?u=` → globale.
+  const rawUser = req.nextUrl.searchParams.get("u") ?? req.nextUrl.searchParams.get("user")
+  const scopedUser = getScopedUserId(rawUser)
+  // Rate-limit per-utente (multi-user): il bucket segue il namespace
+  // (IP+UUID) così il flood su `?u=vittima` brucia solo il sotto-bucket
+  // dell'attaccante e non la quota legittima del proprietario.
+  const rl = await rateLimit(scopedUser ? userRateLimitKey(req, scopedUser) : rateLimitKey(req), "poster")
+  if (!rl.ok) return rateLimitResponse(rl.retAfter)
+  // Chiavi effettive (slice 2, una sola lettura namespace): esplicite della
+  // richiesta > namespace utente > env d'istanza. Con `scopedUser` null sono
+  // identiche a oggi (byte-identico).
+  const effKeys = await resolveUserApiKeys(req, scopedUser)
+  const effTmdbKey = effKeys.tmdb.key
+  const effMdblistKey = effKeys.mdblist.key
+  const effTvdbKey = effKeys.tvdb.key
 
   // Decode optional stateless config token (stile AIOMetadata / RPDB)
   const configToken = req.nextUrl.searchParams.get("config") || req.nextUrl.searchParams.get("c")
@@ -183,7 +201,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   let tmdbId = Number(id)
   if (isNaN(tmdbId) || tmdbId <= 0) {
     if (typeof id === "string" && id.startsWith("tt")) {
-      const resolved = await resolveImdbToTmdb(id, mediaType, resolveRequestApiKey(req))
+      const resolved = await resolveImdbToTmdb(id, mediaType, effTmdbKey)
       if (resolved) tmdbId = resolved
     }
   }
@@ -215,9 +233,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     }
   }
 
+  // Attività di lettura per il cleanup inattivi (throttled, fire-and-forget):
+  // DOPO la validazione (ID + R1/R2) così le request 400 non creano dir/file.
+  if (scopedUser) touchUserActivity(scopedUser)
+
   // 1. Get mapping + server defaults (no network)
-  let mapping = await getById(mediaType, tmdbId)
-  const sd = getServerDefaults()
+  // (`scopedUser` già risolto sopra: serve anche al ramo tt e alle chiavi.)
+  let mapping = await getById(mediaType, tmdbId, scopedUser)
+  const sd = scopedUser ? await getServerDefaultsForUser(scopedUser) : getServerDefaults()
   const qRegion = parseRegion(req.nextUrl.searchParams.get("region") ?? req.nextUrl.searchParams.get("country"))
   const configRegion = parseRegion(configOverride?.region)
   const langParam = req.nextUrl.searchParams.get("lang") || mapping?.language
@@ -266,11 +289,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const cacheParams = normalizePosterCacheParams(req.nextUrl.searchParams)
   cacheParams.delete("config")
   cacheParams.delete("c")
-  cacheParams.delete("u")
-  cacheParams.delete("user")
+  if (scopedUser) {
+    // Il namespace entra come hash a 64-bit (mai in chiaro): senza, B
+    // servirebbe il render cachato di A. Con flag OFF resta il delete storico.
+    cacheParams.set("u", hashUserFragment(scopedUser))
+    cacheParams.delete("user")
+  } else {
+    cacheParams.delete("u")
+    cacheParams.delete("user")
+  }
   // api_key non influisce sul rendering: rimuoverla evita frammentazione della
   // cache per utente e segreti in memoria nelle chiavi.
   cacheParams.delete("api_key")
+  // B1-bis come tvdb_key: la chiave MDBList è un segreto e non entra mai in
+  // chiaro nella cache key (prima frammentava la cache per chiave e restava
+  // in memoria in chiaro). Il flag `mdb=1` separa le entry con rating
+  // aggregati attivi da quelle senza — l'output a parità di dati non dipende
+  // dalla chiave (solo accesso upstream), quindi niente frammentazione.
+  cacheParams.delete("mdblist_key")
+  if (effMdblistKey) cacheParams.set("mdb", "1")
   // B1: la chiave TVDB non entra mai in chiaro nella cache key (segreto in
   // memoria); il flag `tvdb=1` separa le entry con rescue attivo da quelle
   // senza (output diverso a parità di altri parametri).
@@ -278,11 +315,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // Il flag è server-side: un `tvdb=` in query viene ignorato (solo la
   // presenza della chiave abilita il rescue).
   cacheParams.delete("tvdb")
-  // Chiave TVDB per il rescue poster (B1): query `tvdb_key` > fallback
-  // d'istanza (stessa precedenza della route meta). Senza chiave il rescue
-  // è spento e il comportamento resta quello storico.
-  const tvdbApiKey = req.nextUrl.searchParams.get("tvdb_key")
-    || envWithFallback("TVDB_API_KEY") || process.env.TVDB_API_KEY || undefined
+  // Chiave TVDB per il rescue poster (B1): query `tvdb_key` > namespace >
+  // fallback d'istanza (stessa precedenza della route meta). Senza chiave il
+  // rescue è spento e il comportamento resta quello storico.
+  const tvdbApiKey = effTvdbKey
   if (tvdbApiKey) cacheParams.set("tvdb", "1")
   if (typeof cacheParams.sort === "function") cacheParams.sort()
   const cachedRank = mapping?.trendRank ?? null
@@ -314,7 +350,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // invece delle 24h del path mappato, così rank/IMDb Top 250 non restano
   // stantii per un giorno intero. Il flag non cambia per tutta la richiesta.
   const dynamicPoster = !mapping
-  const mappingTag = mapping ? `poster:${mediaType}:${tmdbId}` : undefined
+  // Tag con UUID solo come hash (userTagFragment, stessa forma della cache
+  // key): mai l'UUID in chiaro nei tag di cache.
+  const mappingTag = mapping ? `poster:${mediaType}:${tmdbId}${scopedUser ? `:${userTagFragment(scopedUser)}` : ""}` : undefined
   // TTL reale della entry canonica (jitter deterministico ±10%): threadato
   // negli header così restano sincronizzati con lo storage (M3). La variante
   // webp ha storage key propria → TTL proprio (vedi serveWebpVariant).
@@ -606,7 +644,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   } else {
     const preferredLanguage = req.nextUrl.searchParams.get("lang") || "it"
     posterRequestedLang = preferredLanguage
-    const apiKey = resolveRequestApiKey(req)
+    const apiKey = effTmdbKey
     try {
       // F6: session cache editor — i tick di preview sullo stesso titolo
       // non-mappato riusano details/images/externalIds senza rifare la rete.
@@ -653,7 +691,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       // A1: fetch deferito — la media TMDB+IMDb parte subito ma non blocca.
       ratingAbort = imdbId ? new AbortController() : null
       aggregatedRating = imdbId
-        ? fetchAggregatedRating(imdbId, req.nextUrl.searchParams.get("mdblist_key") || envWithFallback("MDBLIST_KEY") || undefined, ratingAbort!.signal).catch(() => null)
+        ? fetchAggregatedRating(imdbId, effMdblistKey, ratingAbort!.signal).catch(() => null)
         : Promise.resolve(null)
       genreName = details.genres[0]?.name || null
       voteAverage = details.vote_average ?? 0
@@ -830,7 +868,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // e il blocco landscape sotto risponde 404 onesto.
   if (isLandscape && !queryBackdrop && !mapping?.backdropPath && !autoBackdropPath) {
     try {
-      const fbApiKey = resolveRequestApiKey(req)
+      const fbApiKey = effTmdbKey
       const fbLang = req.nextUrl.searchParams.get("lang") || mapping?.language || "it"
       const cached = getTMDBSessionCache(mediaType, tmdbId)
       let fbDetails = cached?.details
@@ -985,7 +1023,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
               ? Promise.resolve(qAnimeRank)
               : fetchMDBList(
                   mediaType === "movie" ? "mdblistAnimeMovie" : "mdblistAnime",
-                  req.nextUrl.searchParams.get("mdblist_key") || envWithFallback("MDBLIST_KEY") || process.env.MDBLIST_KEY || process.env.MDBLIST_API_KEY || undefined,
+                  // Namespace incluso via effMdblistKey; coda env allargata
+                  // storica di questo sito (MDBLIST_KEY/MDBLIST_API_KEY).
+                  effMdblistKey || envWithFallback("MDBLIST_KEY") || process.env.MDBLIST_KEY || process.env.MDBLIST_API_KEY || undefined,
                   renderAbort.signal
                 )
                   .then((entries) => {
@@ -1029,7 +1069,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
               })
               const detect = (async (): Promise<boolean> => {
                 try {
-                  const apiKey = resolveRequestApiKey(req)
+                  const apiKey = effTmdbKey
                   // Titolo per la ricerca JW (stesso fallback del blocco
                   // qualità): senza searchQuery la query chiede 5 titoli
                   // popolari generici e il match per tmdbId fallisce quasi
@@ -1097,14 +1137,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           return result
         })(),
         rankingEnabledEarly
-          ? getKeywords(mediaType, tmdbId, resolveRequestApiKey(req), renderAbort.signal, POSTER_TMDB_TIMEOUT_MS).catch(() => [])
+          ? getKeywords(mediaType, tmdbId, effTmdbKey, renderAbort.signal, POSTER_TMDB_TIMEOUT_MS).catch(() => [])
           : Promise.resolve([]),
         (async () => {
           if (!rankingEnabledEarly && !customRatingConfig.enabled) return false
           if (!imdbId) {
             // F6: externalIds già in session cache (ramo non-mappato) → niente rete.
             const extIds = getTMDBSessionCache(mediaType, tmdbId)?.externalIds
-              ?? (await getExternalIds(mediaType, tmdbId, resolveRequestApiKey(req), renderAbort.signal, POSTER_TMDB_TIMEOUT_MS).catch(() => null))
+              ?? (await getExternalIds(mediaType, tmdbId, effTmdbKey, renderAbort.signal, POSTER_TMDB_TIMEOUT_MS).catch(() => null))
             if (extIds?.imdb_id) imdbId = extIds.imdb_id
           }
           if (!imdbId) return false
@@ -1114,7 +1154,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
             ratingAbort = new AbortController()
             aggregatedRating = fetchAggregatedRating(
               imdbId,
-              req.nextUrl.searchParams.get("mdblist_key") || envWithFallback("MDBLIST_KEY") || undefined,
+              effMdblistKey,
               combineAbortSignals(AbortSignal.any([renderAbort.signal, ratingAbort.signal]), RATING_WAIT_MS),
             ).catch(() => null)
           }
@@ -1214,8 +1254,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         return await bottomLuminance(posterBuf)
       })(),
       (tmdbNetworks.length === 0 && productionCompanies.length === 0)
-        ? (async () => {
-            const apiKey = resolveRequestApiKey(req)
+          ? (async () => {
+            const apiKey = effTmdbKey
             const preferredLang = req.nextUrl.searchParams.get("lang") || mapping?.language || "it"
             // F6: anche il refetch dei dettagli TV riusa la session cache.
             // Un singolo retry sul fallimento transitorio (cold-start

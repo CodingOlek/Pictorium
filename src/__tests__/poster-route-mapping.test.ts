@@ -102,6 +102,17 @@ vi.mock("@/lib/tmdb", () => ({
   getExternalIds: vi.fn(async () => ({ imdb_id: null })),
   getKeywords: vi.fn(async () => []),
   resolveRequestApiKey: vi.fn((req: { nextUrl?: { searchParams: URLSearchParams } }) => req.nextUrl?.searchParams.get("api_key") || undefined),
+  // La route risolve le chiavi via resolveUserApiKeys: mock fedele alla
+  // semantica (query api_key), così i test che armano ?api_key= restano validi.
+  resolveUserApiKeys: vi.fn(async (req: { headers: { get: (n: string) => string | null }; nextUrl?: { searchParams: URLSearchParams } }) => {
+    const q = req.nextUrl?.searchParams.get("api_key") || undefined
+    const none = { key: undefined, source: "none" } as const
+    return {
+      tmdb: q ? { key: q, source: "query" } : none,
+      mdblist: none,
+      tvdb: none,
+    }
+  }),
 }))
 
 vi.mock("@/lib/imdb-resolver", () => ({

@@ -315,6 +315,21 @@ npm install --ignore-scripts && npm run build && npm start
 | `PICTORIUM_DATA_DIR` | `./data` | Local disk persistence folder for database and saved files. |
 | `KV_REST_API_URL` / `TOKEN` | *(empty)* | Upstash Redis connection parameters for serverless deployment on Vercel. |
 
+### Multi-user (public instances)
+
+With `PICTORIUM_MULTI_USER=1` every user gets a personal UUID (`POST /api/users` → `{ uuid, secret }`, secret shown once, mandatory password min 8) with isolated mappings, defaults and API keys. Without the flag everything stays single-user.
+
+| Variable | Default | Description |
+|---|:---:|---|
+| `PICTORIUM_MULTI_USER` | `0` | `1` = per-UUID namespaced store (managed at `/u/<uuid>/configure`). |
+| `PROFILE_ENCRYPTION_KEY` | *(empty)* | **Required** with `MULTI_USER=1` to save per-user keys (AES-256-GCM, generate with `openssl rand -hex 32`). Without it, key saving is fail-closed (503), never plaintext. |
+| `PICTORIUM_MAX_MAPPINGS_PER_USER` | `500` | Quota of savable posters per UUID (`413` beyond). |
+| `PICTORIUM_MAX_USERS` | *(unlimited)* | Anti-Sybil cap on namespaces (`429` beyond, e.g. `1000` on public instances). |
+| `PICTORIUM_MULTI_USER_ALLOW_ENV_FALLBACK` | `0` | `1` = scoped requests (`?u=`) may use instance keys. Default `0`: only explicit/namespace keys (never an open proxy on the operator's quota); global requests without UUID keep the historic fallback. |
+| `PICTORIUM_USER_RETENTION_DAYS` | `180` | Cleanup of inactive namespaces via `POST /api/users/cleanup` (admin only); `0` = never. Aggregates at `GET /api/status`. |
+
+User flow (AIOmetadata-style, zero auto-login): home (`/` and `/configure`) is the gate — create a space (mandatory password, min 8) and see UUID + recovery secret (once), or sign in with an existing UUID + password; search and editor stay locked until you open your space at `/u/<uuid>/configure` (namespaces start empty and isolated; single-user migrants run authenticated `POST /api/users/:uuid/import-global`). The password lives only in session memory, the secret stays on the device (UUID section in settings, always copyable); but neither alone is ever enough: every refresh needs a fresh session unlock (retyped password or secret) — the browser never keeps you signed in, you get back in only that way or via the Stremio/Nuvio "modify config" button (the key icon on top opens UUID settings or login). The manage link `/u/<uuid>/configure#key=<secret>` uses the hash fragment (never in HTTP/logs, never stored) as session recovery. The AIO template emits `u=` and omits `api_key` when the namespace has server-side keys (the server resolves from namespace). Compromised secret → `POST /api/users/:uuid/rotate` (new secret shown once, old revoked immediately); lost secret + password = new UUID (no server-side reset); account deletion via `DELETE /api/users/:uuid` (GDPR). With the flag ON the settings PIN section is hidden and the PIN lock never walls spaces (there the gate is the space password): instance admin stays `ADMIN_TOKEN`, backend unchanged. On `/u/<uuid>/...` the path always wins: divergent `?u=` or non-UUID path → `400`. Password attempts beyond 5 failures/5min per IP+UUID are rejected without scrypt (successes reset the counter: legitimate autosave is never limited). Quota note: with the flag ON, scoped requests never use instance keys (unless opted in above) — without namespace keys catalogs answer empty instead of burning the operator's quota.
+
 ---
 
 <details>
