@@ -337,6 +337,8 @@
   "ui.posterExamplesDesc": "バッジ・ロゴ・グラデーション付きの実際のレイアウト",
   "ui.demoTag": "デモ",
   "ui.allSystemsOperational": "すべてのシステムが正常です",
+  "ui.spacesUsedOf": "{used}/{max} スペース",
+  "ui.spacesUsed": "{used} スペース",
   "ui.statusMeta": "• ポスターAPI • TMDB • アドオン",
   "ui.profileTitle": "プロフィールを保存",
   "ui.profileSubtitle": "ポスター設定をパスワードで保護",

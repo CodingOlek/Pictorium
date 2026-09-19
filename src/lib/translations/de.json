@@ -351,6 +351,8 @@
   "ui.posterExamplesDesc": "Echte Layouts mit Badges, Logos und Verläufen generiert",
   "ui.demoTag": "Demo",
   "ui.allSystemsOperational": "Alle Systeme betriebsbereit",
+  "ui.spacesUsedOf": "{used}/{max} Plätze",
+  "ui.spacesUsed": "{used} Plätze",
   "ui.statusMeta": "• Poster-API • TMDB • Addon",
   "ui.homeTagline": "Personalisierte Poster für deine Stremio-Bibliothek",
   "ui.heroKicker": "Poster Studio",

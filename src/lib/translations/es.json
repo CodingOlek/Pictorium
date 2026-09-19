@@ -353,6 +353,8 @@
   "ui.posterExamplesDesc": "Diseños reales generados con insignias, logotipos y degradados",
   "ui.demoTag": "Demo",
   "ui.allSystemsOperational": "Todos los sistemas operativos",
+  "ui.spacesUsedOf": "{used}/{max} espacios",
+  "ui.spacesUsed": "{used} espacios",
   "ui.statusMeta": "• API de póster • TMDB • Addon",
   "ui.homeTagline": "Pósters personalizados para tu biblioteca de Stremio",
   "ui.heroKicker": "Poster Studio",

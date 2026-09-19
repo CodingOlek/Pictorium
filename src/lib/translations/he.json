@@ -337,6 +337,8 @@
   "ui.posterExamplesDesc": "Real layouts generated with badges, logos and gradients",
   "ui.demoTag": "Demo",
   "ui.allSystemsOperational": "All systems operational",
+  "ui.spacesUsedOf": "{used}/{max} spaces",
+  "ui.spacesUsed": "{used} spaces",
   "ui.statusMeta": "• Poster API • TMDB • Addon",
   "ui.profileTitle": "Save Profile",
   "ui.profileSubtitle": "Protect your poster configuration with a password",

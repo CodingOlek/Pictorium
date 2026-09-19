@@ -337,6 +337,8 @@
   "ui.posterExamplesDesc": "Skutečné layouty s odznaky, logy a přechody",
   "ui.demoTag": "Demo",
   "ui.allSystemsOperational": "Všechny systémy funkční",
+  "ui.spacesUsedOf": "{used}/{max} míst",
+  "ui.spacesUsed": "{used} míst",
   "ui.statusMeta": "• Poster API • TMDB • Addon",
   "ui.profileTitle": "Uložit profil",
   "ui.profileSubtitle": "Chraň konfiguraci plakátů heslem",
