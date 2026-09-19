@@ -280,6 +280,10 @@ echo "PICTORIUM_PUBLIC_INSTANCE=1" > .env
 echo "PICTORIUM_TMDB_KEY=your_key_here" >> .env
 sudo docker compose up -d
 ```
+> [!TIP]
+> **Data storage**: Persistence is already enabled out of the box via the `posterium-data` Docker volume. If you prefer saving data directly into a local host directory, simply change the volume mapping in `docker-compose.yml` to `./data:/data`.
+>
+> **Private vs Public**: `PICTORIUM_PUBLIC_INSTANCE=1` leaves the editor accessible without an admin token. For a locked private instance, set `PICTORIUM_PUBLIC_INSTANCE=0` and add `PICTORIUM_ADMIN_TOKEN=your_secret_token` (or use `PICTORIUM_MULTI_USER=1` for isolated password-protected user spaces).
 
 #### 🖥️ VPS + Caddy (Automatic HTTPS)
 ```caddyfile
@@ -307,12 +311,13 @@ npm install --ignore-scripts && npm run build && npm start
 
 | Variable | Default | Description |
 |---|:---:|---|
-| `PICTORIUM_PUBLIC_INSTANCE` | `0` | Set to `1` on Vercel/HF to allow saving posters and using the editor without an admin token. |
+| `PICTORIUM_PUBLIC_INSTANCE` | `0` | If `1`, allows using the editor and saving posters without requiring an admin token. Recommended for Homelab/LAN or open deployments. |
+| `PICTORIUM_ADMIN_TOKEN` | *(optional)* | Secret token to protect the editor when `PUBLIC_INSTANCE=0` (header `x-admin-token` or `Bearer`). |
 | `PICTORIUM_TMDB_KEY` | *(optional)* | Instance TMDB API key to generate posters and catalogs without requiring users to input one. |
 | `PICTORIUM_TVDB_API_KEY` | *(optional)* | TheTVDB API key for alternative season ordering and episode descriptions. |
 | `PICTORIUM_MDBLIST_KEY` | *(optional)* | MDBList API key for custom lists and anime catalogs. |
 | `PICTORIUM_REGION` | `IT` | Default country for JustWatch/FlixPatrol charts and title language (`IT`, `US`, `GB`, `FR`, `DE`, `ES`, `MX`, `IL`, `JP`, `KR`, `BR`, `IN`, `CA`, `AU`). Overridable per-request via `?region=` and per-user via config token or saved defaults. |
-| `PICTORIUM_DATA_DIR` | `./data` | Local disk persistence folder for database and saved files. |
+| `PICTORIUM_DATA_DIR` | `./data` | Local disk persistence folder for database and saved files (in Docker already mounted to `/data`). |
 | `KV_REST_API_URL` / `TOKEN` | *(empty)* | Upstash Redis connection parameters for serverless deployment on Vercel. |
 
 ### Multi-user (public instances)
