@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useT } from "@/lib/contexts/TranslationContext"
 import { APP_VERSION } from "@/generated/app-version"
 import { currentPathUuid } from "@/lib/user-token"
@@ -16,7 +17,7 @@ export function HomeStatusStrip() {
         <span className="status-meta hidden sm:inline" aria-hidden="true">{t("ui.statusMeta")}</span>
       </div>
       <div className="status-right">
-        <a href={statusHref} className="status-link">{t("ui.statusTitle")}</a>
+        <Link href={statusHref} className="status-link">{t("ui.statusTitle")}</Link>
         <span className="hidden sm:inline" aria-hidden="true">Pictorium v{APP_VERSION}</span>
       </div>
     </footer>
