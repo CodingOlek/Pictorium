@@ -41,6 +41,7 @@ function KeyRow({
   placeholder,
   readOnly,
   onChange,
+  onFocus,
   show,
   onToggleShow,
   showTitle,
@@ -57,6 +58,7 @@ function KeyRow({
   placeholder?: string
   readOnly?: boolean
   onChange?: (v: string) => void
+  onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void
   show: boolean
   onToggleShow: () => void
   showTitle: string
@@ -80,6 +82,7 @@ function KeyRow({
           autoComplete="off"
           value={value}
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          onFocus={onFocus}
           placeholder={placeholder}
           className="flex-1 min-w-0 w-0 font-mono text-xs py-1.5 px-3 rounded-lg bg-black/40 border border-white/10 text-white placeholder-zinc-600 focus:outline-none focus:border-accent-orange/50"
         />
@@ -106,6 +109,12 @@ function KeyRow({
       </div>
     </div>
   )
+}
+
+const SAVED_KEY_MASKS: Record<UserKeyKind, string> = {
+  tmdb: "••••••••••••••••••••••••••••••••", // 32 caratteri (hex TMDB)
+  mdblist: "••••••••••••••••••••••••••••", // 28 caratteri (MDBList)
+  tvdb: "••••••••••••••••••••••••••••••••", // 32 caratteri (TVDB)
 }
 
 const DEVICE_KEY_NAMES: Record<UserKeyKind, string> = {
@@ -332,44 +341,54 @@ export function UserKeysSection() {
       {(unauthorized || !hasCredential) && (
         <p className="text-[10px] text-amber-300/90">{t("ui.userKeysTokenHint")}</p>
       )}
-      {KINDS.map((kind) => (
-        <KeyRow
-          key={kind}
-          label={kind}
-          badge={
-            status ? (
-              <span className={`text-[10px] font-medium ${status[kind] ? "text-emerald-400" : "text-zinc-500"}`}>
-                {status[kind] ? t("ui.userKeysSet") : t("ui.userKeysUnset")}
-              </span>
-            ) : undefined
-          }
-          value={values[kind]}
-          placeholder={status?.[kind] ? "••••••••" : ""}
-          onChange={(v) => {
-            setValues((prev) => ({ ...prev, [kind]: v }))
-            setDirty((prev) => ({ ...prev, [kind]: true }))
-          }}
-          show={show[kind]}
-          onToggleShow={() => {
-            // Valore presente: toggle locale. Salvata ma vuota (post
-            // refresh): reveal dal server e mostrala.
-            if (values[kind] || !status?.[kind]) toggleShow(kind)
-            else void ensureValue(kind)
-          }}
-          showTitle={t("ui.showKey")}
-          hideTitle={t("ui.hideKey")}
-          canCopy={(!!values[kind] || !!status?.[kind]) && revealingKind !== kind}
-          onCopy={() => {
-            void (async () => {
-              const v = values[kind] || (await ensureValue(kind))
-              if (v) void copyValue(kind, v)
-            })()
-          }}
-          copied={copiedKind === kind}
-          copyTitle={t("ui.copyUuid")}
-          disabled={revealingKind === kind}
-        />
-      ))}
+      {KINDS.map((kind) => {
+        const isMasked = !!status?.[kind] && !dirty[kind] && !values[kind]
+        const displayValue = isMasked ? (show[kind] ? "" : SAVED_KEY_MASKS[kind]) : values[kind]
+        return (
+          <KeyRow
+            key={kind}
+            label={kind}
+            badge={
+              status ? (
+                <span className={`text-[10px] font-medium ${status[kind] ? "text-emerald-400" : "text-zinc-500"}`}>
+                  {status[kind] ? t("ui.userKeysSet") : t("ui.userKeysUnset")}
+                </span>
+              ) : undefined
+            }
+            value={displayValue}
+            placeholder=""
+            onFocus={(e) => {
+              if (isMasked) {
+                e.currentTarget.select()
+              }
+            }}
+            onChange={(v) => {
+              const nextVal = isMasked ? v.replaceAll("•", "") : v
+              setValues((prev) => ({ ...prev, [kind]: nextVal }))
+              setDirty((prev) => ({ ...prev, [kind]: true }))
+            }}
+            show={show[kind]}
+            onToggleShow={() => {
+              // Valore presente: toggle locale. Salvata ma vuota (post
+              // refresh): reveal dal server e mostrala.
+              if (values[kind] || !status?.[kind]) toggleShow(kind)
+              else void ensureValue(kind)
+            }}
+            showTitle={t("ui.showKey")}
+            hideTitle={t("ui.hideKey")}
+            canCopy={(!!values[kind] || !!status?.[kind]) && revealingKind !== kind}
+            onCopy={() => {
+              void (async () => {
+                const v = values[kind] || (await ensureValue(kind))
+                if (v) void copyValue(kind, v)
+              })()
+            }}
+            copied={copiedKind === kind}
+            copyTitle={t("ui.copyUuid")}
+            disabled={revealingKind === kind}
+          />
+        )
+      })}
       <button
         type="button"
         disabled={!hasDirty || busy || !hasCredential}
