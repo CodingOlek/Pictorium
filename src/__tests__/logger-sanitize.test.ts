@@ -21,6 +21,8 @@ describe("logger sanitization", () => {
       expect(isSensitiveKey("clientSecret")).toBe(true)
       expect(isSensitiveKey("userPassword")).toBe(true)
       expect(isSensitiveKey("customApiKey")).toBe(true)
+      expect(isSensitiveKey("userPin")).toBe(true)
+      expect(isSensitiveKey("oldPin")).toBe(true)
     })
 
     it("NON tocca chiavi legittime di routing, cache e diagnostica", () => {

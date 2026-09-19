@@ -56,13 +56,14 @@ export function isSensitiveKey(rawKey: string): boolean {
   ) {
     return false
   }
-  // Suffix check per credenziali composte (es. userToken, clientSecret, oldPassword, tmdbApiKey)
+  // Suffix check per credenziali composte (es. userToken, clientSecret, oldPassword, tmdbApiKey, userPin)
   if (
     k.endsWith("token") ||
     k.endsWith("secret") ||
     k.endsWith("password") ||
     k.endsWith("apikey") ||
-    k.endsWith("api_key")
+    k.endsWith("api_key") ||
+    k.endsWith("pin")
   ) {
     return true
   }
