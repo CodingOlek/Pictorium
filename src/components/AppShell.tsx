@@ -173,6 +173,7 @@ export function AppShell() {
           onPickLang={pickLang}
           onPickRegion={(regionCode) => { ed.setDefaultRegion(regionCode); ed.setRegion(regionCode) }}
           onDone={() => setShowLangPicker(false)}
+          skipPin={isUserPath || uuidShortcutVisible}
         />
       )}
 
