@@ -59,6 +59,13 @@ export function AppShell() {
   // cancello in multi-user). Letto al mount: AppShell è per-pagina.
   const [isUserPath] = useState(() => currentPathUuid() !== null)
 
+  useEffect(() => {
+    const id = currentPathUuid()
+    if (id && typeof window !== "undefined") {
+      try { window.sessionStorage?.setItem("pictorium_active_space", id) } catch {}
+    }
+  }, [])
+
   const checkPinStatus = useCallback(() => {
     fetch("/api/auth/pin")
       .then((r) => (r.ok ? r.json() : null))
