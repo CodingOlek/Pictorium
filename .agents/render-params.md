@@ -52,7 +52,7 @@ When you modify a visual render parameter in one file, update its server counter
 | Scala badge superiore (`topBadgeScale`) | Resize bitmap dopo il render (tutti gli stili; la **barra genere** scala nativa via font per restare full-width), prima di `fitBadgeToCanvas`; `%` 10..200, default 100; entra nella `rankBadgeKey` |
 | Geometria staccata (`isDetached`) | Solo stili centrati (default/extra; il nastro resta ancorato) con `toy !== 0`: tutti e 4 gli angoli raccordati (`rx = r`) invece del tetto dritto; stesso box di render; entra nella `rankBadgeKey` come `detached` (bitmap diverso) |
 | Offset badge superiore (`topBadgeOffsetX/Y`) | Solo stili centrati: `left = center + tox`, `top = 0 + toy` (px, default 0) + `pillTopGap` per la pill (`+10` fisso dal bordo alto); il nastro resta ancorato; la matematica overlap usa `finalRankTop + h` |
-| Posizione badge qualità | Angolo in alto a destra (`left = pw - w - padX + 10`, `top = padY - 10`); con nastro Netflix a destra (Stremio) va a **sinistra** (`left = padX + 10`) per non restargli accanto, impilato sotto il logo network se occupa il top-left (`top = netBottom + gap`, senza shift) |
+| Posizione badge qualità | Angolo in alto a destra (`left = pw - w - padX + 10 + 10 Nuvio`, `top = padY - 10`); con nastro Netflix a destra (Stremio) va a **sinistra** (`left = padX + 10 - 30`) per non restargli accanto, impilato sotto il logo network se occupa il top-left (`top = netBottom + gap`, senza shift) |
 | Sfondo badge qualità | Gradiente satinato traslucido a polarità pill (`satinPillStops(topLight)`); altezza unificata `badgeBoxHeight(fs)`; bordo `topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"` 1.5px; ombra 3D singola + padding simmetrico 14; testo invariato (`topLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)"`); font base `17 * pw / 380` (era `14`) |
 
 ## Pill Network Logo
@@ -63,7 +63,7 @@ When you modify a visual render parameter in one file, update its server counter
 | Bordo | `topLight ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.20)"` stroke-width 1px |
 | Padding | `px = round(fs * 0.65)`, `pt = pb = round(fs * 0.32)` dove `fs = round(max(18 * pw / 380, 12))` |
 | Raggio | `r = round(pillH * 0.35)` (squircle, identico al badge qualità) |
-| Posizione | default in alto a sinistra (`top = round(18 * STD_H / 570)`, `left = round(18 * STD_W / 380)`, resta a sinistra anche con `side="right"`); centrato sopra il logo film (`top = logoTop - h - gap`) SOLO con nastro Netflix o Coming Soon; senza logo film e con nastro: a fianco del nastro (`w + 10`). Se si sovrappone al badge centrale, rimpicciolisce fino a 0.55x |
+| Posizione | default in alto a sinistra (`top = round(18 * STD_H / 570) + 10`, `left = round(18 * STD_W / 380)`, resta a sinistra anche con `side="right"`); centrato sopra il logo film (`top = logoTop - h - gap + 10`) SOLO con nastro Netflix o Coming Soon; senza logo film e con nastro: a fianco del nastro (`w + 10`). Se si sovrappone al badge centrale, rimpicciolisce fino a 0.55x |
 | Scala (`netscale`) | Resize bitmap dopo il fetch, prima del fit; `%` 10..200, default 100 |
 | Offset (`nox`/`noy`) | `top += noy`, `left += nox` (px, default 0) dopo il posizionamento automatico |
 | Logo interno | `topLight ? rgba(255,255,255,0.85) : rgba(18,18,22,0.88)` (eccetto Marvel a colori brand) |
@@ -83,6 +83,24 @@ Solo quando il provider è abilitato server-side (`PICTORIUM_CUSTOM_RATING_*`) e
 | Font embedded | Nessun `@font-face` negli SVG: i font si risolvono dal fontdb resvg via `FONT_FILES` (`fonts.ts`: Inter 400/700/900 + Noto Symbols + Rubik 400/700/900) |
 | Fit | `w = min(maxWidth, width)` con `maxWidth = STD_W - 40`, `h` in scala proporzionale |
 | Posizione | centrata, `top = legacyTop - h - 10` sopra il badge genere (o `STD_H - 20` senza badge) — `poster-service.ts` |
+
+## Colonna rating separati (Separate Ratings)
+
+Opt-in portrait-only (`sep=1`, default OFF): sostituisce la media ★ nel badge genere con una colonna a destra di pill verticali (logo provider sopra, punteggio sotto). A OFF zero pixel cambiano.
+
+| Parametro | Server (`separate-rating-renderer.ts:renderSeparateRatingStack` + `poster-service.ts`) |
+|---|---|
+| Font size | `round(max(14 * pw / 380, 11))` (più piccolo del quality-badge: pill compatte moderne) |
+| Stack | UN solo bitmap: pill verticali `logoH = round(fs * 1.0)`, `h = pt + logoH + gap + fs + pt` (`px = round(fs*0.6)`, `pt = round(fs*0.3)`, `gap = max(2, round(fs*0.2))`), gap stack `SEPARATE_STACK_GAP = 5`; larghezza uniforme `colW = max(contenuti) + px*2` (colonna dritta); `rx = round(maxH * 0.32)` condiviso |
+| Cap display | max 3 (`pickSeparateRatings` in `ratings.ts`: ordine selezione `rsrc`, skip miss/0; vuoto → fallback media) |
+| Formati | decimale 1 cifra (`7.3`); famiglia percent (`tomatoes`, `popcorntime`) come `88%` (`formatSeparateValue`) |
+| Colori | convenzione quality-badge: `topLight ? dark pill : light pill`, bordo 1.5px adattivo, ombra dedicata ridotta (`seps`: dx=2, dy=2, blur 2, 0.55 — la 3D standard sbordava nel gap 5px sembrando squadrata) |
+| Loghi | `public/rating/*.svg` a colori brand originali (mai ricolorati), embed `<image data:...>` come le pill network; asset mancante → pill skippata (mai 500) |
+| Posizione | bordo destro allineato al badge qualità (`right = qualityRight`), `top = qualityBottom + 5`; senza qualità parte dal top (`netBaseTop - 10`, "sale"); con nastro a destra segue a sinistra (stesso branch `isRightRibbonCorner`); gap stack `5px` (`SEPARATE_STACK_GAP`) |
+| Priorità | mai col custom provider: se la riga custom è renderizzata, lo stack si nasconde |
+| Sostituzione | con stack attivo (`useSeparate`) il badge genere nasconde il segmento ★ (`badgeRating` effettivo = false) |
+| Cache | chiave stack `badge:separate:<src+val,...>:<CW>:<topLight>` (un composite); flag `sep` nella cache key poster; valori sep nell'etag dei poster dinamici |
+| Landscape | `sep` ignorato (media ★ invariata) |
 
 ## Gradiente fondo poster
 
@@ -106,6 +124,7 @@ Solo quando il provider è abilitato server-side (`PICTORIUM_CUSTOM_RATING_*`) e
 | `br` | `badgeRating === false ? "0" : null` | `qBr !== null ? qBr !== "0"` — nasconde il VOTO nel badge genere/rating |
 | `cr` | sempre esplicito in preview (`cr=0/1`, WYSIWYG); solo-OFF in pattern/Stremio | `qCr` — display riga rating custom: `query > mapping.customRatings > config > defaults > true`, AND con env `PICTORIUM_CUSTOM_RATING_ENABLED` |
 | `rsrc` | `ratingSources` per-titolo (preview); per-titolo salvato o default globale (Stremio) | fonti voto medio ★: `query > mapping.ratingSources > config token > server defaults (RATING_SOURCES) > imdb+tmdb` — parser unico `resolveRatingSources` (whitelist `SUPPORTED_RATING_SOURCES`) |
+| `sep` | `separateRatings` per-titolo (preview, sempre esplicito `sep=0/1`); solo-ON in pattern/Stremio | colonna separati: `query > mapping.separateRatings > config token > server defaults (PICTORIUM_SEPARATE_RATINGS) > false`, AND con portrait + `badgeRating` + ≥1 valore (altrimenti fallback media) |
 | `gradHeight` | `gradientHeight` | `qGradHeight` — alimenta l'altezza del gradiente/sfocatura (blurHeight; default 30 portrait, 20 landscape solo da query/config assenti; mapping non-clean senza valore congelato: 20) |
 | `bf` | `blurFade` (slider editor 0..100 + double-click reset al default per tipo poster, 70 in landscape) | punto di attacco transizione 0..100 (default 50 portrait, 70 landscape, 80 su mapping non-clean senza valore congelato): query > mapping > config token > server defaults > default di formato/tipo. Emessa sempre esplicita in preview e Stremio |
 | `tint` | `tintStrength` (slider editor 0..100 + default globale, double-click reset 20) | `qTint` — intensità tinta di scena 0..100 (default 20): query > mapping (`tintStrength`) > config token > server defaults (`PICTORIUM_TINT_STRENGTH`) > 20. Emessa sempre esplicita in preview e Stremio. Nessun profilo landscape dedicato (vale per entrambi i canvas) |
@@ -164,7 +183,12 @@ Solo quando il provider è abilitato server-side (`PICTORIUM_CUSTOM_RATING_*`) e
 - `src/lib/badges.ts` — server-side SVG (bottomGradientSVG)
 - `src/lib/svg-badge.ts` — server-side SVG raw badges (renderGenreBadge, renderRankingBadge, renderExtraBadge) + Resvg rendering (font risolti via `FONT_FILES`, nessun embedding negli SVG; vale anche per la riga multi-rating)
 - `src/lib/multi-rating-renderer.ts` — riga pill custom rating (`renderMultiRatings`, `MAX_CUSTOM_RATINGS`)
+- `src/lib/separate-rating-renderer.ts` — stack colonna separati (`renderSeparateRatingStack`, bitmap unico a larghezza uniforme, logo sopra/punteggio sotto)
 - `src/lib/custom-rating/` — provider server-side (`fetchCustomRatings`, `resolveCustomRatingConfig`, `formatRating`)
+- `src/lib/ratings.ts` — aggregatore voti (`fetchAggregatedRating`: MDBList + provider diretti condizionali Simkl/anime + backfill `sources.tmdb` dal voto TMDB diretto + fallback `sources.imdb` via Cinemeta quando MDBList manca, `resolveRatingSources`, `pickSeparateRatings`/`formatSeparateValue`)
+- `src/lib/cinemeta.ts` — voto IMDb gratis senza chiave (meta movie/series + fallback tipo, miss su meta vuoto; solo se `imdb` in `rsrc` e MDBList senza imdb)
+- `src/lib/simkl.ts` — voto Simkl diretto (BYOK, redirect 301 + details; solo se `simkl` in `rsrc`)
+- `src/lib/anime-ratings.ts` — voti anime diretti (AniZip mapping tmdb→imdb con fallback + AniList GraphQL + Kitsu REST; solo se `anilist`/`kitsu` in `rsrc`). `anilist`/`kitsu`/`simkl` NON arrivano da MDBList: il parse resta per compatibilità
 - `src/lib/badge-priority.ts` — logica priorità badge (condivisa)
 - `src/lib/logo-layout.ts` — geometria condivisa logo preview/server
 - `src/app/api/poster/[type]/[id]/route.ts` — composizione poster finale (preview + Stremio usano la stessa route)

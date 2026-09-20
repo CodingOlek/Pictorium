@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Route
     ? (body as Record<string, unknown>).kind
     : undefined
   if (typeof kind !== "string" || !(USER_KEY_KINDS as readonly string[]).includes(kind)) {
-    return Response.json({ error: "Invalid kind: use tmdb, mdblist or tvdb" }, { status: 400 })
+    return Response.json({ error: "Invalid kind: use tmdb, mdblist, tvdb or simkl" }, { status: 400 })
   }
   const value = (await getUserKeys(userId))[kind as UserKeyKind]
   if (!value) return Response.json({ error: "Key not set" }, { status: 404 })

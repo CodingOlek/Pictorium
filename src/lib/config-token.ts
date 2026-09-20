@@ -35,6 +35,7 @@ export const configTokenSchema = z.object({
   badgeQuality: z.boolean().optional(),
   customRatings: z.boolean().optional(),
   ratingSources: z.array(z.string().max(20)).optional(),
+  separateRatings: z.boolean().optional(),
   badgeStyle: badgeStyleSchema,
   rankingBadgeStyle: rankingBadgeStyleSchema,
   blurEnabled: z.boolean(),

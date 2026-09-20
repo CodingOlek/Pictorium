@@ -417,6 +417,76 @@ const server = http.createServer(async (req, res) => {
       })
     }
 
+    // MDBList aggregated ratings (lib/ratings.ts → ${MDBLIST_API_URL}/?i=tt...):
+    // voti deterministici per la colonna rating separati (sep=1).
+    // Nota: l'app chiama `${MDBLIST_API_URL}/?i=...` (slash prima del ?),
+    // quindi il pathname arriva con trailing slash.
+    if (method === "GET" && (pathname === "/mdblist/api" || pathname === "/mdblist/api/")) {
+      // tt0000001: MDBList senza imdb (per il test fallback Cinemeta).
+      if (url.searchParams.get("i") === "tt0000001") {
+        return json(res, 200, { ratings: [{ source: "tmdb", score: 79 }] })
+      }
+      return json(res, 200, {
+        ratings: [
+          { source: "imdb", score: 87 },
+          { source: "tmdb", score: 79 },
+          { source: "tomatoes", score: 88 },
+          { source: "popcorntime", score: 92 },
+          { source: "metacritic", score: 75 },
+        ],
+      })
+    }
+
+    // Simkl redirect (stop-at-301): risolve IMDb/TMDB ID nel canonical path Simkl
+    if (method === "GET" && pathname.startsWith("/simkl/redirect")) {
+      res.writeHead(301, {
+        Location: "https://simkl.com/movies/472214/inception",
+        "Content-Length": "0",
+      })
+      return res.end()
+    }
+
+    // Simkl details endpoint: restituisce i ratings con rating.simkl.rating
+    if (method === "GET" && pathname.match(/^\/simkl\/(movies|tv|anime)\/\d+/)) {
+      return json(res, 200, {
+        ratings: {
+          simkl: { rating: 8.6, votes: 14000 },
+          imdb: { rating: 8.8, votes: 2000000 },
+        },
+      })
+    }
+
+    // AniZip mappings (lib/anime-ratings.ts → ${ANIZIP_API_URL}/mappings?...):
+    // solo tt0388629/tmdb 37854 (One Piece) è un anime; resto → 404.
+    if (method === "GET" && pathname === "/anizip/mappings") {
+      const tmdb = url.searchParams.get("themoviedb_id")
+      const imdb = url.searchParams.get("imdb_id")
+      if (tmdb === "37854" || imdb === "tt0388629") {
+        return json(res, 200, {
+          mappings: { anilist_id: 21, kitsu_id: 12, type: "TV" },
+          episodes: { 1: { seasonNumber: 1, episodeNumber: 1 } },
+        })
+      }
+      return json(res, 404, { error: "not found" })
+    }
+
+    // AniList GraphQL (POST ${ANILIST_API_URL}): voto medio 0-100.
+    if (method === "POST" && pathname === "/anilist") {
+      return json(res, 200, { data: { Media: { id: 21, averageScore: 87 } } })
+    }
+
+    // Kitsu REST (${KITSU_API_URL}/anime/:id): averageRating stringa 0-100.
+    if (method === "GET" && pathname.match(/^\/kitsu\/anime\/\d+/)) {
+      return json(res, 200, { data: { id: "12", type: "anime", attributes: { averageRating: "84.01" } } })
+    }
+
+    // Cinemeta meta (${CINEMETA_API_URL}/meta/:type/:id.json): imdbRating gratis.
+    // tt0133093, tt0388629 e tt0000001 risolvono; il resto ha meta vuoto (come il reale).
+    if (method === "GET" && pathname.match(/^\/cinemeta\/meta\/(movie|series)\/tt\d+\.json$/)) {
+      const hit = pathname.includes("tt0133093") || pathname.includes("tt0388629") || pathname.includes("tt0000001")
+      return json(res, 200, hit ? { meta: { id: "tt0133093", type: "movie", name: "Mock", imdbRating: "8.4" } } : { meta: {} })
+    }
+
     // Fallback esplicito per chiamate non mockate
     return json(res, 501, { error: `Mock server: endpoint non mockato (${method} ${pathname})` })
   } catch (err) {

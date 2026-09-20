@@ -76,6 +76,7 @@ export default function EditView() {
   const topEdgeColor = usePSelector((v) => v.topEdgeColor)
   const bottomEdgeColor = usePSelector((v) => v.bottomEdgeColor)
   const trendRank = usePSelector((v) => v.trendRank)
+  const currentUserId = usePSelector((v) => v.currentUserId)
   const yearOf = usePSelector((v) => v.yearOf)
   const { t, lang } = useT()
   const ed = usePosterEditor()
@@ -520,7 +521,9 @@ export default function EditView() {
                         accentColor: accentColor,
                         autoAccentColor: autoAccentColor,
                         lang: lang,
+                        region: ed.defaultRegion,
                         tmdbKey: tmdbKey,
+                        userId: currentUserId,
                       }, {
                         globalBadges: ed.globalBadges,
                         rankingBadges: ed.rankingBadges,
@@ -530,6 +533,7 @@ export default function EditView() {
                         badgeQuality: ed.badgeQuality,
                         customRatings: ed.customRatings,
                         ratingSources: ed.ratingSources,
+                        separateRatings: ed.separateRatings,
                         badgeStyle: ed.badgeStyle,
                         rankingBadgeStyle: ed.rankingBadgeStyle,
                         customBadge: ed.customBadge,

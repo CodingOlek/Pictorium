@@ -15,6 +15,7 @@ import {
   InvalidUserKeyError,
   KeysEncryptionUnavailableError,
   setUserKeys,
+  USER_KEY_KINDS,
   type UserKeyKind,
 } from "@/lib/user-keys"
 import { readJsonBody, BodyTooLargeError, DEFAULT_MAX_BODY_BYTES } from "@/lib/read-body"
@@ -24,7 +25,7 @@ type RouteParams = { uuid: string }
 /**
  * Chiavi API del namespace (multi-user, slice 2).
  *
- * GET → solo presenza per kind (`{tmdb, mdblist, tvdb}` booleani): MAI valori,
+ * GET → solo presenza per kind (`{tmdb, mdblist, tvdb, simkl}` booleani): MAI valori,
  * MAI nei log. PUT → salva/cancella (stringa = imposta, `""`/`null` = cancella,
  * campo assente = invariato). POST `/reveal` → restituisce UNA chiave al
  * proprietario autenticato (sotto): unica eccezione all'eco, rate-limitata e
@@ -76,7 +77,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<RouteP
     return Response.json({ error: "Invalid body" }, { status: 400 })
   }
   const input: Partial<Record<UserKeyKind, unknown>> = {}
-  for (const kind of ["tmdb", "mdblist", "tvdb"] as const) {
+  for (const kind of USER_KEY_KINDS) {
     if (kind in (body as Record<string, unknown>)) {
       input[kind] = (body as Record<string, unknown>)[kind]
     }

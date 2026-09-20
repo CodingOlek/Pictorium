@@ -115,12 +115,16 @@ export function BadgeControls() {
                           <span className="text-zinc-600">·</span>
                           <button
                             type="button"
-                            onClick={() => ed.setRatingSources(["imdb", "tmdb"])}
+                            onClick={() => ed.setRatingSources(["imdb"])}
                             className="text-muted hover:text-zinc-200 transition-colors"
                           >
                             {t("ui.disableAll")}
                           </button>
                         </div>
+                      </div>
+                      <div className="flex items-center justify-between px-0.5 pt-1 border-t border-surface2/50" title={t("ui.separateRatingsHint")}>
+                        <span className="text-[11px] text-zinc-300 font-medium">{t("ui.separateRatings")}</span>
+                        <Toggle value={ed.separateRatings} onChange={(v) => ed.setSeparateRatings(v)} label={t("ui.separateRatings")} />
                       </div>
                       <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-0.5">
                         {UI_RATING_SOURCES.map((s, idx) => {

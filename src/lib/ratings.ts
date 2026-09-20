@@ -4,10 +4,15 @@ import { timedFetch } from "./outbound-stats"
 import { createLogger } from "@/lib/logger"
 import { envWithFallback } from "@/lib/env-compat"
 import { createCircuitBreaker, parseRetryAfterMs } from "@/lib/circuit-breaker"
+import { fetchSimklRating } from "./simkl"
+import { fetchAnimeRatings } from "./anime-ratings"
+import { fetchCinemetaRating } from "./cinemeta"
 
 const log = createLogger("ratings")
 
-const MDBLIST = "https://mdblist.com/api"
+// Override E2E/mock deterministico (stesso pattern di mdblist.ts): in
+// produzione la env è assente e si usa l'endpoint reale.
+const MDBLIST = process.env.MDBLIST_API_URL || "https://mdblist.com/api"
 
 // Phase 2 (Provider Resilience): deadline interna 8000 → 1500ms. I caller
 // fanno già race con RATING_WAIT_MS, ma il fetch restava zombie fino a 8s;
@@ -161,32 +166,78 @@ export function calculateAverageRating(
   return avg(values)
 }
 
-export async function fetchAggregatedRating(
-  imdbId: string,
-  apiKey?: string,
-  signal?: AbortSignal
-): Promise<AggregatedRatings | null> {
-  if (!imdbId) return null
+/** Cap display colonna rating separati: oltre, la colonna destra mangia il poster. */
+export const MAX_SEPARATE_RATINGS = 3
 
-  // Solo la chiave esplicita della richiesta: non esiste più chiave d'istanza.
-  const key = apiKey
-  // La key MDBList cambia il voto aggregato → parte del cache key (hash, mai
-  // plaintext). Altrimenti due contesti con key diverse collidono (D4).
-  const keyHash = key ? crypto.createHash("sha1").update(key).digest("hex").slice(0, 8) : "nomk"
-  const cacheKey = `mdb:ratings:${imdbId}:${keyHash}`
-  const cached = cacheGet<AggregatedRatings>(cacheKey)
-  if (cached) return cached
-  // Null/miss non cachabili nel KV tipizzato (null = miss): negativa breve
-  // in-memory così un titolo senza rating non rifà rete a ogni render.
-  // Stesso pattern di wikidata: solo memoria, mai KV, TTL 60s.
-  const nulledAt = ratingsNullAt.get(cacheKey)
-  if (nulledAt !== undefined) {
-    if (Date.now() - nulledAt < RATINGS_NULL_TTL_MS) return null
-    ratingsNullAt.delete(cacheKey)
+/** Fonti mostrate in percentuale invece che in decimi (valore /10 → `88%`). */
+const PERCENT_SOURCES: ReadonlySet<string> = new Set(["tomatoes", "popcorntime"])
+
+export interface SeparateRating {
+  readonly id: string
+  readonly value: number
+}
+
+/**
+ * Sottoinsieme ordinato delle fonti aggregate per la colonna separata:
+ * ordine di selezione `requestedSources`, skip valori mancanti/0, cap
+ * MAX_SEPARATE_RATINGS. Ritorna [] quando niente è mostrabile (il chiamante
+ * ripiega sulla media ★).
+ */
+export function pickSeparateRatings(
+  ratings: AggregatedRatings | null,
+  requestedSources?: string[],
+  max: number = MAX_SEPARATE_RATINGS,
+): SeparateRating[] {
+  if (!ratings || !ratings.sources) return []
+  const wanted = requestedSources && requestedSources.length > 0
+    ? requestedSources.map((s) => s.trim().toLowerCase())
+    : [...DEFAULT_RATING_SOURCES]
+  const out: SeparateRating[] = []
+  for (const src of wanted) {
+    if (out.length >= max) break
+    const v = ratings.sources[src]
+    if (typeof v === "number" && Number.isFinite(v) && v > 0) out.push({ id: src, value: v })
   }
+  return out
+}
 
-  // Breaker aperto → fail-open immediato: niente rete, i caller usano il voto TMDB.
-  if (mdblistBreaker.isOpen()) return null
+/** Formato display di una fonte separata: `7.3` decimale, `88%` per la famiglia percent. */
+export function formatSeparateValue(source: string, value: number): string {
+  if (PERCENT_SOURCES.has(source.toLowerCase())) return `${Math.round(value * 10)}%`
+  return (Math.round(value * 10) / 10).toFixed(1)
+}
+
+export interface FetchAggregatedOptions {
+  simklKey?: string | null
+  tmdbId?: number | string | null
+  mediaType?: "movie" | "tv" | "series" | "anime" | null
+  wantSimkl?: boolean
+  wantAnilist?: boolean
+  wantKitsu?: boolean
+  /** Voto IMDb via Cinemeta quando MDBList non lo fornisce (fallback sequenziale). */
+  wantImdb?: boolean
+  /**
+   * Voto TMDB diretto (details.vote_average) come backfill di `sources.tmdb`
+   * quando MDBList manca (quota/outage): senza, a MDBList down spariscono
+   * imdb E tmdb insieme pur avendo la chiave TMDB funzionante. Vale solo in
+   * assenza del tmdb da MDBList (mai sovrascrittura) e non entra nel cache
+   * key (staleness 30min come tutte le fonti). Solo voto TMDB genuino —
+   * mai medie congelate da mapping/query.
+   */
+  tmdbFallbackVote?: number | null
+}
+
+interface MdbListFetchResult {
+  sources: Record<string, number> | null
+  isGenuineMiss: boolean
+}
+
+async function fetchMdbListSources(
+  imdbId: string,
+  key?: string,
+  signal?: AbortSignal
+): Promise<MdbListFetchResult> {
+  if (mdblistBreaker.isOpen()) return { sources: null, isGenuineMiss: false }
 
   const qs = key ? `?apikey=${encodeURIComponent(key)}&i=${encodeURIComponent(imdbId)}` : `?i=${encodeURIComponent(imdbId)}`
 
@@ -212,94 +263,158 @@ export async function fetchAggregatedRating(
       { signal: combined }
     )
     if (res.status === 429 || res.status >= 500) {
-      // Rate limit o server error (500, 502, 503): la finestra segue
-      // l'eventuale Retry-After upstream, oppure il default 30s.
-      // Niente negativa qui: i fallimenti appartengono al breaker (che deve
-      // contarli per aprirsi), la negativa copre solo i miss genuini.
       mdblistBreaker.recordFailure(parseRetryAfterMs((n) => res.headers.get(n)))
-      return null
+      return { sources: null, isGenuineMiss: false }
     }
-    // Altri non-OK (404 miss genuina, 401 chiave invalida): fail veloce
-    // senza far scattare il breaker per tutti i film.
     if (!res.ok) {
-      ratingsNullSet(cacheKey)
-      return null
+      return { sources: null, isGenuineMiss: true }
     }
     mdblistBreaker.recordSuccess()
-    {
-      const raw = await res.json()
-      const data = raw?.data ?? raw
+    const raw = await res.json()
+    const data = raw?.data ?? raw
 
-      const ratings = data?.ratings
-      const sources: Record<string, number> = {}
-      const defaultValues: number[] = []
+    const ratings = data?.ratings
+    const sources: Record<string, number> = {}
 
-      // If root data has mdblist score/rating
-      const rootScore = typeof data?.score === "number" ? data.score : parseFloat(data?.score)
-      if (!isNaN(rootScore) && rootScore > 0) {
-        sources.mdblist = Math.round((rootScore > 10 ? rootScore / 10 : rootScore) * 10) / 10
-      }
+    // If root data has mdblist score/rating
+    const rootScore = typeof data?.score === "number" ? data.score : parseFloat(data?.score)
+    if (!isNaN(rootScore) && rootScore > 0) {
+      sources.mdblist = Math.round((rootScore > 10 ? rootScore / 10 : rootScore) * 10) / 10
+    }
 
-      if (Array.isArray(ratings) && ratings.length > 0) {
-        const ALL_SOURCES = new Set<string>(SUPPORTED_RATING_SOURCES)
+    if (Array.isArray(ratings) && ratings.length > 0) {
+      const ALL_SOURCES = new Set<string>(SUPPORTED_RATING_SOURCES)
 
-        for (const item of ratings) {
-          let src = (item?.source || item?.name || item?.provider || "").toLowerCase().replace(/[-_]/g, "")
-          if (src === "myanimelist") src = "mal"
-          if (src === "popcorn" || src === "rtaudience" || src === "audience" || src === "tomatoesaudience") src = "popcorntime"
-          if (!ALL_SOURCES.has(src)) continue
+      for (const item of ratings) {
+        let src = (item?.source || item?.name || item?.provider || "").toLowerCase().replace(/[-_]/g, "")
+        if (src === "myanimelist") src = "mal"
+        if (src === "popcorn" || src === "rtaudience" || src === "audience" || src === "tomatoesaudience") src = "popcorntime"
+        if (!ALL_SOURCES.has(src)) continue
 
-          let normalized: number | null = null
-          const rawScore = item?.score
-          const scoreNum = typeof rawScore === "number" ? rawScore : parseFloat(rawScore)
-          if (!isNaN(scoreNum) && scoreNum > 0) {
-            normalized = scoreNum > 10 ? scoreNum / 10 : scoreNum
-          } else {
-            const rawV = item?.value ?? item?.rating
-            const v = typeof rawV === "number" ? rawV : parseFloat(rawV)
-            if (!isNaN(v) && v > 0) {
-              if (src === "letterboxd" && v <= 5) {
-                normalized = v * 2
-              } else if (src === "rogerebert" && v <= 4) {
-                normalized = v * 2.5
-              } else {
-                normalized = toTen(v)
-              }
-            }
-          }
-
-          if (normalized !== null && !isNaN(normalized) && normalized > 0 && !sources[src]) {
-            sources[src] = Math.round(normalized * 10) / 10
-            if (src === "imdb" || src === "tmdb") {
-              defaultValues.push(sources[src])
+        let normalized: number | null = null
+        const rawScore = item?.score
+        const scoreNum = typeof rawScore === "number" ? rawScore : parseFloat(rawScore)
+        if (!isNaN(scoreNum) && scoreNum > 0) {
+          normalized = scoreNum > 10 ? scoreNum / 10 : scoreNum
+        } else {
+          const rawV = item?.value ?? item?.rating
+          const v = typeof rawV === "number" ? rawV : parseFloat(rawV)
+          if (!isNaN(v) && v > 0) {
+            if (src === "letterboxd" && v <= 5) {
+              normalized = v * 2
+            } else if (src === "rogerebert" && v <= 4) {
+              normalized = v * 2.5
+            } else {
+              normalized = toTen(v)
             }
           }
         }
-      }
 
-      if (Object.keys(sources).length > 0) {
-        const fallbackValues = Object.values(sources)
-        const valuesToAvg = defaultValues.length > 0 ? defaultValues : fallbackValues
-        const result: AggregatedRatings = {
-          sources,
-          average: avg(valuesToAvg),
-          count: Object.keys(sources).length,
+        if (normalized !== null && !isNaN(normalized) && normalized > 0 && !sources[src]) {
+          sources[src] = Math.round(normalized * 10) / 10
         }
-        cacheSet(cacheKey, result, ["mdb"])
-        return result
       }
     }
+
+    const hasSources = Object.keys(sources).length > 0
+    return { sources: hasSources ? sources : null, isGenuineMiss: !hasSources }
   } catch (e) {
-    // Cancellazione nostra (deadline render, race persa) ≠ fallimento
-    // upstream: non deve far scattare il breaker. Timeout interno e errori
-    // di rete invece sì. Mai in negativa: abort e transienti appartengono a
-    // race/breaker, non alla cache dei miss.
     if (!signal?.aborted) mdblistBreaker.recordFailure()
     log.error("MDBList fetch failed", { error: e instanceof Error ? e.message : String(e) })
-    return null
+    return { sources: null, isGenuineMiss: false }
+  }
+}
+
+export async function fetchAggregatedRating(
+  imdbId: string,
+  apiKey?: string,
+  signal?: AbortSignal,
+  opts?: FetchAggregatedOptions
+): Promise<AggregatedRatings | null> {
+  if (!imdbId) return null
+
+  const wantSimkl = !!(opts?.wantSimkl && opts?.simklKey?.trim())
+  const wantAnilist = !!opts?.wantAnilist
+  const wantKitsu = !!opts?.wantKitsu
+  const wantAnime = wantAnilist || wantKitsu
+
+  // Solo la chiave esplicita della richiesta: non esiste più chiave d'istanza per MDBList.
+  const key = apiKey
+  const keyHash = key ? crypto.createHash("sha1").update(key).digest("hex").slice(0, 8) : "nomk"
+  const simklHash = wantSimkl && opts?.simklKey ? crypto.createHash("sha1").update(opts.simklKey.trim()).digest("hex").slice(0, 8) : "nosk"
+  // Le fonti anime cambiano i sources → parte del cache key (flag, mai ID).
+  // Stesso per wantImdb (Cinemeta): senza, togglare rsrc in editor servirebbe
+  // entry con/senza imdb a caso dentro i 30min di TTL.
+  const animeFlag = `${wantAnilist ? "al" : "x"}${wantKitsu ? "ki" : "x"}`
+  const cacheKey = `mdb:ratings:${imdbId}:${keyHash}${wantSimkl ? `:${simklHash}` : ""}${wantAnime ? `:${animeFlag}` : ""}${opts?.wantImdb ? ":ci" : ""}`
+
+  const cached = cacheGet<AggregatedRatings>(cacheKey)
+  if (cached) return cached
+
+  const nulledAt = ratingsNullAt.get(cacheKey)
+  if (nulledAt !== undefined) {
+    if (Date.now() - nulledAt < RATINGS_NULL_TTL_MS) return null
+    ratingsNullAt.delete(cacheKey)
   }
 
-  // Solo i miss genuini (404/401 o payload senza rating) arrivano qui.
-  ratingsNullSet(cacheKey)
-  return null
+  try {
+    const [mdbResult, simklRating, animeRatings] = await Promise.all([
+      fetchMdbListSources(imdbId, key, signal),
+      wantSimkl
+        ? fetchSimklRating(imdbId, opts!.simklKey!, { tmdbId: opts?.tmdbId, mediaType: opts?.mediaType, signal }).catch(() => null)
+        : Promise.resolve(null),
+      wantAnime
+        ? fetchAnimeRatings(imdbId, { tmdbId: opts?.tmdbId, wantAnilist, wantKitsu, signal }).catch(() => null)
+        : Promise.resolve(null),
+    ])
+
+    const sources: Record<string, number> = mdbResult.sources ? { ...mdbResult.sources } : {}
+    if (typeof simklRating === "number" && Number.isFinite(simklRating) && simklRating > 0) {
+      sources.simkl = simklRating
+    }
+    if (typeof animeRatings?.anilist === "number") {
+      sources.anilist = animeRatings.anilist
+    }
+    if (typeof animeRatings?.kitsu === "number") {
+      sources.kitsu = animeRatings.kitsu
+    }
+    // Fallback IMDb via Cinemeta (gratis, senza chiave): SOLO se MDBList non
+    // lo fornisce e solo se richiesto. Sequenziale apposta: a chiave MDBList
+    // funzionante zero chiamate extra; sul miss path costa ~300ms dentro la
+    // race RATING_WAIT dei caller (fail-open oltre). MDBList vince sempre.
+    if (sources.imdb === undefined && opts?.wantImdb) {
+      const cinemetaRating = await fetchCinemetaRating(imdbId, opts?.mediaType, signal).catch(() => null)
+      if (typeof cinemetaRating === "number") {
+        sources.imdb = cinemetaRating
+      }
+    }
+    const fbVote = opts?.tmdbFallbackVote
+    if (sources.tmdb === undefined && typeof fbVote === "number" && Number.isFinite(fbVote) && fbVote > 0) {
+      sources.tmdb = Math.round(Math.min(fbVote, 10) * 10) / 10
+    }
+
+    if (Object.keys(sources).length > 0) {
+      const defaultValues: number[] = []
+      if (typeof sources.imdb === "number") defaultValues.push(sources.imdb)
+      if (typeof sources.tmdb === "number") defaultValues.push(sources.tmdb)
+
+      const fallbackValues = Object.values(sources)
+      const valuesToAvg = defaultValues.length > 0 ? defaultValues : fallbackValues
+      const result: AggregatedRatings = {
+        sources,
+        average: avg(valuesToAvg),
+        count: Object.keys(sources).length,
+      }
+      cacheSet(cacheKey, result, wantAnime ? ["mdb", "simkl", "anime"] : ["mdb", "simkl"])
+      return result
+    }
+
+    if (mdbResult.isGenuineMiss) {
+      ratingsNullSet(cacheKey)
+    }
+    return null
+  } catch (e) {
+    log.error("Aggregated ratings fetch failed", { error: e instanceof Error ? e.message : String(e) })
+    return null
+  }
 }

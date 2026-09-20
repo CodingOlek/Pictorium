@@ -291,7 +291,7 @@ export function glassStops(topLight: boolean): string {
  * (dx=3, dy=3, blur 3.5, 0.65), canvas = box esatta come il nastro — la coda
  * oltre il viewport viene tagliata, come lì. Solo sul contenitore, mai sul testo.
  */
-const TOP_SHADOW_FILTER = `<filter id="tds" x="-20%" y="-20%" width="180%" height="180%"><feDropShadow dx="3" dy="3" stdDeviation="3.5" flood-color="#000000" flood-opacity="0.65"/></filter>`
+export const TOP_SHADOW_FILTER = `<filter id="tds" x="-20%" y="-20%" width="180%" height="180%"><feDropShadow dx="3" dy="3" stdDeviation="3.5" flood-color="#000000" flood-opacity="0.65"/></filter>`
 
 /**
  * Padding per la coda dell'ombra 3D (dx=3, dy=3, blur 3.5 → ~14px): senza,

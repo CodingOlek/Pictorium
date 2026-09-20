@@ -54,13 +54,13 @@ describe("user-keys encryption", () => {
     const keys = await import("@/lib/user-keys")
     await keys.setUserKeys(UUID_A, { tmdb: NS_TMDB_KEY, mdblist: "ns-mdblist-1" })
     expect(await keys.getUserKeys(UUID_A)).toMatchObject({ tmdb: NS_TMDB_KEY, mdblist: "ns-mdblist-1" })
-    expect(await keys.getUserKeysStatus(UUID_A)).toEqual({ tmdb: true, mdblist: true, tvdb: false })
+    expect(await keys.getUserKeysStatus(UUID_A)).toEqual({ tmdb: true, mdblist: true, tvdb: false, simkl: false })
     const raw = await fsp.readFile(path.join(tempDir!, "users", UUID_A, "keys.json"), "utf-8")
     expect(raw).not.toContain(NS_TMDB_KEY)
     expect(raw).not.toContain("ns-mdblist-1")
     // "" cancella la kind, campo assente = invariato.
     await keys.setUserKeys(UUID_A, { tmdb: "" })
-    expect(await keys.getUserKeysStatus(UUID_A)).toEqual({ tmdb: false, mdblist: true, tvdb: false })
+    expect(await keys.getUserKeysStatus(UUID_A)).toEqual({ tmdb: false, mdblist: true, tvdb: false, simkl: false })
     expect(await keys.getUserKeys(UUID_A)).toMatchObject({ mdblist: "ns-mdblist-1" })
   })
 
@@ -200,6 +200,35 @@ describe("keys API route", () => {
       { params: Promise.resolve({ uuid: created.uuid }) },
     )
     expect(wrong.status).toBe(401)
+  })
+
+  it("PUT persiste anche simkl (regressione: whitelist hardcodata la scartava)", async () => {
+    vi.resetModules()
+    const auth = await import("@/lib/user-auth")
+    const route = await import("@/app/api/users/[uuid]/keys/route")
+    const tmdb = await import("@/lib/tmdb")
+    const created = await auth.createUser()
+    const base = `http://localhost:3000/api/users/${created.uuid}/keys`
+
+    const put = await route.PUT(
+      nextReq(base, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-user-token": created.secret },
+        body: JSON.stringify({ simkl: "ns-simkl-client-id" }),
+      }),
+      { params: Promise.resolve({ uuid: created.uuid }) },
+    )
+    expect(put.status).toBe(200)
+
+    const get = await route.GET(
+      nextReq(base, { headers: { "x-user-token": created.secret } }),
+      { params: Promise.resolve({ uuid: created.uuid }) },
+    )
+    const body = await get.json()
+    expect(body.simkl).toBe(true)
+
+    const r = await tmdb.resolveUserApiKey(nextReq(`http://x/?u=${created.uuid}`), created.uuid, "simkl")
+    expect(r).toEqual({ key: "ns-simkl-client-id", source: "namespace" })
   })
 
   it("503 senza PROFILE_ENCRYPTION_KEY quando si scrive", async () => {

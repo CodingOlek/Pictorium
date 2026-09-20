@@ -346,6 +346,71 @@ test.describe("poster API — functional", () => {
     expect(buffer.length).toBeGreaterThan(1000)
   })
 
+  test("separate ratings (sep=1) — column replaces average — valid image", async ({ request }) => {
+    // Colonna separati: imdbId in query → aggregated dal mock MDBList, media ★
+    // sostituita dalla colonna a destra (mai sommate). I byte devono differire
+    // dalla media: altrimenti lo stack non è stato renderizzato (fallback).
+    const sepUrl = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0133093", sep: "1", rsrc: "imdb,tmdb,tomatoes" })
+    const avgUrl = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0133093", rsrc: "imdb,tmdb,tomatoes" })
+    const sepRes = await request.get(sepUrl)
+    expect(sepRes.ok()).toBeTruthy()
+    const sepBuffer = await sepRes.body()
+    expect(sepBuffer.length).toBeGreaterThan(1000)
+    const avgRes = await request.get(avgUrl)
+    expect(avgRes.ok()).toBeTruthy()
+    const avgBuffer = await avgRes.body()
+    expect(Buffer.compare(sepBuffer, avgBuffer)).not.toBe(0)
+  })
+
+  test("separate ratings off by default — average kept — valid image", async ({ request }) => {
+    const url = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0133093", rsrc: "imdb,tmdb,tomatoes" })
+    const res = await request.get(url)
+    expect(res.ok()).toBeTruthy()
+    const buffer = await res.body()
+    expect(buffer.length).toBeGreaterThan(1000)
+  })
+
+  test("anime ratings (anilist+kitsu) — aggregated + separate column — valid image", async ({ request }) => {
+    // imdbId anime in query → AniZip mock mappa tt0388629 (il tmdbId mock fa
+    // 404 e scatta il fallback imdb), voti AniList/Kitsu dal mock, colonna
+    // separati renderizzata (byte diversi dalla media ★ sola).
+    const sepUrl = posterUrl({ genreName: "Animation", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0388629", sep: "1", rsrc: "anilist,kitsu" })
+    const avgUrl = posterUrl({ genreName: "Animation", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0388629", rsrc: "anilist,kitsu" })
+    const sepRes = await request.get(sepUrl)
+    expect(sepRes.ok()).toBeTruthy()
+    const sepBuffer = await sepRes.body()
+    expect(sepBuffer.length).toBeGreaterThan(1000)
+    const avgRes = await request.get(avgUrl)
+    expect(avgRes.ok()).toBeTruthy()
+    const avgBuffer = await avgRes.body()
+    expect(Buffer.compare(sepBuffer, avgBuffer)).not.toBe(0)
+  })
+
+  test("anime ratings on non-anime — graceful miss — valid image", async ({ request }) => {
+    // tt0133093 non è mappato dal mock AniZip (404) → fallback media, mai 500.
+    const url = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0133093", sep: "1", rsrc: "anilist,kitsu" })
+    const res = await request.get(url)
+    expect(res.ok()).toBeTruthy()
+    const buffer = await res.body()
+    expect(buffer.length).toBeGreaterThan(1000)
+  })
+
+  test("cinemeta imdb fallback (no mdblist imdb) — separate column — valid image", async ({ request }) => {
+    // tt0000001: il mock MDBList non ha imdb → Cinemeta riempie 8.4, la colonna
+    // separati rende (byte diversi dalla media ★ sola). Senza fallback la
+    // colonna sarebbe vuota e i byte identici.
+    const sepUrl = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0000001", sep: "1", rsrc: "imdb" })
+    const avgUrl = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0000001", rsrc: "imdb" })
+    const sepRes = await request.get(sepUrl)
+    expect(sepRes.ok()).toBeTruthy()
+    const sepBuffer = await sepRes.body()
+    expect(sepBuffer.length).toBeGreaterThan(1000)
+    const avgRes = await request.get(avgUrl)
+    expect(avgRes.ok()).toBeTruthy()
+    const avgBuffer = await avgRes.body()
+    expect(Buffer.compare(sepBuffer, avgBuffer)).not.toBe(0)
+  })
+
   test("landscape shape — 16:9 image rendered from backdrop", async ({ page }) => {
     // ?shape=landscape usa lo sfondo TMDB come base invece del poster
     // verticale: l'immagine risultante è 768×432.
@@ -512,5 +577,27 @@ test.describe("poster API — visual regression", () => {
     const url = posterUrl({ backdrop: "/mocked/backdrop.jpg", logo: "/mocked/logo.png", shape: "landscape", genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0" })
     const poster = await renderPoster(page, url)
     await expect(poster).toHaveScreenshot("poster-landscape-nologo.png", { maxDiffPixelRatio: 0.10 })
+  })
+
+  test("separate ratings column (3 providers) — screenshot", async ({ page }) => {
+    // Colonna a destra con logo sopra / punteggio sotto (IMDb 8.7, TMDB 7.9,
+    // 88%), badge genere senza segmento ★.
+    const url = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0133093", sep: "1", rsrc: "imdb,tmdb,tomatoes", quality: "4K" })
+    const poster = await renderPoster(page, url)
+    await expect(poster).toHaveScreenshot("poster-separate-ratings.png", { maxDiffPixelRatio: 0.10 })
+  })
+
+  test("separate ratings without quality badge (stack rises) — screenshot", async ({ page }) => {
+    // Senza badge qualità lo stack parte dall'alto invece che sotto il 4K.
+    const url = posterUrl({ genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", bq: "0", imdbId: "tt0133093", sep: "1", rsrc: "imdb,tmdb" })
+    const poster = await renderPoster(page, url)
+    await expect(poster).toHaveScreenshot("poster-separate-ratings-noquality.png", { maxDiffPixelRatio: 0.10 })
+  })
+
+  test("separate ratings ignored in landscape (average kept) — screenshot", async ({ page }) => {
+    // Portrait-only: in landscape sep=1 non cambia niente (media ★ invariata).
+    const url = posterUrl({ backdrop: "/mocked/backdrop.jpg", shape: "landscape", genreName: "Action", voteAverage: "7.8", badges: "1", ranking: "0", imdbId: "tt0133093", sep: "1", rsrc: "imdb,tmdb,tomatoes" })
+    const poster = await renderPoster(page, url)
+    await expect(poster).toHaveScreenshot("poster-separate-ratings-landscape.png", { maxDiffPixelRatio: 0.10 })
   })
 })

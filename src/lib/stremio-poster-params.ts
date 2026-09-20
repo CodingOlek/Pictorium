@@ -25,6 +25,8 @@ export interface StremioPosterParamsInput {
   /** Riga rating custom provider (display). `false` emette `cr=0`. */
   readonly customRatings?: boolean
   readonly ratingSources?: string[]
+  /** Colonna rating separati: emessa come `sep=1` solo quando attiva (default OFF, cache stabile). */
+  readonly separateRatings?: boolean
   /** Ordine sash (emesso come `sash` solo quando non-default). */
   readonly sashOrder?: readonly SashBucket[] | null
   readonly badgeStyle?: BadgeStyle
@@ -129,6 +131,7 @@ export function buildStremioPosterSearchParams(input: StremioPosterParamsInput):
   const mq = parseMinQuality(input.minQuality ?? null)
   if (mq && mq !== "SD") params.set("qmin", mq)
   if (input.customRatings === false) params.set("cr", "0")
+  if (input.separateRatings) params.set("sep", "1")
   if (input.ratingSources && input.ratingSources.length > 0) params.set("rsrc", input.ratingSources.join(","))
   if (input.sashOrder && !isDefaultSashOrder(input.sashOrder)) {
     const parsed = parseSashOrder(input.sashOrder.join(","))

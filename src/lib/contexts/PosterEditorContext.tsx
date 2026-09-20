@@ -34,6 +34,9 @@ export interface PosterEditorCtx {
   setCustomRatings: (v: boolean | ((prev: boolean) => boolean)) => void
   ratingSources: string[]
   setRatingSources: (v: string[] | ((prev: string[]) => string[])) => void
+  /** Colonna rating separati a destra (sostituisce la media ★, default OFF). */
+  separateRatings: boolean
+  setSeparateRatings: (v: boolean | ((prev: boolean) => boolean)) => void
   badgeStyle: BadgeStyle
   setBadgeStyle: (v: BadgeStyle | ((prev: BadgeStyle) => BadgeStyle)) => void
   rankingBadgeStyle: RankingBadgeStyle
@@ -121,6 +124,8 @@ export interface PosterEditorCtx {
   setDefaultCustomRatingApiKeyHeader: (v: string | undefined | ((prev: string | undefined) => string | undefined)) => void
   defaultRatingSources: string[]
   setDefaultRatingSources: (v: string[] | ((prev: string[]) => string[])) => void
+  defaultSeparateRatings: boolean
+  setDefaultSeparateRatings: (v: boolean | ((prev: boolean) => boolean)) => void
   /** Bucket sash abilitati (ordine canonico; vuota = tutto spento). */
   defaultSashOrder: SashBucket[]
   setDefaultSashOrder: (v: SashBucket[] | ((prev: SashBucket[]) => SashBucket[])) => void
@@ -289,7 +294,7 @@ export function PosterEditorProvider({
 
   const {
     globalBadges, rankingBadges, networkLogo, preRelease, ribbonSide, posterShape, logoAlign,
-    badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources,
+    badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources, separateRatings,
     gradientHeight, blurIntensity, blurFade, blurDarkness, blurEnabled, tintStrength,
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY,
     genreBadgeScale, qualityBadgeScale, networkLogoScale,
@@ -303,7 +308,7 @@ export function PosterEditorProvider({
     defaultGenreBadgeScale, defaultQualityBadgeScale, defaultNetworkLogoScale,
     defaultGenreBadgeOffsetX, defaultGenreBadgeOffsetY, defaultQualityBadgeOffsetX, defaultQualityBadgeOffsetY,
     defaultNetworkLogoOffsetX, defaultNetworkLogoOffsetY,
-    defaultBadgeGenre, defaultBadgeYear, defaultBadgeRating, defaultBadgeQuality, defaultCustomRatings, defaultCustomRatingEndpoint, defaultCustomRatingApiKeyHeader, defaultRatingSources, defaultSashOrder,
+    defaultBadgeGenre, defaultBadgeYear, defaultBadgeRating, defaultBadgeQuality, defaultCustomRatings, defaultCustomRatingEndpoint, defaultCustomRatingApiKeyHeader, defaultRatingSources, defaultSeparateRatings, defaultSashOrder,
     defaultAutoRotateClean, defaultAutoRotateBackdrop, defaultPortraitFitEnabled, defaultLandscapeFitEnabled, defaultNetworkLogo, defaultPreRelease, defaultRibbonSide, defaultPosterShape, defaultLogoAlign,
     episodeMetadataSource, defaultEpisodeMetadataSource,
     region, defaultRegion,
@@ -350,6 +355,11 @@ export function PosterEditorProvider({
       const next = typeof v === "function" ? v(ratingSources) : v
       update({ ratingSources: next })
     }, [ratingSources, update])
+  const setSeparateRatings = useCallback(
+    (v: boolean | ((prev: boolean) => boolean)) => {
+      const next = typeof v === "function" ? v(separateRatings) : v
+      update({ separateRatings: next })
+    }, [separateRatings, update])
   const setNetworkLogo = useCallback(
     (v: boolean | ((prev: boolean) => boolean)) => {
       const next = typeof v === "function" ? v(networkLogo) : v
@@ -633,6 +643,11 @@ export function PosterEditorProvider({
       const next = typeof v === "function" ? v(defaultRatingSources) : v
       update({ defaultRatingSources: next })
     }, [defaultRatingSources, update])
+  const setDefaultSeparateRatings = useCallback(
+    (v: boolean | ((prev: boolean) => boolean)) => {
+      const next = typeof v === "function" ? v(defaultSeparateRatings) : v
+      update({ defaultSeparateRatings: next })
+    }, [defaultSeparateRatings, update])
   const setDefaultSashOrder = useCallback(
     (v: SashBucket[] | ((prev: SashBucket[]) => SashBucket[])) => {
       const next = typeof v === "function" ? v(defaultSashOrder) : v
@@ -728,6 +743,8 @@ export function PosterEditorProvider({
       setCustomRatings,
       ratingSources,
       setRatingSources,
+      separateRatings,
+      setSeparateRatings,
       badgeStyle,
       setBadgeStyle,
       rankingBadgeStyle,
@@ -812,6 +829,8 @@ export function PosterEditorProvider({
       setDefaultCustomRatingApiKeyHeader,
       defaultRatingSources,
       setDefaultRatingSources,
+      defaultSeparateRatings,
+      setDefaultSeparateRatings,
       defaultSashOrder,
       setDefaultSashOrder,
       defaultAutoRotateClean,
@@ -934,6 +953,7 @@ export function PosterEditorProvider({
       badgeQuality, setBadgeQuality,
       customRatings, setCustomRatings,
       ratingSources, setRatingSources,
+      separateRatings, setSeparateRatings,
       badgeStyle, setBadgeStyle,
       rankingBadgeStyle, setRankingBadgeStyle,
       customBadge, setCustomBadge,
@@ -987,6 +1007,7 @@ export function PosterEditorProvider({
       defaultCustomRatingEndpoint, setDefaultCustomRatingEndpoint,
       defaultCustomRatingApiKeyHeader, setDefaultCustomRatingApiKeyHeader,
       defaultRatingSources, setDefaultRatingSources,
+      defaultSeparateRatings, setDefaultSeparateRatings,
       defaultSashOrder, setDefaultSashOrder,
       defaultAutoRotateClean, setDefaultAutoRotateClean,
       defaultAutoRotateBackdrop, setDefaultAutoRotateBackdrop,

@@ -17,7 +17,7 @@ import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel, isValidWikidata
 import { createT } from "@/lib/i18n"
 import type { EnrichedAnimeItem } from "@/lib/validation"
 import { fetchMDBList, type MDBListEntry } from "@/lib/mdblist"
-import { fetchAggregatedRating, resolveRatingSources } from "@/lib/ratings"
+import { fetchAggregatedRating, pickSeparateRatings, resolveRatingSources, type SeparateRating } from "@/lib/ratings"
 import { isImdbTop250 } from "@/lib/imdb-top250"
 import { getEffectiveRotationState, tryRotatePoster, getEffectiveBackdropRotationState, tryRotateBackdrop } from "@/lib/poster-rotation"
 import { getTMDBSessionCache, setTMDBSessionCache } from "@/lib/tmdb-session-cache"
@@ -186,9 +186,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // richiesta > namespace utente > env d'istanza. Con `scopedUser` null sono
   // identiche a oggi (byte-identico).
   const effKeys = await resolveUserApiKeys(req, scopedUser)
-  const effTmdbKey = effKeys.tmdb.key
-  const effMdblistKey = effKeys.mdblist.key
-  const effTvdbKey = effKeys.tvdb.key
+  const effTmdbKey = effKeys.tmdb?.key
+  const effMdblistKey = effKeys.mdblist?.key
+  const effTvdbKey = effKeys.tvdb?.key
+  const effSimklKey = effKeys.simkl?.key
 
   // Decode optional stateless config token (stile AIOMetadata / RPDB)
   const configToken = req.nextUrl.searchParams.get("config") || req.nextUrl.searchParams.get("c")
@@ -283,6 +284,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     : (mapping?.customRatings ?? configOverride?.customRatings ?? sd.customRatings ?? true)
   const envRatingConfig = resolveCustomRatingConfig({}, sd)
   const customRatingConfig = { ...envRatingConfig, enabled: envRatingConfig.enabled && customRatingsDisplay }
+  // Colonna rating separati (display) — catena: query `sep` > mapping >
+  // config token > server defaults > false (stessa di `cr` sopra).
+  const qSep = req.nextUrl.searchParams.get("sep")
+  const sepDisplay = qSep !== null
+    ? qSep !== "0"
+    : (mapping?.separateRatings ?? configOverride?.separateRatings ?? sd.separateRatings ?? false)
   const customRatingHash = customRatingConfig.enabled
     ? createHash("sha256").update(JSON.stringify(customRatingConfig)).digest("hex") : ""
   const sdHash = hashKey(JSON.stringify(sd) + customRatingHash)
@@ -308,6 +315,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // dalla chiave (solo accesso upstream), quindi niente frammentazione.
   cacheParams.delete("mdblist_key")
   if (effMdblistKey) cacheParams.set("mdb", "1")
+  cacheParams.delete("simkl_key")
+  if (effSimklKey) cacheParams.set("simkl", "1")
   // B1: la chiave TVDB non entra mai in chiaro nella cache key (segreto in
   // memoria); il flag `tvdb=1` separa le entry con rescue attivo da quelle
   // senza (output diverso a parità di altri parametri).
@@ -339,7 +348,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // Rating dinamici: con provider abilitato niente cache immutable annuale
   // (i rating cambiano) — vale anche il display-aware locale: solo la riga
   // davvero renderizzata rinuncia all'immutable.
-  const immutablePoster = !customRatingConfig.enabled && isImmutablePosterRequest(req.nextUrl.searchParams, {
+  const immutablePoster = !customRatingConfig.enabled && !sepDisplay && isImmutablePosterRequest(req.nextUrl.searchParams, {
     hasMapping: !!mapping,
     isRotating,
     mappingVersionMatches: !!currentMappingVersion && req.nextUrl.searchParams.get("mv") === currentMappingVersion,
@@ -539,6 +548,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   let aggregatedRating: ReturnType<typeof fetchAggregatedRating> | null = null
   let multiRatingOnly = false
   const ratings: RatingItem[] = []
+  // Colonna rating separati: popolata dai sources aggregati dopo la race
+  // (solo portrait — il gate è qui, non in poster-config che resta pura).
+  let sepItems: SeparateRating[] = []
   let ratingAbort: AbortController | null = null
   let showBadges = true
   let rankingBadges = true
@@ -713,9 +725,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       // session): il fetch qui è l'ultima ruota, non la prima.
       if (!wikidataId) wikidataId = extIds.wikidata_id ?? null
       // A1: fetch deferito — la media TMDB+IMDb parte subito ma non blocca.
+      // Simkl solo se tra le fonti richieste: la colonna separati pesca da
+      // reqRatingSources, quindi sep=1 senza simkl in rsrc non deve pagare i
+      // 2 hop Simkl (BYOK: solo chi ha la chiave li pagherebbe comunque).
+      // Stessa regola per le fonti anime (AniZip + provider, solo se richieste).
+      const wantSimkl = reqRatingSources.includes("simkl") && !!effSimklKey
+      const wantAnilist = reqRatingSources.includes("anilist")
+      const wantKitsu = reqRatingSources.includes("kitsu")
+      const wantImdb = reqRatingSources.includes("imdb")
       ratingAbort = imdbId ? new AbortController() : null
       aggregatedRating = imdbId
-        ? fetchAggregatedRating(imdbId, effMdblistKey, ratingAbort!.signal).catch(() => null)
+        ? fetchAggregatedRating(imdbId, effMdblistKey, ratingAbort!.signal, {
+            simklKey: effSimklKey,
+            tmdbId,
+            mediaType,
+            wantSimkl,
+            wantAnilist,
+            wantKitsu,
+            wantImdb,
+            // Voto TMDB diretto come backfill di sources.tmdb (MDBList down).
+            tmdbFallbackVote: details.vote_average ?? undefined,
+          }).catch(() => null)
         : Promise.resolve(null)
       genreName = details.genres[0]?.name || null
       voteAverage = details.vote_average ?? 0
@@ -1164,7 +1194,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           ? getKeywords(mediaType, tmdbId, effTmdbKey, renderAbort.signal, POSTER_TMDB_TIMEOUT_MS).catch(() => [])
           : Promise.resolve([]),
         (async () => {
-          if (!rankingEnabledEarly && !customRatingConfig.enabled) return false
+          // La colonna separati (solo portrait) richiede gli stessi aggregated
+          // dei custom rating: senza, preview e poster mappati non avrebbero
+          // mai i sources (desync WYSIWYG).
+          const sepFetch = sepDisplay && !isLandscape
+          if (!rankingEnabledEarly && !customRatingConfig.enabled && !sepFetch) return false
           if (!imdbId) {
             // F6: externalIds già in session cache (ramo non-mappato) → niente rete.
             const extIds = getTMDBSessionCache(mediaType, tmdbId)?.externalIds
@@ -1172,14 +1206,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
             if (extIds?.imdb_id) imdbId = extIds.imdb_id
           }
           if (!imdbId) return false
-          if (customRatingConfig.enabled && !aggregatedRating) {
+          if ((customRatingConfig.enabled || sepFetch) && !aggregatedRating) {
             // Saved/query posters need source data only; keep their legacy vote intact.
             multiRatingOnly = true
             ratingAbort = new AbortController()
+            const wantSimkl = reqRatingSources.includes("simkl") && !!effSimklKey
+            const wantAnilist = reqRatingSources.includes("anilist")
+            const wantKitsu = reqRatingSources.includes("kitsu")
+            const wantImdb = reqRatingSources.includes("imdb")
             aggregatedRating = fetchAggregatedRating(
               imdbId,
               effMdblistKey,
               combineAbortSignals(AbortSignal.any([renderAbort.signal, ratingAbort.signal]), RATING_WAIT_MS),
+              {
+                simklKey: effSimklKey,
+                tmdbId,
+                mediaType,
+                wantSimkl,
+                wantAnilist,
+                wantKitsu,
+                wantImdb,
+              },
             ).catch(() => null)
           }
           return rankingEnabledEarly ? isImdbTop250(imdbId, renderAbort.signal) : false
@@ -1215,6 +1262,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
         const avgVote = computeVote(aggregated, reqRatingSources)
         if (typeof avgVote === "number" && avgVote > 0) voteAverage = avgVote
       }
+      // Colonna separati: dai sources aggregati (anche con media skippata via
+      // multiRatingOnly — i sources servono comunque). Vuoto → fallback media.
+      if (sepDisplay && !isLandscape) sepItems = pickSeparateRatings(aggregated, reqRatingSources)
       ratingAbort?.abort()
     }
 
@@ -1343,6 +1393,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       queryExtra, qNetLogo, networkLogo, ribbonSide,
       preRelease, posterShape, logoAlign, hideLogo,
     } = renderConfig
+
+    // Colonna rating separati attiva solo con badge voto visibili e almeno un
+    // valore: sostituisce il segmento ★ nel badge genere (sostituire, non
+    // sommare). Senza valori → fallback media invariato.
+    const useSeparate = badgesEnabled && badgeRating && sepItems.length > 0
+    const effectiveBadgeRating = badgeRating && !useSeparate
 
     // Render degradato per timeout/errore upstream sulla qualità (solo se il
     // badge FINALE è attivo e senza override esplicito): TTL effimero 120s
@@ -1474,6 +1530,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
             badgeYear,
             badgeRating,
             badgeQuality,
+            separateRatings: useSeparate,
             sashOrder,
             customBadge: queryExtra,
           },
@@ -1528,7 +1585,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       backdropScale, backdropOffsetX, backdropOffsetY,
       blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness, tintStrength,
       badgesEnabled, rankingEnabled, genreName, voteAverage, badgeStyle,
-      rankingBadgeStyle, badgeGenre, badgeYear, badgeRating, badgeQuality,
+      rankingBadgeStyle, badgeGenre, badgeYear, badgeRating: effectiveBadgeRating, badgeQuality,
+      separateRatings: useSeparate ? sepItems : undefined,
       sashOrder,
       quality: finalQuality,
       topLight, bottomLight, targetCenter, ribbonSide,
@@ -1567,7 +1625,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
 
     // 10. Fix stale auto ETag: include dynamic data (rank, rating) so when it re-renders, the ETag changes
     if (!mapping && !isPreview) {
-      etag = `${etag.slice(0, -1)}:${finalRank ?? "X"}:${imdbTop250}:${voteAverage ?? "0"}:${applyPreRelease ? "P" : "x"}"`
+      const sepSig = useSeparate ? sepItems.map((s) => `${s.id}${s.value}`).join(",") : ""
+      etag = `${etag.slice(0, -1)}:${finalRank ?? "X"}:${imdbTop250}:${voteAverage ?? "0"}:${applyPreRelease ? "P" : "x"}:${sepSig}"`
     }
 
     // 11. Cache + response

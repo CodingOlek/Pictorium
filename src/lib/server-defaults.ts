@@ -37,6 +37,8 @@ export interface ServerDefaults {
   /** Header della chiave provider (UI). Default "X-API-Key". */
   customRatingApiKeyHeader?: string
   ratingSources?: string[]
+  /** Colonna rating separati a destra (sostituisce la media ★). Default OFF. */
+  separateRatings?: boolean
   /** Ordine/priorità sash (sottoinsieme ammesso: non listati = spenti). Default = ordine standard. */
   sashOrder?: SashBucket[]
   autoRotateClean?: boolean
@@ -129,6 +131,8 @@ function defaultsFromEnv(): ServerDefaults {
   if (cr !== undefined) d.customRatings = cr
   const rsrcEnv = getEnv("RATING_SOURCES")?.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
   if (rsrcEnv && rsrcEnv.length > 0) d.ratingSources = rsrcEnv
+  const sepR = envBool("SEPARATE_RATINGS")
+  if (sepR !== undefined) d.separateRatings = sepR
   // Ordine sash da env (stesso formato della query): token validi, dedup.
   // Vuoto/invalido → ignorato (default). Array salvato via UI non toccato qui.
   const sashEnv = getEnv("SASH_ORDER")?.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)

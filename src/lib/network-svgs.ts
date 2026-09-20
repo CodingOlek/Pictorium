@@ -90,6 +90,7 @@ const NETWORK_FILES: Record<string, string> = {
   skydance: "Skydance_Media_2020.svg",
   dg_cinema: "direzione-generale-cinema-e-audiovisivo-vector-logo.svg",
   dc: "DC_Studios_logo.svg",
+  bigtalk: "Big+Talk+Studios+-+Logo+-+Brandmark.webp",
 }
 
 // Falso positivo NBC giapponese (Jujutsu Kaisen tmdb 95479): network list contiene 25+ regionali tra cui "NBC" (Nagasaki Broadcasting).
@@ -251,6 +252,7 @@ function getNetworkKey(networkName: string): string | null {
   if (lower.includes("bandai")) return "bandai"
   if (lower.includes("mappa")) return "mappa"
   if (lower.includes("skydance")) return "skydance"
+  if (lower.includes("big talk")) return "bigtalk"
   if (lower.includes("direzione generale") || lower.includes("cinema e audiovisivo") || lower.includes("dg cinema")) return "dg_cinema"
   return null
 }

@@ -58,9 +58,10 @@ function recordFailure(): void {
 // Esposte per i test unitari del circuito (stesso pattern di __resetJWRankingsCache).
 export { isBreakerOpen, recordSuccess, recordFailure }
 
-/** Solo per i test: azzera lo stato del circuit breaker. */
+/** Solo per i test: azzera lo stato dei circuit breaker Wikidata. */
 export function __resetCircuitBreaker(): void {
   wikidataBreaker.reset()
+  wikidataRestBreaker.reset()
 }
 
 // ---- Concurrency limiter (max 2 parallel SPARQL queries) ----

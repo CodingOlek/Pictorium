@@ -1,6 +1,8 @@
 import sharp from "sharp"
 import type { RatingItem } from "./custom-rating/types"
 import { renderMultiRatings } from "./multi-rating-renderer"
+import type { SeparateRating } from "./ratings"
+import { renderSeparateRatingStack } from "./separate-rating-renderer"
 import { cacheGet, cacheSet } from "./cache"
 import { GENRE_FALLBACK, cinematicVignetteSVG, cinematicCornerGradientSVG } from "./badges"
 import { applyBlur } from "./blur"
@@ -61,6 +63,8 @@ const IMAGE_CACHE_TAG = "poster-extract"
 
 export interface GenerationInput {
   ratings?: RatingItem[]
+  /** Colonna rating separati a destra (sostituisce la media ★). Solo portrait, max 3. */
+  separateRatings?: readonly SeparateRating[]
   // Images (already fetched)
   posterBuf: Buffer
   logoFetch: Buffer | null
@@ -338,6 +342,7 @@ const NETWORK_FILES_COMBINED: Record<string, string> = {
   skydance: "Skydance_Media_2020.svg",
   dg_cinema: "direzione-generale-cinema-e-audiovisivo-vector-logo.svg",
   dc: "DC_Studios_logo.svg",
+  bigtalk: "Big+Talk+Studios+-+Logo+-+Brandmark.webp",
 }
 
 // B4: memo per (networkKey, targetH, fg). Gli SVG in public/networks/ sono
@@ -993,6 +998,9 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
       composites.push({ input: safeGenreBadgeResult.png, top: badgeY, left: badgeLeft })
     }
   }
+  // Riga custom provider: se renderizzata, la colonna separati si nasconde
+  // (mai due stack di rating impilati — il provider vince).
+  let customRowRendered = false
   if (input.ratings?.length) {
     // Optional enrichment must never prevent the original poster from rendering.
     // La riga sta sopra il badge genere, in basso: stessa polarità del fondo.
@@ -1003,6 +1011,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
           : CH - safeGenreBadgeResult.h - Math.max(0, Math.round(targetCenter - safeGenreBadgeResult.h / 2)) + genreBadgeOffsetY)
         : CH - 20
       composites.push({ input: row.png, left: Math.round((CW - row.w) / 2), top: Math.max(0, legacyTop - row.h - 10) })
+      customRowRendered = true
     }
   }
   const isRightRibbon = ribbonSide === "right"
@@ -1058,6 +1067,11 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   // con nastro Netflix o Coming Soon. Senza logo film resta il layout storico
   // (top-left, o a fianco del nastro).
   // netTopLeftBottom traccia il fondo del logo network quando occupa il top-left (per qualità Stremio sotto).
+  // Tuning editoriale globale (default per tutti i poster, entrambi i lati):
+  // pill network +10px Y; qualità +10px X lato Nuvio, -30px X lato Stremio.
+  const NETWORK_LOGO_SHIFT_Y = 10
+  const QUALITY_SHIFT_X_NUVIO = 10
+  const QUALITY_SHIFT_X_STREMIO = -30
   let netTopLeftBottom: number | null = null
   if (networkLogoForLayout) {
     const gap = Math.round(6 * CH / 570)
@@ -1115,14 +1129,14 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
         top = (showComingSoon && ribbonLayout && ribbonSide !== "right") ? ribbonLayout.extent + gap : netPadY
         left = netPadX
         fittedRaw = await shrinkToAvoidRank(fittedRaw, top, left)
-        netTopLeftBottom = top + fittedRaw.h
+        netTopLeftBottom = top + NETWORK_LOGO_SHIFT_Y + fittedRaw.h
       } else if (logoResult) {
         // Con logo film ma SENZA nastro Netflix né Coming Soon: in alto a
         // sinistra (resta a sinistra anche con side="right").
         top = netPadY
         left = netPadX
         fittedRaw = await shrinkToAvoidRank(fittedRaw, top, left)
-        netTopLeftBottom = top + fittedRaw.h
+        netTopLeftBottom = top + NETWORK_LOGO_SHIFT_Y + fittedRaw.h
       } else {
         // Con nastro Netflix senza logo film: top-left o a fianco del nastro
         top = netPadY
@@ -1140,13 +1154,15 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
             if (left > maxLeft) left = maxLeft
           }
         }
-        netTopLeftBottom = top + fittedRaw.h
+        netTopLeftBottom = top + NETWORK_LOGO_SHIFT_Y + fittedRaw.h
       }
       composites.push({
         input: fittedRaw.png,
         // Offset applicati DOPO il posizionamento automatico (come il badge
         // qualità): la logica overlap/shrink ragiona sulla posizione ancorata.
-        top: top + networkLogoOffsetY,
+        // NETWORK_LOGO_SHIFT_Y è default globale (tuning editoriale), non
+        // offset utente: sposta anche l'ancora netTopLeftBottom sotto.
+        top: top + networkLogoOffsetY + NETWORK_LOGO_SHIFT_Y,
         left: left + networkLogoOffsetX,
       })
     }
@@ -1157,6 +1173,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   // altrimenti impilata sotto di esso. Top allineato al logo network.
   // Il badge centrale resta invariato: se si sovrappone alla qualità,
   // rimpicciolisce la qualità (fino a 0.55x).
+  let qualityStackAnchor: { top: number; centerX: number; leftCorner: boolean } | null = null
   if (safeQualityBadgeResult) {
     const netBaseTop = Math.round(18 * CH / 570)
     const netPadX = Math.round(18 * CW / 380)
@@ -1168,8 +1185,10 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     // (era -20, alzato di 10 dalla situazione precedente).
     // Lo stacking sotto il logo network resta invariato (lì conta non
     // sovrapporsi, non la misura).
+    // Tuning editoriale globale: +10px X lato Nuvio, -30px X lato Stremio.
     let top = netBaseTop - 10
     let left = (isRightRibbonCorner ? netPadX : Math.round(CW - safeQualityBadgeResult.w - netPadX)) + 10
+      + (isRightRibbonCorner ? QUALITY_SHIFT_X_STREMIO : QUALITY_SHIFT_X_NUVIO)
     let finalQualityBadge = safeQualityBadgeResult
 
     if (isRightRibbonCorner) {
@@ -1219,6 +1238,43 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
       top: top + qualityBadgeOffsetY,
       left: left + qualityBadgeOffsetX,
     })
+    // Ancoraggio della colonna separati: sotto il badge qualità (asse
+    // centrale allineato). Senza qualità lo stack "sale" al top (vedi sotto).
+    qualityStackAnchor = {
+      top: top + qualityBadgeOffsetY + finalQualityBadge.h,
+      centerX: (left + qualityBadgeOffsetX) + finalQualityBadge.w / 2,
+      leftCorner: isRightRibbonCorner,
+    }
+  }
+
+  // Colonna rating separati a destra (solo portrait): UN solo bitmap con
+  // pill verticali logo-sopra/punteggio-sotto a larghezza uniforme,
+  // centrato sull'asse verticale del badge qualità (o all'angolo quando la
+  // qualità manca). Mai col custom provider.
+  if (!customRowRendered && input.separateRatings?.length && shape !== "landscape") {
+    const items = input.separateRatings.slice(0, 3)
+    const netPadX = Math.round(18 * CW / 380)
+    const netBaseTop = Math.round(18 * CH / 570)
+    // Senza qualità ma con nastro a destra, lo stack segue a sinistra come
+    // farebbe la qualità (stessa condizione del blocco sopra).
+    const rightCorner = qualityStackAnchor
+      ? qualityStackAnchor.leftCorner
+      : ((rankingBadgeStyle === "netflix" && ribbonSide === "right" && topBadge?.type === "rank" && !!finalRankBadge)
+        || (showComingSoon && ribbonSide === "right" && !!ribbonLayout))
+    const stackTop = qualityStackAnchor ? qualityStackAnchor.top + 5 : netBaseTop - 10
+    const stackKey = badgeCacheKey("separate", items.map((i) => `${i.id}${i.value}`).join(","), CW, topLight)
+    const cached = cacheGet<{ png: Buffer; w: number; h: number }>(stackKey)
+    const stack = cached ?? await coalesceBadgeRender(stackKey, () =>
+      renderSeparateRatingStack(items, badgePw, topLight)
+        .then((r) => { if (r) cacheSet(stackKey, r, ["badge"], BADGE_CACHE_TTL); return r })
+    )
+    const fitted = stack ? await fitBadgeToCanvas(stack, CW, CH) : null
+    if (fitted) {
+      const leftPos = qualityStackAnchor
+        ? Math.round(qualityStackAnchor.centerX - fitted.w / 2)
+        : (rightCorner ? netPadX : Math.round(CW - netPadX + 10 - fitted.w))
+      composites.push({ input: fitted.png, top: Math.max(0, stackTop), left: Math.max(0, Math.min(CW - fitted.w, leftPos)) })
+    }
   }
 
 

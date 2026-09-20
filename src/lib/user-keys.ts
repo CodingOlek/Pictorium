@@ -8,8 +8,8 @@ const log = createLogger("user-keys")
 
 const useKv = !!process.env.KV_REST_API_URL && !!process.env.KV_REST_API_TOKEN
 
-export type UserKeyKind = "tmdb" | "mdblist" | "tvdb"
-export const USER_KEY_KINDS: readonly UserKeyKind[] = ["tmdb", "mdblist", "tvdb"]
+export type UserKeyKind = "tmdb" | "mdblist" | "tvdb" | "simkl"
+export const USER_KEY_KINDS: readonly UserKeyKind[] = ["tmdb", "mdblist", "tvdb", "simkl"]
 
 export type UserKeys = Partial<Record<UserKeyKind, string>>
 
@@ -156,6 +156,7 @@ export async function getUserKeysStatus(userId: string): Promise<Record<UserKeyK
     tmdb: isValidBundle(file?.keys.tmdb),
     mdblist: isValidBundle(file?.keys.mdblist),
     tvdb: isValidBundle(file?.keys.tvdb),
+    simkl: isValidBundle(file?.keys.simkl),
   }
 }
 
@@ -179,12 +180,13 @@ export async function getUserKeysHealth(userId: string): Promise<UserKeysHealth>
     tmdb: isValidBundle(file?.keys.tmdb),
     mdblist: isValidBundle(file?.keys.mdblist),
     tvdb: isValidBundle(file?.keys.tvdb),
+    simkl: isValidBundle(file?.keys.simkl),
   }
   const key = encryptionKey()
   if (!key) {
-    return { present, decryptable: { tmdb: false, mdblist: false, tvdb: false }, encryptionAvailable: false }
+    return { present, decryptable: { tmdb: false, mdblist: false, tvdb: false, simkl: false }, encryptionAvailable: false }
   }
-  const decryptable: Record<UserKeyKind, boolean> = { tmdb: false, mdblist: false, tvdb: false }
+  const decryptable: Record<UserKeyKind, boolean> = { tmdb: false, mdblist: false, tvdb: false, simkl: false }
   for (const kind of USER_KEY_KINDS) {
     const bundle = file?.keys[kind]
     if (!isValidBundle(bundle)) continue

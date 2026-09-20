@@ -63,6 +63,7 @@ const defaultsSchema = z.object({
   }, { message: "customRatingEndpoint must be an http(s) URL containing {imdbId} without credentials" }),
   customRatingApiKeyHeader: z.string().max(64).optional(),
   ratingSources: z.array(z.string()).optional(),
+  separateRatings: z.boolean().optional(),
   sashOrder: z.array(z.string().max(20)).optional(),
   autoRotateClean: z.boolean().optional(),
   defaultAutoRotateBackdrop: z.boolean().optional(),

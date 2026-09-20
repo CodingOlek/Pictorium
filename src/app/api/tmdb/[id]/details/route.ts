@@ -24,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const language = req.nextUrl.searchParams.get("language") || "it-IT"
   const apiKey = await resolveRouteApiKey(req)
   const mdblistKey = await resolveRouteApiKey(req, "mdblist")
+  const simklKey = await resolveRouteApiKey(req, "simkl")
   // Stesso parser della poster route (Fix D): whitelist identica ovunque.
   const ratingSources = parseRatingSources(req.nextUrl.searchParams.get("rsrc")) ?? undefined
   const mediaType = type === "tv" || type === "series" ? "tv" : "movie"
@@ -31,15 +32,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
     return Response.json({ genres: [], voteAverage: 0, voteCount: 0, status: null, type: null, release_date: null, first_air_date: null, last_air_date: null, next_episode_to_air: null, number_of_seasons: null, number_of_episodes: null, title: null, name: null, imdb_id: null })
   }
-  // mdblist_key e rsrc cambiano il voto medio → parte del cache key.
+  // mdblist_key, simkl_key e rsrc cambiano il voto medio → parte del cache key.
+  // Le fonti anime non hanno chiavi (endpoint pubblici): rsrcKey le copre.
   const mdblistHash = mdblistKey ? crypto.createHash("sha1").update(mdblistKey).digest("hex").slice(0, 8) : ""
+  const simklHash = simklKey ? crypto.createHash("sha1").update(simklKey).digest("hex").slice(0, 8) : ""
   const rsrcKey = ratingSources ? ratingSources.slice().sort().join(",") : ""
-  // v12: il body include anche wikidata_id (fast-path REST awards). Le entry
-  // v11 in cache hanno shape senza e scadrebbero comunque per TTL, ma il bump
-  // rende deterministico il cutover invece di lasciarlo alla scadenza.
+  // v14: le fonti anime (anilist/kitsu) entrano negli aggregated via rsrcKey
   const cacheKey = rsrcKey
-    ? `details:v12:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}:${rsrcKey}`
-    : `details:v12:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}`
+    ? `details:v14:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}:${simklHash || "nosk"}:${rsrcKey}`
+    : `details:v14:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}:${simklHash || "nosk"}`
   interface Genre { id: number; name: string }
   interface Episode { id: number; name: string; air_date: string | null; episode_number: number; season_number: number }
 
@@ -59,8 +60,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           const ratingTimeout = new Promise<Awaited<ReturnType<typeof fetchAggregatedRating>>>((resolve) => {
             ratingTimer = setTimeout(() => resolve(null), RATING_WAIT_MS)
           })
+          const wantSimkl = !!(ratingSources?.includes("simkl") && simklKey)
+          const wantAnilist = !!ratingSources?.includes("anilist")
+          const wantKitsu = !!ratingSources?.includes("kitsu")
+          const wantImdb = !ratingSources || ratingSources.includes("imdb")
           const aggregated = await Promise.race([
-            fetchAggregatedRating(imdbId, mdblistKey).catch(() => null),
+            fetchAggregatedRating(imdbId, mdblistKey, undefined, {
+              simklKey,
+              tmdbId,
+              mediaType,
+              wantSimkl,
+              wantAnilist,
+              wantKitsu,
+              wantImdb,
+              tmdbFallbackVote: data.vote_average ?? undefined,
+            }).catch(() => null),
             ratingTimeout,
           ])
           if (ratingTimer) clearTimeout(ratingTimer)

@@ -25,6 +25,8 @@ interface BadgeParams {
   /** Riga rating custom provider (display). `false` emette `cr=0`. */
   customRatings?: boolean
   ratingSources?: string[]
+  /** Colonna rating separati. Emessa sempre esplicita in preview (`sep=0/1`, WYSIWYG). */
+  separateRatings?: boolean
   customBadge: string | null
   gradientHeight: number
   blurIntensity: number
@@ -127,6 +129,7 @@ export function buildUrlPattern(bp: BadgeParams & {
     badgeQuality: bp.badgeQuality,
     customRatings: bp.customRatings,
     ratingSources: bp.ratingSources,
+    separateRatings: bp.separateRatings,
     badgeStyle: bp.badgeStyle,
     rankingBadgeStyle: bp.rankingBadgeStyle,
     gradientHeight: bp.gradientHeight,
@@ -181,6 +184,7 @@ export function buildPreviewUrl(ps: PosterState, bp: BadgeParams): string {
   // cr SEMPRE esplicito in preview (ON e OFF): senza, un mapping salvato con
   // customRatings=false scavalcerebbe il toggle editor (desync WYSIWYG).
   params.push(`cr=${bp.customRatings === false ? "0" : "1"}`)
+  params.push(`sep=${bp.separateRatings ? "1" : "0"}`)
   if (bp.ratingSources && bp.ratingSources.length > 0) params.push(`rsrc=${encodeURIComponent(bp.ratingSources.join(","))}`)
   if (ps.previewPoster) {
     params.push(`poster=${encodeURIComponent(ps.previewPoster.file_path)}`)

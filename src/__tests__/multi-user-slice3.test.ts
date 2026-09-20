@@ -154,7 +154,7 @@ describe("wipe account (GDPR)", () => {
     )
     expect(res.status).toBe(200)
     expect(await store.getAll(uuid)).toHaveLength(0)
-    expect(await keys.getUserKeysStatus(uuid)).toEqual({ tmdb: false, mdblist: false, tvdb: false })
+    expect(await keys.getUserKeysStatus(uuid)).toEqual({ tmdb: false, mdblist: false, tvdb: false, simkl: false })
     // Auth cancellata: il token non verifica più (secondo DELETE → 401).
     const auth = await import("@/lib/user-auth")
     expect(await auth.verifyUserToken(uuid, secret)).toBe(false)

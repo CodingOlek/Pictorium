@@ -418,6 +418,10 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
 
                   {sourcesOpen && (
                     <div className="space-y-2 pt-0.5 animate-fade-in">
+                      <div className="flex items-center justify-between px-0.5 pt-1" title={t("ui.separateRatingsHint")}>
+                        <span className="text-[11px] text-zinc-300 font-medium">{t("ui.separateRatings")}</span>
+                        <Toggle value={ed.defaultSeparateRatings} onChange={(v) => ed.setDefaultSeparateRatings(v)} label={t("ui.separateRatings")} />
+                      </div>
                       <div className="flex items-center justify-between px-0.5">
                         <span className="text-[10px] text-muted leading-tight">
                           {t("ui.ratingSourcesHint")}
@@ -437,7 +441,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
                           <button
                             type="button"
                             onClick={() => {
-                              const def = ["imdb", "tmdb"]
+                              const def = ["imdb"]
                               ed.setDefaultRatingSources(def)
                             }}
                             className="text-muted hover:text-zinc-200 transition-colors cursor-pointer"

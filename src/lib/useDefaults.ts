@@ -49,6 +49,8 @@ export interface DefaultsState {
   /** Header chiave provider salvato via UI. */
   defaultCustomRatingApiKeyHeader?: string
   defaultRatingSources: string[]
+  /** Colonna rating separati di default (default OFF). */
+  defaultSeparateRatings: boolean
   /** Bucket sash abilitati (ordine canonico; vuota = tutto spento). */
   defaultSashOrder: SashBucket[]
   defaultAutoRotateClean: boolean
@@ -78,6 +80,8 @@ export interface DefaultsState {
   /** Riga rating custom provider (default ON). */
   customRatings: boolean
   ratingSources: string[]
+  /** Colonna rating separati a destra (default OFF). */
+  separateRatings: boolean
   networkLogo: boolean
   preRelease: boolean
   ribbonSide: RibbonSide
@@ -138,6 +142,7 @@ const DEFAULTS: DefaultsState = {
   defaultBadgeQuality: true,
   defaultCustomRatings: true,
   defaultRatingSources: ["imdb", "tmdb"],
+  defaultSeparateRatings: false,
   defaultSashOrder: [...DEFAULT_SASH_ORDER],
   defaultAutoRotateClean: false,
   defaultAutoRotateBackdrop: false,
@@ -159,6 +164,7 @@ const DEFAULTS: DefaultsState = {
   badgeQuality: true,
   customRatings: true,
   ratingSources: ["imdb", "tmdb"],
+  separateRatings: false,
   networkLogo: true,
   preRelease: false,
   ribbonSide: "left",
@@ -249,6 +255,8 @@ interface StoredDefaults {
   customRatingApiKeyHeader?: string
   defaultRatingSources?: string[]
   ratingSources?: string[]
+  defaultSeparateRatings?: boolean
+  separateRatings?: boolean
   /** Bucket sash abilitati (grezzi; normalizzati in buildFromStored). */
   defaultSashOrder?: string[]
   defaultAutoRotateClean?: boolean
@@ -341,6 +349,7 @@ function buildFromStored(d: StoredDefaults | null): DefaultsState {
     defaultCustomRatingEndpoint: d.defaultCustomRatingEndpoint ?? d.customRatingEndpoint,
     defaultCustomRatingApiKeyHeader: d.defaultCustomRatingApiKeyHeader ?? d.customRatingApiKeyHeader,
     defaultRatingSources: d.defaultRatingSources ?? d.ratingSources ?? ["imdb", "tmdb"],
+    defaultSeparateRatings: d.defaultSeparateRatings ?? d.separateRatings ?? false,
     defaultSashOrder: normalizeSashOrder(d.defaultSashOrder) ?? [...DEFAULT_SASH_ORDER],
     defaultAutoRotateClean: d.defaultAutoRotateClean ?? d.autoRotateClean ?? false,
     defaultAutoRotateBackdrop: d.defaultAutoRotateBackdrop ?? false,
@@ -363,6 +372,7 @@ function buildFromStored(d: StoredDefaults | null): DefaultsState {
     badgeQuality: d.badgeQuality ?? d.defaultBadgeQuality ?? true,
     customRatings: d.customRatings ?? d.defaultCustomRatings ?? true,
     ratingSources: d.ratingSources ?? d.defaultRatingSources ?? ["imdb", "tmdb"],
+    separateRatings: d.separateRatings ?? d.defaultSeparateRatings ?? false,
     networkLogo: d.networkLogo ?? d.defaultNetworkLogo ?? true,
     preRelease: d.preRelease ?? d.defaultPreRelease ?? false,
     ribbonSide: d.ribbonSide ?? d.defaultRibbonSide ?? "left",
@@ -432,6 +442,7 @@ function defaultsToPayload(d: DefaultsState): Record<string, unknown> {
     customRatingEndpoint: d.defaultCustomRatingEndpoint ?? "",
     customRatingApiKeyHeader: d.defaultCustomRatingApiKeyHeader ?? "",
     ratingSources: d.defaultRatingSources,
+    separateRatings: d.defaultSeparateRatings,
     sashOrder: d.defaultSashOrder,
     autoRotateClean: d.defaultAutoRotateClean,
     defaultAutoRotateBackdrop: d.defaultAutoRotateBackdrop,

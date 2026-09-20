@@ -253,7 +253,7 @@ export function resolveRequestApiKey(req: { headers: Headers | { get: (name: str
   return undefined
 }
 
-export type ApiKeyKind = "tmdb" | "mdblist" | "tvdb"
+export type ApiKeyKind = "tmdb" | "mdblist" | "tvdb" | "simkl"
 export type ApiKeySource = "header" | "query" | "namespace" | "env" | "none"
 
 export interface ResolvedApiKey {
@@ -265,6 +265,7 @@ export interface ResolvedUserApiKeys {
   tmdb: ResolvedApiKey
   mdblist: ResolvedApiKey
   tvdb: ResolvedApiKey
+  simkl: ResolvedApiKey
 }
 
 type KeyRequest = {
@@ -273,18 +274,20 @@ type KeyRequest = {
   url?: string
 }
 
-function searchParamsOf(req: KeyRequest): URLSearchParams | null {
-  try {
-    if (req.nextUrl?.searchParams) return req.nextUrl.searchParams
-    if (req.url) return new URL(req.url).searchParams
-    return null
-  } catch {
-    return null
+function searchParamsOf(req: KeyRequest): URLSearchParams | undefined {
+  if (req.nextUrl?.searchParams) return req.nextUrl.searchParams
+  if (req.url) {
+    try {
+      return new URL(req.url, "http://localhost").searchParams
+    } catch {
+      return undefined
+    }
   }
+  return undefined
 }
 
 /**
- * Chiave API effettiva per kind (multi-user, slice 2):
+ * Chiave API effettiva per kind (multi-user):
  * esplicita della richiesta > namespace utente (solo con `userId`) > env
  * globale d'istanza (opt-in). Con `userId` null il risultato è identico a
  * oggi (header/query/env, catene env invariate per kind).
@@ -300,6 +303,7 @@ function searchParamsOf(req: KeyRequest): URLSearchParams | null {
  * - tmdb: header `x-api-key` > query `api_key` > namespace.tmdb > env TMDB.
  * - mdblist: query `mdblist_key` > namespace.mdblist > env MDBLIST.
  * - tvdb: header `x-tvdb-key` > query `tvdb_key` > namespace.tvdb > env TVDB.
+ * - simkl: query `simkl_key` > header `x-simkl-key`/`simkl-api-key` > namespace.simkl > env SIMKL_CLIENT_ID/SIMKL_API_KEY.
  */
 export async function resolveUserApiKeys(
   req: KeyRequest,
@@ -309,9 +313,10 @@ export async function resolveUserApiKeys(
     tmdb: { key: undefined, source: "none" },
     mdblist: { key: undefined, source: "none" },
     tvdb: { key: undefined, source: "none" },
+    simkl: { key: undefined, source: "none" },
   }
   // 1. Richiesta esplicita (ogni kind indipendente: l'header TMDB non deve
-  // oscurare le query mdblist_key/tvdb_key).
+  // oscurare le query mdblist_key/tvdb_key/simkl_key).
   const headerTmdb = req.headers.get("x-api-key")
   if (headerTmdb) out.tmdb = { key: headerTmdb, source: "header" }
   const sp = searchParamsOf(req)
@@ -327,14 +332,21 @@ export async function resolveUserApiKeys(
     const headerTvdb = req.headers.get("x-tvdb-key")
     if (headerTvdb) out.tvdb = { key: headerTvdb, source: "header" }
   }
+  const querySimkl = sp?.get("simkl_key")
+  if (querySimkl) out.simkl = { key: querySimkl, source: "query" }
+  else {
+    const headerSimkl = req.headers.get("x-simkl-key") || req.headers.get("simkl-api-key")
+    if (headerSimkl) out.simkl = { key: headerSimkl, source: "header" }
+  }
   // 2. Namespace utente (una sola lettura per tutte le kind).
-  if (userId && (!out.tmdb.key || !out.mdblist.key || !out.tvdb.key)) {
+  if (userId && (!out.tmdb.key || !out.mdblist.key || !out.tvdb.key || !out.simkl.key)) {
     try {
       const { getUserKeys } = await import("@/lib/user-keys")
       const scoped = await getUserKeys(userId)
       if (!out.tmdb.key && scoped.tmdb) out.tmdb = { key: scoped.tmdb, source: "namespace" }
       if (!out.mdblist.key && scoped.mdblist) out.mdblist = { key: scoped.mdblist, source: "namespace" }
       if (!out.tvdb.key && scoped.tvdb) out.tvdb = { key: scoped.tvdb, source: "namespace" }
+      if (!out.simkl.key && scoped.simkl) out.simkl = { key: scoped.simkl, source: "namespace" }
     } catch {
       // getUserKeys logga già: qui fallback all'env sotto (degraded, mai throw).
     }
@@ -361,6 +373,10 @@ export async function resolveUserApiKeys(
   if (allowEnvFallback && !out.tvdb.key) {
     const env = envWithFallback("TVDB_API_KEY") || process.env.TVDB_API_KEY
     if (env) out.tvdb = { key: env, source: "env" }
+  }
+  if (allowEnvFallback && !out.simkl.key) {
+    const env = envWithFallback("SIMKL_CLIENT_ID") || process.env.SIMKL_CLIENT_ID || process.env.SIMKL_API_KEY
+    if (env) out.simkl = { key: env, source: "env" }
   }
   return out
 }

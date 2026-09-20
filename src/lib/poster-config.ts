@@ -89,6 +89,8 @@ export interface PosterRenderConfig {
   /** Riga rating custom provider (display). Default ON quando il provider è configurato. */
   customRatings: boolean
   ratingSources: string[]
+  /** Colonna rating separati a destra (sostituisce la media ★). Default OFF. Solo portrait (il gate è al sito d'uso). */
+  separateRatings: boolean
   logoScale: number | null
   logoOffsetX: number | null
   logoOffsetY: number | null
@@ -271,6 +273,12 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
     sd.ratingSources,
   )
 
+  // Colonna rating separati — stessa catena (query `sep` > mapping > config >
+  // server defaults > false). Il gate portrait-only è al sito d'uso (route):
+  // qui il flag resta puro per preview/WYSIWYG.
+  const qSep = q.get("sep")
+  const separateRatings = qSep !== null ? qSep !== "0" : (mapping?.separateRatings ?? configOverride?.separateRatings ?? sd.separateRatings ?? false)
+
   // Badge style — confinamento della query string al union type: valori non validi
   // cadono sul default (il renderer in passato li trattava come "shadow" nel ramo else).
   // In landscape vale SOLO il default (shadow): gli altri stili sono disegnati
@@ -442,6 +450,7 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
     sashOrder,
     customRatings,
     ratingSources,
+    separateRatings,
     logoScale,
     logoOffsetX,
     logoOffsetY,

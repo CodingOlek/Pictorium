@@ -15,7 +15,7 @@ import {
 } from "@/lib/user-token"
 import type { UserKeyKind } from "@/lib/user-keys"
 
-const KINDS: readonly UserKeyKind[] = ["tmdb", "mdblist", "tvdb"]
+const KINDS: readonly UserKeyKind[] = ["tmdb", "mdblist", "tvdb", "simkl"]
 
 // Contratto token col resto dell'app (ri-esportato per compatibilità):
 // secret di sessione, MAI in URL/query/log.
@@ -115,12 +115,21 @@ const SAVED_KEY_MASKS: Record<UserKeyKind, string> = {
   tmdb: "••••••••••••••••••••••••••••••••", // 32 caratteri (hex TMDB)
   mdblist: "••••••••••••••••••••••••••••", // 28 caratteri (MDBList)
   tvdb: "••••••••••••••••••••••••••••••••", // 32 caratteri (TVDB)
+  simkl: "••••••••••••••••••••••••••••••••", // Simkl Client ID
 }
 
 const DEVICE_KEY_NAMES: Record<UserKeyKind, string> = {
   tmdb: "tmdb_key",
   mdblist: "mdblist_key",
   tvdb: "tvdb_key",
+  simkl: "simkl_key",
+}
+
+const KIND_LABELS: Record<UserKeyKind, string> = {
+  tmdb: "TMDB",
+  mdblist: "MDBList",
+  tvdb: "TVDB",
+  simkl: "Simkl Client ID",
 }
 
 /**
@@ -138,14 +147,18 @@ export function UserKeysSection() {
   const [uuid, setUuid] = useState<string | null>(null)
   const [token, setToken] = useState("")
   const [status, setStatus] = useState<Record<UserKeyKind, boolean> | null>(null)
-  const [values, setValues] = useState<Record<UserKeyKind, string>>({ tmdb: "", mdblist: "", tvdb: "" })
-  const [dirty, setDirty] = useState<Record<UserKeyKind, boolean>>({ tmdb: false, mdblist: false, tvdb: false })
+  // Decifrabilità con la PROFILE_ENCRYPTION_KEY corrente (health dal server):
+  // presente ma non decifrabile = chiave inutilizzabile (env mancante/ruotata),
+  // il badge deve dirlo invece di un verde bugiardo.
+  const [healthy, setHealthy] = useState<Record<UserKeyKind, boolean> | null>(null)
+  const [values, setValues] = useState<Record<UserKeyKind, string>>({ tmdb: "", mdblist: "", tvdb: "", simkl: "" })
+  const [dirty, setDirty] = useState<Record<UserKeyKind, boolean>>({ tmdb: false, mdblist: false, tvdb: false, simkl: false })
   const [busy, setBusy] = useState(false)
   const [unauthorized, setUnauthorized] = useState(false)
   // Mostra/copia: valori digitati oppure rivelati dal server su richiesta
   // esplicita (reveal autenticato, mai in elenco). Dopo refresh/restart una
   // chiave salvata si rivela così, senza ridigitarla.
-  const [show, setShow] = useState<Record<UserKeyKind, boolean>>({ tmdb: false, mdblist: false, tvdb: false })
+  const [show, setShow] = useState<Record<UserKeyKind, boolean>>({ tmdb: false, mdblist: false, tvdb: false, simkl: false })
   const [copiedKind, setCopiedKind] = useState<UserKeyKind | null>(null)
   const [revealingKind, setRevealingKind] = useState<UserKeyKind | null>(null)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -160,7 +173,7 @@ export function UserKeysSection() {
     const stored = getStoredUserToken(id) || ""
     setToken(stored)
     // Riuso chiavi del dispositivo: precompila solo a status noto e assente.
-    const prefill: Record<UserKeyKind, string> = { tmdb: "", mdblist: "", tvdb: "" }
+    const prefill: Record<UserKeyKind, string> = { tmdb: "", mdblist: "", tvdb: "", simkl: "" }
     for (const kind of KINDS) prefill[kind] = safeGetItem(DEVICE_KEY_NAMES[kind])
     // Auth: secret oppure password di sessione (stile AIO). Il retry interno
     // copre il secret stantio che oscura la password fresca (niente refresh
@@ -178,9 +191,17 @@ export function UserKeysSection() {
       .then((data) => {
         if (!data) return
         setUnauthorized(false)
-        const next: Record<UserKeyKind, boolean> = { tmdb: false, mdblist: false, tvdb: false }
+        const next: Record<UserKeyKind, boolean> = { tmdb: false, mdblist: false, tvdb: false, simkl: false }
         for (const kind of KINDS) next[kind] = data[kind] === true
         setStatus(next)
+        const dec = data.health?.decryptable
+        if (dec && typeof dec === "object") {
+          const h: Record<UserKeyKind, boolean> = { tmdb: false, mdblist: false, tvdb: false, simkl: false }
+          for (const kind of KINDS) h[kind] = dec[kind] === true
+          setHealthy(h)
+        } else {
+          setHealthy(null)
+        }
         // Mai eco di segreti dal server; mai cancellare il digitato: riempi
         // solo i vuoti quando il server non ha nulla (prefill dispositivo).
         // Così il save (che scatena questo refresh via evento) non vaporizza
@@ -192,7 +213,7 @@ export function UserKeysSection() {
           }
           return vals
         })
-        setDirty({ tmdb: false, mdblist: false, tvdb: false })
+        setDirty({ tmdb: false, mdblist: false, tvdb: false, simkl: false })
       })
       .catch(() => null)
   }, [])
@@ -312,7 +333,7 @@ export function UserKeysSection() {
         // I valori restano negli input dopo il save (occhio/copia devono
         // funzionare anche a chiave salvata: il server non li restituisce
         // mai). Si azzerano solo al refresh — da lì serve ridigitarli.
-        setDirty({ tmdb: false, mdblist: false, tvdb: false })
+        setDirty({ tmdb: false, mdblist: false, tvdb: false, simkl: false })
         // Riallinea lo status chiavi del context (gate ricerca/hero): senza,
         // resterebbe stantio fino al refresh e i poster non partirebbero.
         // Stesso idioma del cambio password in UserSpaceSection.
@@ -326,7 +347,7 @@ export function UserKeysSection() {
     }
   }
 
-  const hasDirty = dirty.tmdb || dirty.mdblist || dirty.tvdb
+  const hasDirty = Object.values(dirty).some(Boolean)
   // Sblocco via secret salvato sul dispositivo oppure password di sessione
   // (unlock modal). Il secret si incolla solo nel modal, mai qui.
   const hasCredential = !!token.trim() || (!!uuid && !!getStoredUserPassword(uuid))
@@ -344,14 +365,20 @@ export function UserKeysSection() {
       {KINDS.map((kind) => {
         const isMasked = !!status?.[kind] && !dirty[kind] && !values[kind]
         const displayValue = isMasked ? (show[kind] ? "" : SAVED_KEY_MASKS[kind]) : values[kind]
+        // Tre stati onesti: verde solo se decifrabile (usabile), ambra se il
+        // bundle esiste ma la cifratura corrente non lo apre (da ridigitare),
+        // grigio se assente. Senza health dal server (vecchie risposte) vale
+        // la presenza storica.
+        const ok = healthy ? healthy[kind] : status?.[kind]
+        const broken = !!status?.[kind] && healthy !== null && !healthy[kind]
         return (
           <KeyRow
             key={kind}
-            label={kind}
+            label={KIND_LABELS[kind] || kind}
             badge={
               status ? (
-                <span className={`text-[10px] font-medium ${status[kind] ? "text-emerald-400" : "text-zinc-500"}`}>
-                  {status[kind] ? t("ui.userKeysSet") : t("ui.userKeysUnset")}
+                <span className={`text-[10px] font-medium ${ok ? "text-emerald-400" : broken ? "text-amber-400" : "text-zinc-500"}`}>
+                  {ok ? t("ui.userKeysSet") : broken ? t("ui.userKeysNeedsReset") : t("ui.userKeysUnset")}
                 </span>
               ) : undefined
             }
