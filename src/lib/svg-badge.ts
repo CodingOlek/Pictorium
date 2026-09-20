@@ -149,10 +149,11 @@ export async function buildGenreBadgeSVG(
     ? textColorForBg(accentColor || "")
     : isTranslucent
       ? (bottomLight ? "rgba(0,0,0,0.80)" : TRANSLUCENT_BADGE_TEXT)
-      : (isPill && s === "pill" && bottomLight)
-        // Pill satinata: su fondo chiaro la pill diventa grafite → testo chiaro.
-        ? "rgba(255,255,255,0.85)"
-        : (isPill ? "rgba(0,0,0,0.80)" : TRANSLUCENT_BADGE_TEXT)
+      : (isPill
+        // Pill satinata: stesso alto contrasto di bar/quality/ranking-default
+        // (su fondo chiaro la pill diventa grafite → testo chiaro).
+        ? (bottomLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)")
+        : TRANSLUCENT_BADGE_TEXT)
   const bgColor = s === "colored"
     ? (accentColor && accentColor !== "#555555" ? accentColor : "rgba(255,255,255,0.80)")
     : (isPill ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)")
@@ -251,8 +252,10 @@ export function buildNetflixRankBadgeSVG(rank: number, pw: number, topLight: boo
 
   // Nastro satinato traslucido a convenzione "pill" (chiaro su top scuro,
   // grafite su top chiaro) — testo, ombra singola, highlight e letter-spacing invariati.
+  // Stroke polarizzato come quality/default (scuro su pill chiara, chiaro su pill
+  // scura); il testo resta 0.80 perché ha già il textShadow dedicato.
   const textColor = topLight ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.80)"
-  const ribbonStroke = topLight ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)"
+  const ribbonStroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
 
   // Nastro top-left (side="left", default): ancorato al bordo sinistro del poster,
   // lato sinistro dritto e destro inclinato. Modalità Stremio (side="right"): nastro

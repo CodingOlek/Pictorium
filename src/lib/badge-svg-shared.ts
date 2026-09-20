@@ -222,8 +222,9 @@ export function buildGenrePillSvg(
   const textParts = buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX: ox + pillW / 2 + textOffsetX, y: oy + pillH / 2, parts })
   const gradDef = useSatin ? `<linearGradient id="gpg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>` : ""
   const fill = useSatin ? "url(#gpg)" : bgColor
+  const stroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
   const defs = `<defs>${STAR_GRADIENT_DEF}${gradDef}${TOP_SHADOW_FILTER}</defs>`
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}<rect x="${ox}" y="${oy}" width="${pillW}" height="${pillH}" rx="${pillR}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1" filter="url(#tds)"/><g fill="${textColor}">${textParts}</g></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}<rect x="${ox}" y="${oy}" width="${pillW}" height="${pillH}" rx="${pillR}" fill="${fill}" stroke="${stroke}" stroke-width="1.5" filter="url(#tds)"/><g fill="${textColor}">${textParts}</g></svg>`
   return { svg, w: renderW, h: renderH }
 }
 
@@ -345,15 +346,16 @@ export function buildRankingPillSvg(fullText: string, fs: number, textColor: str
   const boxH = badgeBoxHeight(fs)
   const r = boxH / 2
   const renderW = totalW + TOP_SHADOW_PAD * 2
-  const renderH = boxH + TOP_SHADOW_PAD
+  const renderH = boxH + TOP_SHADOW_PAD * 2
   const ox = TOP_SHADOW_PAD
-  const oy = 0
+  const oy = TOP_SHADOW_PAD
   const gradDef = useSatin ? `<linearGradient id="rpg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>` : ""
   const fill = useSatin ? "url(#rpg)" : bg
+  const stroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
   const defs = gradDef ? `<defs>${gradDef}${TOP_SHADOW_FILTER}</defs>` : ""
   const filterAttr = useSatin ? ' filter="url(#tds)"' : ""
   const textEl = `<text x="${ox + totalW / 2}" y="${oy + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(fullText)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(fullText)}</text>`
-  const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1"${filterAttr}/>`
+  const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${filterAttr}/>`
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}${bgEl}${textEl}</svg>`, w: renderW, h: renderH }
 }
 
@@ -418,15 +420,16 @@ export function buildExtraPillSvg(label: string, fs: number, textColor: string, 
   const boxH = badgeBoxHeight(fs)
   const r = boxH / 2
   const renderW = totalW + TOP_SHADOW_PAD * 2
-  const renderH = boxH + TOP_SHADOW_PAD
+  const renderH = boxH + TOP_SHADOW_PAD * 2
   const ox = TOP_SHADOW_PAD
-  const oy = 0
+  const oy = TOP_SHADOW_PAD
   const gradDef = useSatin ? `<linearGradient id="epg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>` : ""
   const fill = useSatin ? "url(#epg)" : bg
+  const stroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
   const defs = gradDef ? `<defs>${gradDef}${TOP_SHADOW_FILTER}</defs>` : ""
   const filterAttr = useSatin ? ' filter="url(#tds)"' : ""
   const textEl = `<text x="${ox + totalW / 2}" y="${oy + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(label)}" font-weight="700" font-size="${fs}" fill="${textColor}"${textFitAttrs(textW)}>${escSvg(label)}</text>`
-  const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="rgba(255,255,255,0.18)" stroke-width="1"${filterAttr}/>`
+  const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${filterAttr}/>`
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}${bgEl}${textEl}</svg>`, w: renderW, h: renderH }
 }
 
