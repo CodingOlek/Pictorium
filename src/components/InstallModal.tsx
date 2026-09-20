@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useMemo } from "react"
-import { X, Check, Copy, Download, ExternalLink, Tv, Sparkles, Film, Search } from "lucide-react"
+import { X, Check, Copy, Download, ExternalLink, Tv, Sparkles, Film, Search, Star } from "lucide-react"
 import QRCode from "qrcode"
 import { useT } from "@/lib/contexts/TranslationContext"
 import { copyText } from "@/lib/clipboard"
@@ -291,6 +291,23 @@ export function InstallModal({ isOpen, onClose, manifestUrl: propManifestUrl, po
               </div>
             </div>
           )}
+
+          {/* GitHub Star Support Footer */}
+          <div className="pt-2.5 border-t border-white/5 flex items-center justify-center">
+            <a
+              href="https://github.com/Eful97/Pictorium"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Star Pictorium on GitHub"
+              className="group flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              <span>Ti piace Pictorium?</span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20 text-amber-400 font-semibold group-hover:bg-amber-400/20 transition-all">
+                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                <span>Lascia una stella su GitHub</span>
+              </span>
+            </a>
+          </div>
         </div>
       </div>
     </Modal>

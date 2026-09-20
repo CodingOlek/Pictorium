@@ -12,6 +12,7 @@ import { currentPathUuid, isUserUnlocked, requestUserUnlock } from "@/lib/user-t
 import { requestSettingsTab } from "@/lib/settings-tab"
 import { isMultiUserServer } from "@/lib/guest-guard"
 import { Settings, Sparkles, QrCode, Palette, Layers, KeyRound } from "lucide-react"
+import { DesktopCommunityLinks, MobileCommunityLinks } from "@/components/HeaderCommunityLinks"
 
 // Code-splitting: viste/modali pesanti caricate on-demand per ridurre il JS iniziale.
 const SettingsPanel = dynamic(() => import("@/components/SettingsPanel").then((m) => m.SettingsPanel), { ssr: false })
@@ -177,6 +178,9 @@ export function AppShell() {
         />
       )}
 
+      {/* Desktop Top-Left Community Island (GitHub & Ko-fi Goal) */}
+      {!(view === "edit" && selected) && <DesktopCommunityLinks />}
+
       {/* Desktop Toolbar — Floating Island */}
       <div className="hidden md:flex absolute top-4 right-4 z-20">
         <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 relative z-50">
@@ -281,6 +285,7 @@ export function AppShell() {
             className="header-logo h-10 sm:h-14 md:h-24 w-auto cursor-pointer hover:brightness-110 active:scale-95 transition-all duration-150 mb-1.5 md:mb-2"
           />
           <p className="header-tagline text-center text-[10px] sm:text-xs md:text-sm mb-3.5 sm:mb-5 md:mb-6 max-w-xs sm:max-w-none">{t("ui.homeTagline")}</p>
+          <MobileCommunityLinks />
           </>
         </div>
         )}
