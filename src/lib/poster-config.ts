@@ -9,7 +9,7 @@ import type { PictoriumUserConfig } from "./config-token"
 import { effectiveMappingForShape, type Mapping, type PosterShape } from "./types"
 import type { ServerDefaults } from "./server-defaults"
 import { resolveLabelFor } from "./i18n"
-import { SUPPORTED_RATING_SOURCES, DEFAULT_RATING_SOURCES } from "./ratings"
+import { resolveRatingSources } from "./ratings"
 import { parseMinQuality, type StreamQuality } from "./quality-tiers"
 import { parseSashOrder, normalizeSashOrder, DEFAULT_SASH_ORDER, type SashBucket } from "./badge-priority"
 import {
@@ -262,11 +262,14 @@ export function resolvePosterRenderConfig(input: PosterRenderConfigInput): Poste
   const qCr = q.get("cr")
   const customRatings = qCr !== null ? qCr !== "0" : (mapping?.customRatings ?? configOverride?.customRatings ?? sd.customRatings ?? true)
 
-  const qRsrc = q.get("rsrc")
-  const validSources = SUPPORTED_RATING_SOURCES as readonly string[]
-  const ratingSources: string[] = qRsrc !== null
-    ? qRsrc.split(",").map((s) => s.trim().toLowerCase()).filter((s) => validSources.includes(s))
-    : (configOverride?.ratingSources ?? [...DEFAULT_RATING_SOURCES])
+  // Fonti voto medio ★ — catena canonica: query `rsrc` > mapping per-titolo >
+  // config token > server defaults > imdb+tmdb. Stessa dell'URL Stremio.
+  const ratingSources: string[] = resolveRatingSources(
+    q.get("rsrc"),
+    mapping?.ratingSources,
+    configOverride?.ratingSources,
+    sd.ratingSources,
+  )
 
   // Badge style — confinamento della query string al union type: valori non validi
   // cadono sul default (il renderer in passato li trattava come "shadow" nel ramo else).

@@ -623,6 +623,32 @@ describe("resolvePosterRenderConfig", () => {
     expect(rConfig.ratingSources).toEqual(["letterboxd", "trakt"])
   })
 
+  it("ratingSources chain is query > mapping > config > server defaults > imdb+tmdb", () => {
+    const rMapping = resolvePosterRenderConfig(baseInput({
+      mapping: mapping({ ratingSources: ["imdb"] }),
+      configOverride: config({ ratingSources: ["letterboxd"] }),
+      sd: { ratingSources: ["trakt"] },
+    }))
+    expect(rMapping.ratingSources).toEqual(["imdb"])
+
+    const rSd = resolvePosterRenderConfig(baseInput({
+      sd: { ratingSources: ["trakt", "letterboxd"] },
+    }))
+    expect(rSd.ratingSources).toEqual(["trakt", "letterboxd"])
+
+    const rQuery = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ rsrc: "IMDb, Tomatoes " }),
+      mapping: mapping({ ratingSources: ["trakt"] }),
+    }))
+    expect(rQuery.ratingSources).toEqual(["imdb", "tomatoes"])
+
+    const rGarbage = resolvePosterRenderConfig(baseInput({
+      searchParams: new URLSearchParams({ rsrc: "xyz,??? " }),
+      sd: { ratingSources: ["metacritic"] },
+    }))
+    expect(rGarbage.ratingSources).toEqual(["metacritic"])
+  })
+
   it("sashOrder defaults to standard order; query sash wins over server defaults", () => {
     expect(resolvePosterRenderConfig(baseInput()).sashOrder).toEqual(
       ["upcoming", "rank", "new", "award", "extra"],

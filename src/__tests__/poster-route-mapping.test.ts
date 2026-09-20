@@ -531,6 +531,55 @@ describe("GET /api/poster/[type]/[id] with saved mappings", () => {
     expect(mockedAggregatedRating).toHaveBeenCalledWith("tt1234567", undefined, expect.any(AbortSignal))
   })
 
+  it("honors single-source rsrc and falls back to default average on garbage rsrc (Fix A/D)", async () => {
+    const posterBuf = await imageBuffer("#101010", 500, 750)
+    const { fetchAggregatedRating } = await import("@/lib/ratings")
+    vi.mocked(fetchAggregatedRating).mockResolvedValue({
+      sources: { imdb: 8.0, tmdb: 6.0, metacritic: 9.0 },
+      average: 7.67,
+      count: 3,
+    })
+
+    mockedGetById.mockResolvedValue(null)
+    mockedGetDetails.mockResolvedValue({
+      id: 43,
+      title: "Rsrc Sources",
+      genres: [{ id: 18, name: "Drama" }],
+      vote_average: 6.0,
+      vote_count: 100,
+      original_language: "en",
+      release_date: "2024-01-15",
+      production_companies: [],
+    })
+    mockedGetImages.mockResolvedValue({
+      id: 43,
+      posters: [
+        { file_path: "/rsrc-clean.jpg", iso_639_1: null, vote_average: 8.0, vote_count: 100, width: 500, height: 750, aspect_ratio: 0.667 },
+      ],
+      logos: [],
+      backdrops: [],
+    })
+    mockedGetExternalIds.mockResolvedValue({ imdb_id: "tt7654321" })
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(posterBuf), {
+      status: 200,
+      headers: { "content-type": "image/png", "content-length": String(posterBuf.length) },
+    }))
+
+    const single = await GET(new NextRequest("http://localhost:3000/api/poster/movie/43?rsrc=metacritic&debug=1"), {
+      params: Promise.resolve({ type: "movie", id: "43" }),
+    })
+    expect(single.status).toBe(200)
+    expect((await single.json()).vote.average).toBeCloseTo(9.0)
+
+    const garbage = await GET(new NextRequest("http://localhost:3000/api/poster/movie/43?rsrc=xyz&debug=1"), {
+      params: Promise.resolve({ type: "movie", id: "43" }),
+    })
+    expect(garbage.status).toBe(200)
+    // Garbage rsrc → default imdb+tmdb (8+6)/2, come la details route — mai fallback TMDB.
+    expect((await garbage.json()).vote.average).toBeCloseTo(7.0)
+  })
+
   it("falls back to TMDB vote when the aggregated rating is not resolved in time", async () => {
     const posterBuf = await imageBuffer("#101010", 500, 750)
     const { fetchAggregatedRating } = await import("@/lib/ratings")

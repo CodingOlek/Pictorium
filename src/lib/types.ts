@@ -115,6 +115,10 @@ export interface Mapping {
   badgeQuality?: boolean | null
   /** Riga rating custom provider (display). Default ON quando il provider è configurato. */
   customRatings?: boolean | null
+  /** Fonti del voto medio ★ per-titolo (catena: query `rsrc` > mapping >
+   * config token > server defaults > imdb+tmdb). Assente nei mapping vecchi
+   * (seguono i default finché non risalvati). */
+  ratingSources?: string[] | null
   /** IMDb ID salvato al save: evita getExternalIds per i poster mappati. */
   imdbId?: string | null
   /** QID Wikidata salvato al save: fast-path REST awards senza SPARQL né

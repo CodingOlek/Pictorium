@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { fetchAggregatedRating, calculateAverageRating } from "@/lib/ratings"
+import { fetchAggregatedRating, calculateAverageRating, parseRatingSources, resolveRatingSources } from "@/lib/ratings"
 import { cacheClear } from "@/lib/cache"
 import * as cacheModule from "@/lib/cache"
 
@@ -116,5 +116,25 @@ describe("fetchAggregatedRating (D4 — mdblist key nel cache key, D5 — niente
     // Nessuna fonte trovata -> null
     expect(calculateAverageRating(sample, ["letterboxd", "mal"])).toBeNull()
     expect(calculateAverageRating(null)).toBeNull()
+  })
+})
+
+describe("parseRatingSources / resolveRatingSources (Fix D — parser unico rsrc)", () => {
+  it("null quando assente; whitelist + lowercase + trim quando presente", () => {
+    expect(parseRatingSources(null)).toBeNull()
+    expect(parseRatingSources(undefined)).toBeNull()
+    expect(parseRatingSources("IMDb, Tomatoes ")).toEqual(["imdb", "tomatoes"])
+    expect(parseRatingSources("imdb,xyz,trakt")).toEqual(["imdb", "trakt"])
+    expect(parseRatingSources("xyz")).toEqual([])
+    expect(parseRatingSources("")).toEqual([])
+  })
+
+  it("catena query > mapping > config > defaults > imdb+tmdb; vuoti saltati", () => {
+    expect(resolveRatingSources("trakt", ["imdb"], ["letterboxd"], ["metacritic"])).toEqual(["trakt"])
+    expect(resolveRatingSources(null, ["imdb"], ["letterboxd"], ["metacritic"])).toEqual(["imdb"])
+    expect(resolveRatingSources(null, null, ["letterboxd"], ["metacritic"])).toEqual(["letterboxd"])
+    expect(resolveRatingSources(null, [], undefined, ["metacritic"])).toEqual(["metacritic"])
+    expect(resolveRatingSources("xyz", ["imdb"])).toEqual(["imdb"])
+    expect(resolveRatingSources(null)).toEqual(["imdb", "tmdb"])
   })
 })

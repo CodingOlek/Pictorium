@@ -30,6 +30,9 @@ export const mappingSchema = z.object({
   badgeYear: z.boolean().nullable().optional(),
   badgeRating: z.boolean().nullable().optional(),
   customRatings: z.boolean().nullable().optional(),
+  // Fonti voto medio per-titolo: lasco al save (max 20 char come il token),
+  // strict al render via parseRatingSources (whitelist SUPPORTED_RATING_SOURCES).
+  ratingSources: z.array(z.string().max(20)).nullable().optional(),
   imdbId: z.string().regex(/^tt\d{1,20}$/).nullable().optional(),
   // QID Wikidata per il fast-path REST awards (stesso pattern imdbId).
   // Opzionale: i mapping vecchi senza campo restano validi (SPARQL-fallback).

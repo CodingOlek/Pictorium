@@ -1,7 +1,7 @@
 import crypto from "node:crypto"
 import { NextRequest } from "next/server"
 import { getDetails, getExternalIds, resolveRouteApiKey } from "@/lib/tmdb"
-import { fetchAggregatedRating, SUPPORTED_RATING_SOURCES } from "@/lib/ratings"
+import { fetchAggregatedRating, parseRatingSources } from "@/lib/ratings"
 import { computeVote } from "@/lib/rating-weights"
 import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
 import { cacheGet, cacheSet } from "@/lib/cache"
@@ -24,11 +24,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const language = req.nextUrl.searchParams.get("language") || "it-IT"
   const apiKey = await resolveRouteApiKey(req)
   const mdblistKey = await resolveRouteApiKey(req, "mdblist")
-  const rsrc = req.nextUrl.searchParams.get("rsrc") || undefined
-  const validSources = SUPPORTED_RATING_SOURCES as readonly string[]
-  const ratingSources = rsrc
-    ? rsrc.split(",").map((s) => s.trim().toLowerCase()).filter((s) => validSources.includes(s))
-    : undefined
+  // Stesso parser della poster route (Fix D): whitelist identica ovunque.
+  const ratingSources = parseRatingSources(req.nextUrl.searchParams.get("rsrc")) ?? undefined
   const mediaType = type === "tv" || type === "series" ? "tv" : "movie"
   const tmdbId = Number(id)
   if (!Number.isInteger(tmdbId) || tmdbId <= 0) {

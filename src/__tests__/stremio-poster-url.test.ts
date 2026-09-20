@@ -102,6 +102,26 @@ describe("buildStremioPosterUrl", () => {
     expect(url.searchParams.get("side")).toBe("right") // solo globale: mapping ignorato
   })
 
+  it("emits per-title ratingSources from the mapping, falling back to defaults", () => {
+    const perTitle = buildStremioPosterUrl({
+      origin: "http://localhost:3000",
+      type: "movie",
+      id: 123,
+      defaults: { ratingSources: ["tmdb", "imdb"] },
+      mapping: { ...mapping("2026-07-16T10:15:30.000Z"), ratingSources: ["imdb"] },
+    })
+    expect(perTitle.searchParams.get("rsrc")).toBe("imdb")
+
+    const fallback = buildStremioPosterUrl({
+      origin: "http://localhost:3000",
+      type: "movie",
+      id: 123,
+      defaults: { ratingSources: ["tmdb", "imdb"] },
+      mapping: mapping("2026-07-16T10:15:30.000Z"),
+    })
+    expect(fallback.searchParams.get("rsrc")).toBe("tmdb,imdb")
+  })
+
   it("ignores invalid mapping timestamps", () => {
     expect(mappingVersionParam(mapping("not-a-date"))).toBeNull()
   })

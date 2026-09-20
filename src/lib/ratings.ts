@@ -104,6 +104,37 @@ function avg(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length
 }
 
+/**
+ * Parsing unico del parametro `rsrc` (Fix D): split "," → trim → lowercase →
+ * whitelist SUPPORTED_RATING_SOURCES. Ritorna null se il parametro è assente
+ * (il chiamante applica la catena dei fallback), [] se presente ma senza
+ * fonti valide. Unica implementazione usata da poster route, poster-config e
+ * tmdb details route (stesso numero ovunque = Golden Rule).
+ */
+export function parseRatingSources(raw: string | null | undefined): string[] | null {
+  if (raw === null || raw === undefined) return null
+  const valid = SUPPORTED_RATING_SOURCES as readonly string[]
+  return raw.split(",").map((s) => s.trim().toLowerCase()).filter((s) => valid.includes(s))
+}
+
+/**
+ * Catena canonica delle fonti voto: query `rsrc` > fallbacks (mapping >
+ * config token > server defaults) > DEFAULT_RATING_SOURCES. Un array vuoto
+ * (nessuna fonte / solo garbage) vale come unset e fa cadere al fallback
+ * successivo — mai media su zero fonti.
+ */
+export function resolveRatingSources(
+  query: string | null | undefined,
+  ...fallbacks: (readonly string[] | null | undefined)[]
+): string[] {
+  const parsed = parseRatingSources(query)
+  if (parsed && parsed.length > 0) return parsed
+  for (const fb of fallbacks) {
+    if (fb && fb.length > 0) return fb.map((s) => s.toLowerCase())
+  }
+  return [...DEFAULT_RATING_SOURCES]
+}
+
 export function calculateAverageRating(
   ratings: AggregatedRatings | null,
   requestedSources?: string[]

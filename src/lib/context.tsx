@@ -427,7 +427,7 @@ export function usePictorium(): PictoriumCtx {
     badgeRating, setBadgeRating,
     badgeQuality, setBadgeQuality,
     customRatings, setCustomRatings,
-    ratingSources,
+    ratingSources, setRatingSources,
     badgeStyle, setBadgeStyle,
     rankingBadgeStyle, setRankingBadgeStyle,
     customBadge, setCustomBadge,
@@ -446,6 +446,7 @@ export function usePictorium(): PictoriumCtx {
     defaultBadgeRating,
     defaultBadgeQuality,
     defaultCustomRatings,
+    defaultRatingSources,
     defaultSashOrder,
     defaultRibbonSide,
     defaultPosterShape,
@@ -820,11 +821,16 @@ export function usePictorium(): PictoriumCtx {
   // dettagli + rank + awards + immagini, aggiornando metaInfo (generi/voto/badge),
   // trendRank, mdblistMatch, posters/logos/backdrops e titolo. La guardia
   // fetchIdRef evita che una risposta stale sovrascriva la selezione corrente.
-  async function loadCurrentItemData(item: SearchResult, fetchId: number) {
+  async function loadCurrentItemData(item: SearchResult, fetchId: number, sourcesOverride?: string[]) {
     const itemId = item.id
     const itemType = item.media_type
     const mdblistParam = mdblistApiKey ? "&mdblist_key=" + encodeURIComponent(mdblistApiKey) : ""
-    const rsrcParam = ratingSources && ratingSources.length > 0 ? "&rsrc=" + encodeURIComponent(ratingSources.join(",")) : ""
+    // Fonti esplicite all'apertura titolo (mapping salvato): la closure
+    // `ratingSources` vale ancora la sessione precedente finché setRatingSources
+    // non committa — senza override il voto congelato in metaInfo userebbe le
+    // fonti vecchie e gareggerebbe col refetch dell'effetto [ratingSources].
+    const activeSources = sourcesOverride ?? ratingSources
+    const rsrcParam = activeSources && activeSources.length > 0 ? "&rsrc=" + encodeURIComponent(activeSources.join(",")) : ""
     const regionLang = getRegionDef(editorCtx.defaultRegion).lang
     const detailsUrl = `/api/tmdb/${itemId}/details?type=${itemType}&language=${regionLang}&api_key=${tmdbKey}${mdblistParam}${rsrcParam}`
     // Le immagini partono SUBITO in parallelo ai details (non dopo): la lingua
@@ -975,6 +981,11 @@ export function usePictorium(): PictoriumCtx {
     // per evitare race condition: se l'utente cambia opzioni mentre
     // i dati sono in caricamento, la vecchia fetch non deve sovrascrivere
     const existing = mappingsMap.get(`${itemType}:${itemId}`)
+    // Fonti che saranno attive per questo titolo (per-titolo salvato o default):
+    // stesse per setRatingSources e per il fetch details qui sotto — così il
+    // voto in metaInfo nasce già corretto e l'effetto [ratingSources] lo
+    // conferma invece di gareggiare con un fetch su fonti diverse.
+    const nextSources = existing?.ratingSources ?? defaultRatingSources
     if (existing) {
       setBadgeStyle(existing.badgeStyle ?? defaultBadgeStyle)
       setRankingBadgeStyle(existing.rankingBadgeStyle ?? defaultRankingBadgeStyle)
@@ -985,6 +996,7 @@ export function usePictorium(): PictoriumCtx {
       setBadgeRating(existing.badgeRating ?? defaultBadgeRating)
       setBadgeQuality(existing.badgeQuality ?? defaultBadgeQuality)
       setCustomRatings(existing.customRatings ?? defaultCustomRatings)
+      setRatingSources(nextSources)
       setNetworkLogo(existing.networkLogo ?? defaultNetworkLogo)
       // ribbonSide solo globale: i mapping storici con valore salvato lo ignorano,
       // così la preview resta sincrona con Stremio (side dal default d'istanza).
@@ -1038,6 +1050,7 @@ export function usePictorium(): PictoriumCtx {
       setBadgeRating(defaultBadgeRating)
       setBadgeQuality(defaultBadgeQuality)
       setCustomRatings(defaultCustomRatings)
+      setRatingSources(nextSources)
       setGradientHeight(defaultGradientHeight)
       setBlurIntensity(defaultBlurIntensity)
       setTintStrength(defaultTintStrength)
@@ -1065,7 +1078,7 @@ export function usePictorium(): PictoriumCtx {
     }
 
     try {
-      const loaded = await loadCurrentItemData(item, fetchId)
+      const loaded = await loadCurrentItemData(item, fetchId, nextSources)
       if (!loaded) return
       const { details, data } = loaded
       const existing = mappingsMap.get(`${itemType}:${itemId}`)
@@ -1157,7 +1170,7 @@ export function usePictorium(): PictoriumCtx {
     selectedBackdrop, setSelectedBackdrop: setSelectedBackdrop, backdropScale, backdropOffsetX, backdropOffsetY,
     setBackdropScale, setBackdropOffsetX, setBackdropOffsetY,
     globalBadges, rankingBadges, customBadge, badgeStyle, rankingBadgeStyle,
-    badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings,
+    badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources,
     defaultBadgeStyle, defaultRankingBadgeStyle, blurEnabled, blurIntensity, blurFade, blurDarkness, tintStrength, gradientHeight,
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale,
     genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY,

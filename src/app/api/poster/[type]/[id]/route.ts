@@ -17,7 +17,7 @@ import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel, isValidWikidata
 import { createT } from "@/lib/i18n"
 import type { EnrichedAnimeItem } from "@/lib/validation"
 import { fetchMDBList, type MDBListEntry } from "@/lib/mdblist"
-import { fetchAggregatedRating } from "@/lib/ratings"
+import { fetchAggregatedRating, resolveRatingSources } from "@/lib/ratings"
 import { isImdbTop250 } from "@/lib/imdb-top250"
 import { getEffectiveRotationState, tryRotatePoster, getEffectiveBackdropRotationState, tryRotateBackdrop } from "@/lib/poster-rotation"
 import { getTMDBSessionCache, setTMDBSessionCache } from "@/lib/tmdb-session-cache"
@@ -579,10 +579,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const isLandscape = resolvePosterShape(req.nextUrl.searchParams, mapping, configOverride, sd) === "landscape"
   const queryGenre = req.nextUrl.searchParams.get("genreName")
   const queryVote = req.nextUrl.searchParams.get("voteAverage")
-  const qRsrc = req.nextUrl.searchParams.get("rsrc")
-  const reqRatingSources = qRsrc !== null
-    ? qRsrc.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-    : (configOverride?.ratingSources ?? undefined)
+  // Fonti voto medio ★ — stessa catena canonica di poster-config/Stremio:
+  // query `rsrc` > mapping per-titolo > config token > server defaults > default.
+  // (Prima: senza whitelist e senza mapping/sd — la preview col client valeva
+  // una media diversa da Stremio a parità di titolo.)
+  const reqRatingSources = resolveRatingSources(
+    req.nextUrl.searchParams.get("rsrc"),
+    mapping?.ratingSources,
+    configOverride?.ratingSources,
+    sd.ratingSources,
+  )
   const t = createT(req.nextUrl.searchParams.get("lang") || mapping?.language || "it")
 
   if (queryPoster) {
