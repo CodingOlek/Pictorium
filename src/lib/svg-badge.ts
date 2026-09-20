@@ -1,4 +1,4 @@
-import { textColorForBg } from "./accent-color"
+import { textColorForBg, isWarmGoldAccent } from "./accent-color"
 import { FONT_FILES } from "./fonts"
 import { estimateTextWidth, fontFamilyFor, genreBadgeSafePad, genreBadgeSvgDims, genrePillMaxW, BADGE_BOX_PAD_X_FACTOR, buildGenreBarSvg, buildGenrePillSvg, buildGenreTextSvg, buildGenreBorderedSvg, buildGenreGlassSvg, buildRankingDefaultSvg, buildRankingPillSvg, buildRankingGlassSvg, buildRankingBorderedSvg, buildExtraDefaultSvg, buildExtraPillSvg, buildExtraGlassSvg, buildExtraBorderedSvg, buildQualityBadgeSvg, escSvg, satinPillStops } from "./badge-svg-shared"
 import type { GenreParts } from "./badge-svg-shared"
@@ -168,8 +168,10 @@ export async function buildGenreBadgeSVG(
     result = buildGenreBarSvg(genreName, voteStr, yearStr, pw, fs, bottomLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)", !!bottomLight, 0, parts)
   } else if (isPill) {
     // colored: tinta piatta (niente satinatura); pill: satinatura polare.
+    // Su accent caldo (oro/ambra) la stella oro annega: fallback in colore testo.
     const useSatin = s !== "colored"
-    result = buildGenrePillSvg(genreName, voteStr, yearStr, fs, bgColor, textColor, 0, parts, !!bottomLight, useSatin)
+    const starFill = s === "colored" && accentColor && isWarmGoldAccent(accentColor) ? textColor : undefined
+    result = buildGenrePillSvg(genreName, voteStr, yearStr, fs, bgColor, textColor, 0, parts, !!bottomLight, useSatin, starFill)
   } else {
     result = buildGenreTextSvg(genreName, voteStr, yearStr, fs, textColor, s, 0, parts)
     // Per shadow, il renderW include shadowPad*2 + safePad*2 aggiuntivi

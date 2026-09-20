@@ -110,6 +110,8 @@ type GenreTextFlowArgs = GenreBadgeText & {
   readonly y: number
   readonly parts?: GenreParts
   readonly style?: string
+  /** Override del fill stella (default: gradiente oro). */
+  readonly starFill?: string
 }
 
 export function genreBadgeSvgDims(fs: number, genreName: string, voteStr: string, yearStr: string, parts?: GenreParts, style?: string) {
@@ -137,7 +139,7 @@ export function genreBadgeSvgDims(fs: number, genreName: string, voteStr: string
   return { starW, gap, gapStar, totalW, svgH, genreW, voteW, yearW, bulletW, textContentW }
 }
 
-function buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX, y, parts, style }: GenreTextFlowArgs) {
+function buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX, y, parts, style, starFill }: GenreTextFlowArgs) {
   const isMinimal = style === "minimal"
   const opts = normalizeParts(parts)
   const dims = genreBadgeSvgDims(fs, genreName, voteStr, yearStr, opts, style)
@@ -160,7 +162,7 @@ function buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX, y, parts
     if (hasRating || hasYear) tspan.push(bullet(dims.gap))
   }
   if (hasRating) {
-    tspan.push(`<tspan dx="${starGapDx}" dy="${starDy}" font-family="Noto Sans Symbols 2" font-weight="400" fill="url(#starg)">${escSvg("\u2605")}</tspan>`)
+    tspan.push(`<tspan dx="${starGapDx}" dy="${starDy}" font-family="Noto Sans Symbols 2" font-weight="400" fill="${starFill ?? "url(#starg)"}">${escSvg("\u2605")}</tspan>`)
     tspan.push(`<tspan dx="${dims.gapStar}" dy="${-starDy}">${escSvg(voteStr)}</tspan>`)
     if (hasYear) tspan.push(bullet(dims.gap))
   }
@@ -207,6 +209,8 @@ export function buildGenrePillSvg(
   parts?: GenreParts,
   topLight = false,
   useSatin = true,
+  /** Override fill stella (colored su accent caldo: oro → colore testo). */
+  starFill?: string,
 ) {
   const padX = Math.round(fs * BADGE_BOX_PAD_X_FACTOR)
   const dims = genreBadgeSvgDims(fs, genreName, voteStr, yearStr, parts)
@@ -219,7 +223,7 @@ export function buildGenrePillSvg(
   const renderH = pillH + TOP_SHADOW_PAD * 2
   const ox = TOP_SHADOW_PAD
   const oy = TOP_SHADOW_PAD
-  const textParts = buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX: ox + pillW / 2 + textOffsetX, y: oy + pillH / 2, parts })
+  const textParts = buildGenreTextFlow({ genreName, voteStr, yearStr, fs, centerX: ox + pillW / 2 + textOffsetX, y: oy + pillH / 2, parts, starFill })
   const gradDef = useSatin ? `<linearGradient id="gpg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>` : ""
   const fill = useSatin ? "url(#gpg)" : bgColor
   const stroke = topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"
@@ -476,7 +480,11 @@ export function buildNetflixRankSvg(rank: number, pw: number) {
 
 export function buildQualityBadgeSvg(quality: string, fs: number, _textColor: string, _bg: string, topLight: boolean = false) {
   const px = Math.round(fs * BADGE_BOX_PAD_X_FACTOR)
-  const textW = Math.max(estimateTextWidth(quality, fs), fs)
+  // Crenatura da marchio tecnico: 0.06em per intervallo. Il textLength è
+  // pinnato sulla larghezza reale (stima + tracking) così il layout segue e
+  // non comprime i glifi.
+  const track = quality.length > 1 ? Math.round(0.06 * fs * (quality.length - 1)) : 0
+  const textW = Math.max(estimateTextWidth(quality, fs) + track, fs)
   const totalW = textW + px * 2
   const boxH = badgeBoxHeight(fs)
   const r = Math.round(boxH / 2)
@@ -486,7 +494,7 @@ export function buildQualityBadgeSvg(quality: string, fs: number, _textColor: st
   const renderH = boxH + TOP_SHADOW_PAD * 2
   const ox = TOP_SHADOW_PAD
   const oy = TOP_SHADOW_PAD
-  const textEl = `<text x="${ox + totalW / 2}" y="${oy + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(quality)}" font-weight="700" font-size="${fs}" fill="${fg}"${textFitAttrs(textW)}>${escSvg(quality)}</text>`
+  const textEl = `<text x="${ox + totalW / 2}" y="${oy + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${fontFamilyFor(quality)}" font-weight="700" font-size="${fs}" letter-spacing="0.06em" fill="${fg}"${textFitAttrs(textW)}>${escSvg(quality)}</text>`
   const defs = `<defs><linearGradient id="qg" x1="0" y1="0" x2="0" y2="1">${satinPillStops(topLight)}</linearGradient>${TOP_SHADOW_FILTER}</defs>`
   const bgEl = `<rect x="${ox}" y="${oy}" width="${totalW}" height="${boxH}" rx="${r}" fill="url(#qg)" stroke="${stroke}" stroke-width="1.5" filter="url(#tds)"/>`
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${renderW}" height="${renderH}">${defs}${bgEl}${textEl}</svg>`, w: renderW, h: renderH }

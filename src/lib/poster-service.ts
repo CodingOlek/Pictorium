@@ -24,7 +24,7 @@ import { renderFirstMatchingNetworkLogoBadge, renderFirstMatchingNetworkRawBadge
 import { computeLogoLayout, logoAlignPadX } from "./logo-layout"
 import fs from "fs"
 import path from "path"
-import { estimateTextWidth, fontFamilyFor, escSvg } from "./badge-svg-shared"
+import { estimateTextWidth, fontFamilyFor, escSvg, TOP_SHADOW_PAD } from "./badge-svg-shared"
 import { computeTopBadge, isNetworkStudio, type BadgeInput } from "./poster-badge"
 import type { SashBucket } from "./badge-priority"
 import { PRE_RELEASE_DIM_ALPHA, PRE_RELEASE_BLUR_SIGMA } from "./pre-release"
@@ -1067,11 +1067,8 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
   // con nastro Netflix o Coming Soon. Senza logo film resta il layout storico
   // (top-left, o a fianco del nastro).
   // netTopLeftBottom traccia il fondo del logo network quando occupa il top-left (per qualità Stremio sotto).
-  // Tuning editoriale globale (default per tutti i poster, entrambi i lati):
-  // pill network +10px Y; qualità +10px X lato Nuvio, -30px X lato Stremio.
+  // Tuning editoriale globale (default per tutti i poster): pill network +10px Y.
   const NETWORK_LOGO_SHIFT_Y = 10
-  const QUALITY_SHIFT_X_NUVIO = 10
-  const QUALITY_SHIFT_X_STREMIO = -30
   let netTopLeftBottom: number | null = null
   if (networkLogoForLayout) {
     const gap = Math.round(6 * CH / 570)
@@ -1181,14 +1178,19 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
     const isComingSoonRight = showComingSoon && ribbonSide === "right" && !!ribbonLayout
     const isRightRibbonCorner = (isNetflixRight && !!finalRankBadge) || isComingSoonRight
 
-    // Ancoraggio base spostato di misura fissa da editor: +10px X, -10px Y
-    // (era -20, alzato di 10 dalla situazione precedente).
+    // Ancoraggio base: top = netBaseTop - 10 + 5 (storia editoriale: era -20).
+    // Griglia laterale a box: il respiro del box qualità è uguale a quello del
+    // network (netPadX) su entrambi i lati. Il bitmap include il padding ombra
+    // simmetrico: il pad scala col rapporto w finale/w render.
     // Lo stacking sotto il logo network resta invariato (lì conta non
     // sovrapporsi, non la misura).
-    // Tuning editoriale globale: +10px X lato Nuvio, -30px X lato Stremio.
-    let top = netBaseTop - 10
-    let left = (isRightRibbonCorner ? netPadX : Math.round(CW - safeQualityBadgeResult.w - netPadX)) + 10
-      + (isRightRibbonCorner ? QUALITY_SHIFT_X_STREMIO : QUALITY_SHIFT_X_NUVIO)
+    const qPad = qualityBadgeResult?.w
+      ? Math.round(TOP_SHADOW_PAD * safeQualityBadgeResult.w / qualityBadgeResult.w)
+      : TOP_SHADOW_PAD
+    let top = netBaseTop - 10 + 5
+    let left = isRightRibbonCorner
+      ? netPadX - qPad
+      : CW - netPadX - (safeQualityBadgeResult.w - qPad)
     let finalQualityBadge = safeQualityBadgeResult
 
     if (isRightRibbonCorner) {
@@ -1221,7 +1223,9 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
           curW = newW
           curH = newH
           curPng = await sharp(safeQualityBadgeResult.png).resize(newW, newH).toBuffer()
-          curLeft = isRightRibbonCorner ? netPadX : Math.round(CW - curW - netPadX)
+          // Lo shrink scala anche il pad: l'ancora resta a box.
+          const curPad = Math.round(qPad * scale)
+          curLeft = isRightRibbonCorner ? netPadX - curPad : CW - netPadX - (curW - curPad)
           if (scale <= minScale) break
         }
         finalQualityBadge = { ...finalQualityBadge, png: curPng, w: curW, h: curH }
@@ -1238,10 +1242,16 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
       top: top + qualityBadgeOffsetY,
       left: left + qualityBadgeOffsetX,
     })
-    // Ancoraggio della colonna separati: sotto il badge qualità (asse
-    // centrale allineato). Senza qualità lo stack "sale" al top (vedi sotto).
+    // Ancoraggio della colonna separati: sotto il box visibile del badge
+    // qualità (asse centrale allineato) con gap ottico 6px. L'ancora sottrae
+    // il padding ombra inferiore (in scala): prima lo stack partiva dal fondo
+    // bitmap + 5, cioè ~19px di vuoto sotto la capsula.
+    // Senza qualità lo stack "sale" al top (vedi sotto).
+    const qBottomPad = qualityBadgeResult?.h
+      ? Math.round(TOP_SHADOW_PAD * finalQualityBadge.h / qualityBadgeResult.h)
+      : TOP_SHADOW_PAD
     qualityStackAnchor = {
-      top: top + qualityBadgeOffsetY + finalQualityBadge.h,
+      top: top + qualityBadgeOffsetY + finalQualityBadge.h - qBottomPad,
       centerX: (left + qualityBadgeOffsetX) + finalQualityBadge.w / 2,
       leftCorner: isRightRibbonCorner,
     }
@@ -1261,7 +1271,7 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
       ? qualityStackAnchor.leftCorner
       : ((rankingBadgeStyle === "netflix" && ribbonSide === "right" && topBadge?.type === "rank" && !!finalRankBadge)
         || (showComingSoon && ribbonSide === "right" && !!ribbonLayout))
-    const stackTop = qualityStackAnchor ? qualityStackAnchor.top + 5 : netBaseTop - 10
+    const stackTop = qualityStackAnchor ? qualityStackAnchor.top + 6 : netBaseTop - 10
     const stackKey = badgeCacheKey("separate", items.map((i) => `${i.id}${i.value}`).join(","), CW, topLight)
     const cached = cacheGet<{ png: Buffer; w: number; h: number }>(stackKey)
     const stack = cached ?? await coalesceBadgeRender(stackKey, () =>

@@ -182,6 +182,14 @@ describe("buildGenreBadgeSVG", () => {
     const quality = buildQualityBadgeSvg("4K", 20, "", "", false)
     expect(quality.svg).toContain('filter="url(#tds)"')
   })
+
+  it("star falls back to text color on warm gold accent, stays gold otherwise", () => {
+    const warm = buildGenrePillSvg("Dramma", "8.5", "2023", 28, "#F59E0B", "#ffffff", 0, undefined, false, false, "#ffffff")
+    expect(warm.svg).toContain('fill="#ffffff"')
+    expect(warm.svg).not.toContain("url(#starg)")
+    const cool = buildGenrePillSvg("Dramma", "8.5", "2023", 28, "#3b82f6", "#ffffff", 0, undefined, false, false)
+    expect(cool.svg).toContain("url(#starg)")
+  })
 })
 
 describe("GenreParts combinations", () => {

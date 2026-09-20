@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect } from "vitest"
 import sharp from "sharp"
-import { findSceneTint, findAccentColor, isManualAccent, computeBottomLight, hexLuminance, bottomEdgeAverage } from "@/lib/accent-color"
+import { findSceneTint, findAccentColor, isManualAccent, computeBottomLight, hexLuminance, bottomEdgeAverage, isWarmGoldAccent } from "@/lib/accent-color"
 import { extractSceneTint } from "@/lib/poster-render-helpers"
 import { GENRE_FALLBACK } from "@/lib/badges"
 
@@ -203,6 +203,24 @@ describe("hexLuminance", () => {
     expect(hexLuminance(null)).toBeNull()
     expect(hexLuminance("#fff")).toBeNull()
     expect(hexLuminance("not-a-color")).toBeNull()
+  })
+})
+
+describe("isWarmGoldAccent", () => {
+  it("true per ori/ambre/aranci saturi (la stella oro annegherebbe)", () => {
+    expect(isWarmGoldAccent("#F59E0B")).toBe(true)
+    expect(isWarmGoldAccent("#fb923c")).toBe(true)
+    expect(isWarmGoldAccent("#eab308")).toBe(true)
+  })
+
+  it("false per freddi, verdi, grigi e input non-hex", () => {
+    expect(isWarmGoldAccent("#3b82f6")).toBe(false)
+    expect(isWarmGoldAccent("#22c55e")).toBe(false)
+    expect(isWarmGoldAccent("#808080")).toBe(false)
+    expect(isWarmGoldAccent("#555555")).toBe(false)
+    expect(isWarmGoldAccent(null)).toBe(false)
+    expect(isWarmGoldAccent(undefined)).toBe(false)
+    expect(isWarmGoldAccent("rgba(0,0,0,0.80)")).toBe(false)
   })
 })
 

@@ -47,6 +47,26 @@ export function textColorForBg(hex: string, dark: string = "#ffffff", light: str
   return best.color
 }
 
+/**
+ * True se l'hex è un giallo/ambra/arancio saturo che uccide la stella oro del
+ * badge (gradiente #FCD34D → #F59E0B, hue ~40°): in quel caso la stella va
+ * resa nel colore del testo invece che in oro. Zona hue [20, 70] con
+ * saturazione HSL > 0.35 — sotto soglia (freddi, grigi, pastelli spenti)
+ * l'oro resta.
+ */
+export function isWarmGoldAccent(hex: string | null | undefined): boolean {
+  if (!hex || !hex.startsWith("#")) return false
+  const [r, g, b] = parseColor(hex)
+  const rn = r / 255, gn = g / 255, bn = b / 255
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
+  const l = (max + min) / 2, d = max - min
+  if (d === 0) return false
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  if (s < 0.35) return false
+  const hue = fastHue(rn, gn, bn, d, max)
+  return hue >= 20 && hue <= 70
+}
+
 /** Parsea "#rrggbb" o "rgba(r,g,b,a)" restituendo [r,g,b,alpha]. Hex: alpha=1 */
 function parseColor(color: string): [number, number, number, number] {
   if (color.startsWith("#")) {

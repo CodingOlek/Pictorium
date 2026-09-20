@@ -9,6 +9,31 @@
 When you modify a visual render parameter in one file, update its server counterpart
 (or vice versa). The `poster-sync` skill drives this workflow end-to-end.
 
+## Livelli di design: Contenuto vs Chrome
+
+Due livelli, mai mescolati:
+
+- **Badge di Contenuto** (genere, ranking, extra): espressivi, stilabili dall'utente
+  (`shadow`/`pill`/`bar`/`colored`/`bordo`/`vetro`/`minimal` in basso;
+  `default`/`pill`/`colored`/`bordo`/`vetro`/`netflix` in alto).
+- **Chrome di Sistema** (qualità streaming, network logo, rating separati/multi):
+  marchi tecnici fissi in pill satinata (come Dolby/IMAX sul poster), mai stilabili.
+  Restano coerenti per **griglia** (stessa linea top, stessi margini), non per materiale.
+
+## Griglia superiore (top line ~27-28px, portrait @380×570, scala 100%)
+
+Le misure contano sui **box visibili**, mai sui bitmap (che includono il padding
+ombra trasparente `TOP_SHADOW_PAD=14`):
+
+- Network: bitmap == box, `top = netPadY(18) + SHIFT(10)` → box a **28**.
+- Qualità: bitmap `top = netBaseTop(18) - 10 + 5 = 13`, box a **27** (+14 pad).
+- Ranking pill: bitmap `top = toy + pillTopGap(10)`, box a **24** (+14 pad).
+- Ranking default: placca a filo, box a **0** (tab ancorato al bordo, pattern a sé).
+- Margini X a box: network `18` a sinistra, qualità `18` a destra (`netPadX`
+  entrambi i lati, pad-aware in scala — niente numeri magici).
+- Colonna separati: ancorata al **fondo box** qualità (pad inferiore sottratto
+  in scala) + gap ottico **6px**; senza qualità parte da `netBaseTop - 10`.
+
 ## Badge Genere/Rating (GenreRatingBadges)
 
 **Componenti configurabili** (`bg`/`by`/`br`): genere, anno e voto si attivano **indipendentemente**. Default tutti ON → output byte-identico al passato (`Dramma • ★ 8.2 • 2024`). Il badge si mostra se almeno un componente abilitato ha un valore disponibile (`hasGenreBadge = badgesEnabled && ((genre && bg) || (rating > 0 && br) || (year && by))`). Lato SVG i segmenti sono condizionali in `badge-svg-shared.ts:buildGenreTextFlow` — il `dx` di separazione si emette solo se il segmento ha un precedente visibile (per non sfuocare dal centro quando anno o voto sono il primo segmento). In landscape i badge si rendono con `pw = 500` (`badgePw` in `poster-service.ts`: stessi pixel assoluti del portrait); il badge superiore centrale (rank/extra, non nastro) è al 120% (`topBadgePw`); posizioni, overflow-protection e chiavi cache restano sul canvas vero (`LAND_W/H`). Le barre in landscape sono centrate come lower-third invece che full-width. Il logo in landscape è contenuto a max 55% larghezza e 28% altezza (`maxWidthPct`/`maxHeightPct` in `logo-layout.ts`) con margine inferiore 25%. Il gradiente di default in landscape è 20% invece di 30% (solo quando non esplicitato).
@@ -31,7 +56,7 @@ When you modify a visual render parameter in one file, update its server counter
 | Sfondo pill/bar | bar (`buildGenreBarSvg`) = gradiente satinato `satinPillStops(bottomLight)` full-width + bordo profilo 1.5px adattivo + ombra 3D singola (code tagliate = bordo poster, invisibili); pill genere = gradiente satinato `satinPillStops(bottomLight)` (polarità del fondo, non del top) + ombra 3D singola + padding simmetrico 14 (colored inclusa: tinta piatta + ombra); pill ranking/extra = `satinPillStops(topLight)` |
 | Posizione Y unificata | Box model normalizzato: zero salti di baseline tra stili (`genreStyleShiftY` rimosso); altezza uniforme `badgeBoxHeight(fs)`; la riga multi-rating segue sopra il badge |
 | Testo pill/bar | bar = ad alto contrasto `bottomLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)"` (su fondi chiari la barra diventa grafite scura, come la pill); pill genere/ranking/extra = ad alto contrasto (`bottomLight`/`topLight ? 0.95 white : 0.88 black`, come quality); nastro Netflix e riga multi-rating restano `0.80` (hanno textShadow dedicato); pill colored resta tinta piatta + `textColorForBg` |
-| Stella voto | gradiente oro verticale `#FCD34D → #F59E0B` (`linearGradient#starg`) sul `tspan` stella; bullet `•` a opacità 0.45 (solo ingombro visivo, metriche invariate) |
+| Stella voto | gradiente oro verticale `#FCD34D → #F59E0B` (`linearGradient#starg`) sul `tspan` stella; bullet `•` a opacità 0.45 (solo ingombro visivo, metriche invariate); stile `colored` su accent caldo (`isWarmGoldAccent`: hue 20-70, sat > 0.35): stella piatta in colore testo (l'oro annegherebbe) |
 | Bordo bar | profilo 1.5px adattivo (`bottomLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"`), come quality-badge; la vecchia `line` 1px `rgba(0,0,0,0.10)` è rimossa |
 | Box Model Unificato | Altezza scatola `badgeBoxHeight(fs) = fs + round(fs * 0.40) * 2` (`1.8 * fs`), padding X `round(fs * 0.75)`, ombra uniforme `badgeShadowBox(h)` (`blur = max(round(h * 0.20), 4), off = max(round(h * 0.10), 2)`) condiviso da tutti i badge centrati |
 
@@ -52,8 +77,8 @@ When you modify a visual render parameter in one file, update its server counter
 | Scala badge superiore (`topBadgeScale`) | Resize bitmap dopo il render (tutti gli stili; la **barra genere** scala nativa via font per restare full-width), prima di `fitBadgeToCanvas`; `%` 10..200, default 100; entra nella `rankBadgeKey` |
 | Geometria staccata (`isDetached`) | Solo stili centrati (default/extra; il nastro resta ancorato) con `toy !== 0`: tutti e 4 gli angoli raccordati (`rx = r`) invece del tetto dritto; stesso box di render; entra nella `rankBadgeKey` come `detached` (bitmap diverso) |
 | Offset badge superiore (`topBadgeOffsetX/Y`) | Solo stili centrati: `left = center + tox`, `top = 0 + toy` (px, default 0) + `pillTopGap` per la pill (`+10` fisso dal bordo alto); il nastro resta ancorato; la matematica overlap usa `finalRankTop + h` |
-| Posizione badge qualità | Angolo in alto a destra (`left = pw - w - padX + 10 + 10 Nuvio`, `top = padY - 10`); con nastro Netflix a destra (Stremio) va a **sinistra** (`left = padX + 10 - 30`) per non restargli accanto, impilato sotto il logo network se occupa il top-left (`top = netBottom + gap`, senza shift) |
-| Sfondo badge qualità | Gradiente satinato traslucido a polarità pill (`satinPillStops(topLight)`); altezza unificata `badgeBoxHeight(fs)`; bordo `topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"` 1.5px; ombra 3D singola + padding simmetrico 14; testo invariato (`topLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)"`); font base `17 * pw / 380` (era `14`) |
+| Posizione badge qualità | Angolo in alto a destra, margini a box: box destro a `netPadX` dal bordo (`left = CW - netPadX - boxW - pad`, pad in scala), `top = padY - 10 + 5` (bitmap; box a +14 pad); con nastro Netflix a destra (Stremio) va a **sinistra** con box sinistro a `netPadX` (`left = netPadX - pad`) per non restargli accanto, impilato sotto il logo network se occupa il top-left (`top = netBottom + gap`, senza shift) |
+| Sfondo badge qualità | Gradiente satinato traslucido a polarità pill (`satinPillStops(topLight)`); altezza unificata `badgeBoxHeight(fs)`; bordo `topLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.22)"` 1.5px; ombra 3D singola + padding simmetrico 14; testo invariato (`topLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.88)"`) + crenatura `letter-spacing="0.06em"` (marchio tecnico; `textLength` pinnato su stima+tracking); font base `17 * pw / 380` (era `14`) |
 
 ## Pill Network Logo
 
@@ -96,7 +121,7 @@ Opt-in portrait-only (`sep=1`, default OFF): sostituisce la media ★ nel badge 
 | Formati | decimale 1 cifra (`7.3`); famiglia percent (`tomatoes`, `popcorntime`) come `88%` (`formatSeparateValue`) |
 | Colori | convenzione quality-badge: `topLight ? dark pill : light pill`, bordo 1.5px adattivo, ombra dedicata ridotta (`seps`: dx=2, dy=2, blur 2, 0.55 — la 3D standard sbordava nel gap 5px sembrando squadrata) |
 | Loghi | `public/rating/*.svg` a colori brand originali (mai ricolorati), embed `<image data:...>` come le pill network; asset mancante → pill skippata (mai 500) |
-| Posizione | bordo destro allineato al badge qualità (`right = qualityRight`), `top = qualityBottom + 5`; senza qualità parte dal top (`netBaseTop - 10`, "sale"); con nastro a destra segue a sinistra (stesso branch `isRightRibbonCorner`); gap stack `5px` (`SEPARATE_STACK_GAP`) |
+| Posizione | bordo destro allineato al badge qualità (`right = qualityRight`), `top = qualityBoxBottom + 6` (pad inferiore sottratto in scala, gap ottico 6px); senza qualità parte dal top (`netBaseTop - 10`, "sale"); con nastro a destra segue a sinistra (stesso branch `isRightRibbonCorner`); gap stack `5px` (`SEPARATE_STACK_GAP`) |
 | Priorità | mai col custom provider: se la riga custom è renderizzata, lo stack si nasconde |
 | Sostituzione | con stack attivo (`useSeparate`) il badge genere nasconde il segmento ★ (`badgeRating` effettivo = false) |
 | Cache | chiave stack `badge:separate:<src+val,...>:<CW>:<topLight>` (un composite); flag `sep` nella cache key poster; valori sep nell'etag dei poster dinamici |
