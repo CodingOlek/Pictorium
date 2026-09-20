@@ -23,15 +23,22 @@ afterEach(() => {
 
 describe("HomeStatusStrip spaces indicator", () => {
   it("mostra occupazione spazi quando multi-user è attivo con cap", async () => {
-    mockStatus({ multiUser: true, users: 3, maxUsers: 100 })
+    mockStatus({ multiUser: true, users: 3, maxUsers: 100, activeUsers: 2 })
     renderWithCtx(<HomeStatusStrip />)
-    await waitFor(() => expect(screen.getByTestId("home-spaces")).toHaveTextContent("3/100 spazi"))
+    await waitFor(() => expect(screen.getByTestId("home-spaces")).toHaveTextContent("3/100 spazi (2 attivi)"))
   })
 
   it("mostra solo il conteggio quando il cap è illimitato (maxUsers 0)", async () => {
-    mockStatus({ multiUser: true, users: 7, maxUsers: 0 })
+    mockStatus({ multiUser: true, users: 7, maxUsers: 0, activeUsers: 3 })
     renderWithCtx(<HomeStatusStrip />)
-    await waitFor(() => expect(screen.getByTestId("home-spaces")).toHaveTextContent("7 spazi"))
+    await waitFor(() => expect(screen.getByTestId("home-spaces")).toHaveTextContent("7 spazi (3 attivi)"))
+  })
+
+  it("resta nascosto quando activeUsers manca (skew di versione)", async () => {
+    mockStatus({ multiUser: true, users: 3, maxUsers: 100 })
+    renderWithCtx(<HomeStatusStrip />)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("home-spaces")).toBeNull()
   })
 
   it("resta nascosto quando multi-user è spento", async () => {

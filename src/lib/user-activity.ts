@@ -70,6 +70,25 @@ export interface UserInfo {
   bytes: number
 }
 
+/** Finestra Weekly Active Users: 7 giorni. */
+export const USER_ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Quanti spazi sono attivi (lastAccess valido entro la finestra rispetto a
+ * Date.now()). Stessa semantica inclusiva del cleanup (`>= cutoff`): senza
+ * lastAccess noto o con data illeggibile lo spazio è dormiente, mai attivo.
+ */
+export function countActiveUsers(users: readonly UserInfo[], windowMs: number = USER_ACTIVE_WINDOW_MS): number {
+  const cutoff = Date.now() - windowMs
+  let active = 0
+  for (const u of users) {
+    if (!u.lastAccess) continue
+    const last = Date.parse(u.lastAccess)
+    if (Number.isFinite(last) && last >= cutoff) active++
+  }
+  return active
+}
+
 const UUID_RE = /^[0-9a-f-]{36}$/i
 
 async function userDirBytes(dir: string): Promise<number> {
