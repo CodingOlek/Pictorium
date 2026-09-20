@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { computeBadge, computeAbsoluteCinema, getAllBadgeOptions } from "@/lib/badge-priority"
-import { computeTopBadge, getNewSeasonLabel, isKDramaOrigin } from "@/lib/poster-badge"
+import { computeTopBadge, getNewSeasonLabel, isKDramaOrigin, resolveSavedBadgeExtra } from "@/lib/poster-badge"
 import { getUpcomingReleaseLabel } from "@/lib/release-badge"
 import { mappingSchema } from "@/lib/validation"
 import { createT } from "@/lib/i18n"
@@ -107,6 +107,24 @@ describe("computeBadge", () => {
     expect(computeBadge({ ...base, subGenre: "Giallo", isKDrama: true }, t)?.label).toBe("Giallo")
     expect(computeBadge({ ...base, isKDrama: true, director: "Di Christopher Nolan" }, t)?.label).toBe("K-Drama")
     expect(computeBadge({ ...base, isKDrama: true, studio: "A24" }, t)?.label).toBe("K-Drama")
+  })
+
+  it("auto miniseries/returning in coda all'extra", () => {
+    const tv = { ...base, mediaType: "tv" as const }
+    expect(computeBadge({ ...tv, miniseries: "Miniserie" }, t)?.label).toBe("Miniserie")
+    expect(computeBadge({ ...tv, returning: "Ritorna" }, t)?.label).toBe("Ritorna")
+    // Una sola placca: miniserie vince su returning.
+    expect(computeBadge({ ...tv, miniseries: "Miniserie", returning: "Ritorna" }, t)?.label).toBe("Miniserie")
+    // Coda confermata: tutto ciò che sta sopra vince.
+    expect(computeBadge({ ...tv, award: "Vincitore Oscar", returning: "Ritorna" }, t)?.label).toBe("Vincitore Oscar")
+    expect(computeBadge({ ...tv, director: "Di Christopher Nolan", returning: "Ritorna" }, t)?.label).toBe("Di Christopher Nolan")
+    expect(computeBadge({ ...tv, studio: "A24", miniseries: "Miniserie" }, t)?.label).toBe("A24")
+    expect(computeBadge({ ...tv, returning: "Ritorna", extra: "Da divorare" }, t)?.label).toBe("Ritorna")
+  })
+
+  it("sash senza extra spegne miniseries/returning (opt-out rispettato)", () => {
+    const tv = { ...base, mediaType: "tv" as const, returning: "Ritorna", miniseries: "Miniserie" }
+    expect(computeBadge(tv, t, ["upcoming", "rank", "new", "award"])).toBeNull()
   })
 })
 
@@ -312,6 +330,47 @@ describe("computeTopBadge (nuovi badge)", () => {
     // Serie annunciata: first_air futura → upcoming, anche con last_air valorizzata
     const c = computeTopBadge({ ...baseInput, firstAirDate: inDays(30), lastAirDate: daysAgo(3), seasonCount: 2 }, t, "it")
     expect(c.badge?.label).toBe(c.upcomingRelease)
+  })
+
+  it("auto Ritorna per serie returning senza badge più forti", () => {
+    // baseInput ha già tvStatus "Returning Series" e date vecchie: niente
+    // upcoming/new/rank/award → cade nel returning.
+    const c = computeTopBadge({ ...baseInput }, t, "it")
+    expect(c.badge).toEqual({ type: "extra", label: "Ritorna" })
+  })
+
+  it("auto Miniserie per tvType miniseries, vince su returning", () => {
+    const c = computeTopBadge({ ...baseInput, tvType: "Miniseries" }, t, "it")
+    expect(c.badge).toEqual({ type: "extra", label: "Miniserie" })
+  })
+
+  it("mai miniseries/returning sui film (guardia mediaType)", () => {
+    const c = computeTopBadge({ ...baseInput, mediaType: "movie", tvType: "Miniseries", tvStatus: "Returning Series" }, t, "it")
+    expect(c.badge).toBeNull()
+  })
+
+  it("award vince su returning auto", () => {
+    const c = computeTopBadge({ ...baseInput, awards: ["Emmy"] }, t, "it")
+    expect(c.badge?.label).toBe("Emmy")
+  })
+})
+
+describe("resolveSavedBadgeExtra (freeze mapping)", () => {
+  it("congela i badge permanenti (award, miniserie, custom)", () => {
+    expect(resolveSavedBadgeExtra({ badge: { type: "extra", label: "Golden Globe" }, upcomingRelease: null, newSeason: null }, t)).toBe("Golden Globe")
+    expect(resolveSavedBadgeExtra({ badge: { type: "extra", label: "Miniserie" }, upcomingRelease: null, newSeason: null }, t)).toBe("Miniserie")
+    expect(resolveSavedBadgeExtra({ badge: { type: "extra", label: "Da divorare" }, upcomingRelease: null, newSeason: null }, t)).toBe("Da divorare")
+  })
+
+  it("non congela mai i time-bound (upcoming, nuova stagione, Ritorna)", () => {
+    expect(resolveSavedBadgeExtra({ badge: { type: "extra", label: "In uscita 18.12.26" }, upcomingRelease: "In uscita 18.12.26", newSeason: null }, t)).toBeUndefined()
+    expect(resolveSavedBadgeExtra({ badge: { type: "extra", label: "Nuova S2" }, upcomingRelease: null, newSeason: "Nuova S2" }, t)).toBeUndefined()
+    expect(resolveSavedBadgeExtra({ badge: { type: "extra", label: "Ritorna" }, upcomingRelease: null, newSeason: null }, t)).toBeUndefined()
+  })
+
+  it("ignora i badge rank (vanno in badgeRank, non in badgeExtra)", () => {
+    expect(resolveSavedBadgeExtra({ badge: { type: "rank", rank: 3, label: "Serie" }, upcomingRelease: null, newSeason: null }, t)).toBeUndefined()
+    expect(resolveSavedBadgeExtra({ badge: null, upcomingRelease: null, newSeason: null }, t)).toBeUndefined()
   })
 })
 

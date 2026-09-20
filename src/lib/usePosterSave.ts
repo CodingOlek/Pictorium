@@ -3,7 +3,7 @@
 import { useCallback } from "react"
 import type { SearchResult, TMDBImage, Mapping, PosterShape } from "./types"
 import { titleOf } from "./utils"
-import { computeTopBadge, type BadgeInput } from "./poster-badge"
+import { computeTopBadge, resolveSavedBadgeExtra, type BadgeInput } from "./poster-badge"
 import type { SashBucket } from "./badge-priority"
 import { defaultGradientHeightForPoster, defaultBlurFadeForPoster } from "./gradient-defaults"
 import { logoDefaultScale } from "./logo-selection"
@@ -45,6 +45,8 @@ interface PosterSaveDeps {
   badgeRating: boolean
   badgeQuality: boolean
   customRatings: boolean
+  /** Fonti del voto medio ★ per-titolo (congelate al save come gli altri badge). */
+  ratingSources: string[]
   customBadge: string | null
   badgeStyle: string
   rankingBadgeStyle: string
@@ -113,7 +115,7 @@ export function usePosterSave(deps: PosterSaveDeps) {
     selectedBackdrop, setSelectedBackdrop, backdropScale, backdropOffsetX, backdropOffsetY,
     setBackdropScale, setBackdropOffsetX, setBackdropOffsetY,
     globalBadges, rankingBadges, customBadge, badgeStyle, rankingBadgeStyle,
-    badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings,
+    badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources,
     defaultBadgeStyle, defaultRankingBadgeStyle,
     blurEnabled, blurIntensity, blurFade, blurDarkness, tintStrength, gradientHeight, setGradientHeight, setBlurFade,
     topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale,
@@ -226,11 +228,9 @@ export function usePosterSave(deps: PosterSaveDeps) {
       imdbTop250: !!imdbTop250,
     }
     const computed = computeTopBadge(badgeInput, t, lang, defaultSashOrder ?? null)
-    const isUpcomingReleaseBadge = !!computed.upcomingRelease && computed.badge?.type === "extra" && computed.badge.label === computed.upcomingRelease
-    // Come "In uscita", anche "Nuova stagione" è time-bound: non va congelato
-    // nel mapping salvato (resterebbe per sempre), quindi è escluso da badgeExtra.
-    const isNewSeasonBadge = !!computed.newSeason && computed.badge?.type === "extra" && computed.badge.label === computed.newSeason
-    const badgeExtra = computed.badge?.type === "extra" && !isUpcomingReleaseBadge && !isNewSeasonBadge ? computed.badge.label : undefined
+    // Time-bound mai congelati (upcoming, nuova stagione, "Ritorna"):
+    // Stremio li ricalcola a runtime. Vedi resolveSavedBadgeExtra.
+    const badgeExtra = resolveSavedBadgeExtra(computed, t)
     const badgeRank = (!badgeExtra && rankingBadges) ? (computed.badge?.type === "rank" ? computed.badge.rank : trendRank || undefined) : undefined
     const badgeLabel = (!badgeExtra && animeRankData) ? t("badge.anime") : (!badgeExtra && computed.badge?.type === "rank") ? (computed.badge.rankLabel || t(selected.media_type === "tv" ? "badge.series" : "badge.movie")) : undefined
     const isClean = posterToSave.iso_639_1 === null
@@ -344,6 +344,7 @@ export function usePosterSave(deps: PosterSaveDeps) {
           badgeRating,
           badgeQuality,
           customRatings,
+          ratingSources: ratingSources ?? undefined,
           tvType: metaInfo.type || null,
           tvStatus: metaInfo.status || null,
           releaseDate: metaInfo.release_date || null,

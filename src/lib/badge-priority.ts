@@ -75,6 +75,10 @@ export interface BadgeParams {
   nomination: string | null
   studio: string | null
   director: string | null
+  /** Miniserie (formato permanente) — auto in coda all'extra, prima di returning. */
+  miniseries?: string | null
+  /** Serie in corso — auto in coda all'extra; MAI congelato nei mapping (transitorio). */
+  returning?: string | null
   subGenre?: string | null
   /** Serie TV prodotta in Corea del Sud (origin country KR). */
   isKDrama?: boolean
@@ -108,6 +112,8 @@ function resolveBucket(bucket: SashBucket, params: BadgeParams, t: T): BadgeResu
       if (params.isKDrama) return { type: "extra", label: "K-Drama" }
       if (params.director) return { type: "extra", label: params.director }
       if (params.studio) return { type: "extra", label: params.studio }
+      if (params.miniseries) return { type: "extra", label: params.miniseries }
+      if (params.returning) return { type: "extra", label: params.returning }
       if (params.extra) return { type: "extra", label: params.extra }
       return null
   }

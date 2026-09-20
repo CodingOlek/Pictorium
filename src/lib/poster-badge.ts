@@ -150,6 +150,18 @@ export function computeTopBadge(input: BadgeInput, t: BadgeT, locale?: string, o
       })
     : null
   const isKDrama = input.mediaType === "tv" && isKDramaOrigin(input.originCountries)
+  // Miniserie (formato permanente) e serie in corso (status transitorio):
+  // stesse condizioni del dropdown (getAllBadgeOptions), promosse ad auto in
+  // coda all'extra. Una sola placca: miniserie vince su returning.
+  const tvTypeLower = (input.tvType || "").toLowerCase()
+  const tvStatusLower = (input.tvStatus || "").toLowerCase()
+  const miniseries = input.mediaType === "tv" && (tvTypeLower === "miniseries" || tvTypeLower === "miniserie")
+    ? t("badge.miniseries")
+    : null
+  const returning = input.mediaType === "tv" && !miniseries &&
+    (tvStatusLower === "returning series" || tvStatusLower === "in corso")
+    ? t("badge.returning")
+    : null
 
   const badge = computeBadge({
     mediaType: input.mediaType,
@@ -163,6 +175,8 @@ export function computeTopBadge(input: BadgeInput, t: BadgeT, locale?: string, o
     nomination,
     studio,
     director: input.director,
+    miniseries,
+    returning,
     subGenre: subGenreBadge,
     isKDrama,
     imdbTop250: !!input.imdbTop250,
@@ -180,4 +194,22 @@ export function computeTopBadge(input: BadgeInput, t: BadgeT, locale?: string, o
     studioBadge,
     subGenreBadge,
   }
+}
+
+/**
+ * Decide cosa congelare in `badgeExtra` del mapping salvato. I badge
+ * time-bound non si congelano mai (resterebbero per sempre): "In uscita",
+ * "Nuova stagione" e — da quando è auto — "Ritorna" (lo status è
+ * transitorio, Stremio lo ricalcola a runtime). "Miniserie" resta
+ * congelabile (formato permanente).
+ */
+export function resolveSavedBadgeExtra(
+  computed: Pick<ComputedTopBadge, "badge" | "upcomingRelease" | "newSeason">,
+  t: BadgeT,
+): string | undefined {
+  if (computed.badge?.type !== "extra") return undefined
+  if (computed.upcomingRelease && computed.badge.label === computed.upcomingRelease) return undefined
+  if (computed.newSeason && computed.badge.label === computed.newSeason) return undefined
+  if (computed.badge.label === t("badge.returning")) return undefined
+  return computed.badge.label
 }
