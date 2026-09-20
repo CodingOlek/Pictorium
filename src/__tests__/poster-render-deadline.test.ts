@@ -53,6 +53,8 @@ vi.mock("@/lib/awards", () => ({
   matchTMDBStudios: vi.fn(() => []),
   matchDirectorName: vi.fn((name: string | null) => name),
   directorBadgeLabel: vi.fn((name: string | null) => name),
+  // La route lo importa davvero: senza, la chain wikidataId lancia TypeError.
+  isValidWikidataQid: (v: unknown): v is string => typeof v === "string" && /^Q\d+$/.test(v),
 }))
 
 vi.mock("@/lib/mdblist", () => ({

@@ -2,6 +2,9 @@ import { cacheGetShared, cacheSet } from "./cache"
 import { combineAbortSignals } from "./abort-signal"
 import { timedFetch } from "./outbound-stats"
 import { createCircuitBreaker } from "@/lib/circuit-breaker"
+import { createLogger } from "@/lib/logger"
+
+const log = createLogger("awards")
 
 interface AwardRule {
   keywords: string[]
@@ -453,10 +456,14 @@ export async function fetchAllWikidata(
   if (isValidWikidataQid(opts?.wikidataId)) {
     const rest = await fetchWikidataRest(opts.wikidataId, mediaType, signal).catch(() => null)
     if (rest) {
+      // Osservabilità path (Dexter): con PICTORIUM_LOG_LEVEL=debug si vede se
+      // il badge è arrivato via REST veloce o via lotteria SPARQL.
+      log.debug("Wikidata fast-path REST hit", { mediaType, tmdbId, awards: rest.awards.length })
       cacheSet(cacheKey, rest, ["wikidata"], WIKIDATA_CACHE_TTL)
       return rest
     }
   }
+  log.debug("Wikidata SPARQL fallback", { mediaType, tmdbId, hadQid: isValidWikidataQid(opts?.wikidataId) })
 
   const tmdbProp = mediaType === "movie" ? "P4947" : "P4983"
   const networkQuery = mediaType === "tv" ? `OPTIONAL { ?item wdt:P449 ?network . ?network rdfs:label ?networkLabel . FILTER(LANG(?networkLabel) = "en") }` : ""

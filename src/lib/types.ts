@@ -117,6 +117,9 @@ export interface Mapping {
   customRatings?: boolean | null
   /** IMDb ID salvato al save: evita getExternalIds per i poster mappati. */
   imdbId?: string | null
+  /** QID Wikidata salvato al save: fast-path REST awards senza SPARQL né
+   * fetch TMDB. Assente nei mapping vecchi (restano SPARQL-fallback). */
+  wikidataId?: string | null
   badgeStyle?: BadgeStyle | null
   rankingBadgeStyle?: RankingBadgeStyle | null
   blurEnabled?: boolean | null

@@ -4,6 +4,7 @@ import { getPosterPublicBaseUrl } from "./poster-public-url"
 import { buildStremioPosterSearchParams } from "./stremio-poster-params"
 import { isManualAccent } from "./accent-color"
 import { RENDER_VERSION } from "./render-version"
+import { isValidWikidataQid } from "./awards"
 import { TOP_LIGHT_LUMINANCE } from "./constants"
 import { hexLuminance, computeBottomLight } from "./accent-color"
 import type { SearchResult, TMDBImage } from "./types"
@@ -86,6 +87,8 @@ interface PosterState {
     type?: string
     status?: string
     imdb_id?: string | null
+    /** QID Wikidata dai details (fast-path REST awards in preview). */
+    wikidata_id?: string | null
   }
   trendRank: number | null
   mdblistAnimeList: EnrichedAnimeItem[]
@@ -203,6 +206,11 @@ export function buildPreviewUrl(ps: PosterState, bp: BadgeParams): string {
     if (/^\d{4}-\d{2}-\d{2}$/.test(fullFad || "")) params.push(`fad=${fullFad}`)
     const imdbId = ps.metaInfo.imdb_id || ps.selected.imdb_id
     if (imdbId) params.push(`imdbId=${encodeURIComponent(imdbId)}`)
+    // QID Wikidata per il fast-path REST awards: il client lo ha già dai
+    // details (zero RTT extra). Validato qui e di nuovo sul server: senza,
+    // la preview cade nella lotteria SPARQL (Dexter: Emmy a intermittenza).
+    const wikidataId = ps.metaInfo.wikidata_id
+    if (isValidWikidataQid(wikidataId)) params.push(`wikidata_id=${wikidataId}`)
     // Titolo per il match JustWatch (rilevamento pre-digitale + qualità):
     // senza, il server ripiega su genreName ("Avventura") e il match per
     // tmdbId fallisce sempre.

@@ -291,12 +291,53 @@ export function UserSpacesList() {
   const [loginPassword, setLoginPassword] = useState("")
   const [loginBusy, setLoginBusy] = useState(false)
   const { copied, copy } = useCopyUuid()
+  // Shortcut spazio attivo di sessione (zero memoria persistente): AppShell
+  // scrive pictorium_active_space in sessionStorage; se è sbloccato in
+  // memoria, il gate mostra un banner per tornarci senza ridigitare.
+  // Solo lettura: nessuna scrittura in localStorage (anti-leak, vedi
+  // expectNoTrustedMemory). Il prefill del login resta comodità senza
+  // bypass (la password resta sempre obbligatoria).
+  const [sessionSpace, setSessionSpace] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/status")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMultiUser(d?.multiUser === true))
       .catch(() => setMultiUser(false))
+  }, [])
+
+  useEffect(() => {
+    const readSpace = (): string | null => {
+      let id: string | null = null
+      try {
+        id = window.sessionStorage?.getItem("pictorium_active_space")
+      } catch {
+        id = null
+      }
+      id = id?.trim().toLowerCase() || null
+      if (!id || !/^[0-9a-f-]{1,36}$/.test(id)) return null
+      return isUserUnlocked(id) ? id : null
+    }
+    const readLast = (): string | null => {
+      let id: string | null = null
+      try {
+        id = window.sessionStorage?.getItem("pictorium_active_space")
+      } catch {
+        id = null
+      }
+      id = id?.trim().toLowerCase() || null
+      return id && /^[0-9a-f-]{1,36}$/.test(id) ? id : null
+    }
+    setSessionSpace(readSpace())
+    const last = readLast()
+    if (last) setLoginUuid((prev) => prev || last)
+    const resync = () => setSessionSpace(readSpace())
+    window.addEventListener(USER_UNLOCK_EVENT, resync)
+    window.addEventListener("popstate", resync)
+    return () => {
+      window.removeEventListener(USER_UNLOCK_EVENT, resync)
+      window.removeEventListener("popstate", resync)
+    }
   }, [])
 
   if (multiUser === null) return null
@@ -362,6 +403,18 @@ export function UserSpacesList() {
 
   return (
     <div className="bg-surface/50 border border-surface2/60 rounded-xl p-3.5 space-y-2.5 shadow-sm">
+      {sessionSpace && !created && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
+          <UuidRow uuid={sessionSpace} />
+          <button
+            type="button"
+            onClick={() => router.push(`/u/${sessionSpace}/configure`)}
+            className="block w-full text-center py-2 rounded-lg text-xs font-semibold bg-amber-500 text-black hover:bg-amber-400 cursor-pointer"
+          >
+            {t("ui.userSpaceOpen")}
+          </button>
+        </div>
+      )}
       {created ? (
         <div className="space-y-2">
           <p className="text-[11px] text-amber-300/90 leading-relaxed">{t("ui.userSpaceSecretOnce")}</p>

@@ -7,6 +7,7 @@ import {
   __resetUserCredentialsForTests,
   getStoredUserPassword,
   isUserUnlocked,
+  USER_UNLOCK_EVENT,
 } from "@/lib/user-token"
 
 const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }))
@@ -70,6 +71,7 @@ afterEach(() => {
   global.fetch = realFetch
   __resetUnlockedUsersForTests()
   __resetUserCredentialsForTests()
+  window.sessionStorage.removeItem("pictorium_active_space")
   setUrl("/")
   vi.restoreAllMocks()
 })
@@ -115,6 +117,28 @@ describe("UserSpacesList gate crea/entri (zero memoria)", () => {
     expect(isUserUnlocked(UUID)).toBe(true)
     expect(getStoredUserPassword(UUID)).toBe("right-password-1")
     // Login non scrive nulla (niente secret da salvare qui).
+    expectNoTrustedMemory()
+  })
+
+  it("shortcut: spazio attivo sbloccato mostra banner e naviga", async () => {
+    window.sessionStorage.setItem("pictorium_active_space", UUID)
+    window.dispatchEvent(new CustomEvent(USER_UNLOCK_EVENT, { detail: { uuid: UUID } }))
+    renderWithCtx(<UserSpacesList />)
+    // Banner con UUID + pulsante: niente ridigitazione.
+    expect(await screen.findByText(UUID)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "ui.userSpaceOpen" }))
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(`/u/${UUID}/configure`))
+    // Solo lettura sessionStorage: niente scritture persistenti.
+    expectNoTrustedMemory()
+  })
+
+  it("shortcut: spazio attivo bloccato non mostra banner ma precompila il login", async () => {
+    window.sessionStorage.setItem("pictorium_active_space", UUID)
+    renderWithCtx(<UserSpacesList />)
+    await screen.findByText("ui.userSpaceOr")
+    // Niente banner senza unlock: solo prefill del campo UUID.
+    expect(screen.queryByRole("button", { name: "ui.userSpaceOpen" })).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")).toHaveValue(UUID)
     expectNoTrustedMemory()
   })
 

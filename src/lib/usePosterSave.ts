@@ -20,7 +20,7 @@ interface PosterSaveDeps {
   setPreviewPoster: (poster: TMDBImage | null) => void
   setPreviewId: (id: string | null) => void
   posters: TMDBImage[]
-  metaInfo: { genres: { id: number; name: string }[]; voteAverage: number; type?: string; status?: string; release_date?: string; first_air_date?: string; last_air_date?: string; number_of_seasons?: number; awards?: string[]; nominations?: string[]; studios?: string[]; director?: string | null; keywords?: string[]; imdb_id?: string | null; networksDetailed?: { name: string; logo_path: string | null; origin_country?: string }[]; productionCompaniesDetailed?: { name: string; logo_path: string | null; origin_country?: string }[] }
+  metaInfo: { genres: { id: number; name: string }[]; voteAverage: number; type?: string; status?: string; release_date?: string; first_air_date?: string; last_air_date?: string; number_of_seasons?: number; awards?: string[]; nominations?: string[]; studios?: string[]; director?: string | null; keywords?: string[]; imdb_id?: string | null; wikidata_id?: string | null; networksDetailed?: { name: string; logo_path: string | null; origin_country?: string }[]; productionCompaniesDetailed?: { name: string; logo_path: string | null; origin_country?: string }[] }
   /** IMDb Top 250 membership for the selected content. */
   imdbTop250?: boolean
   trendRank: number | null
@@ -325,6 +325,8 @@ export function usePosterSave(deps: PosterSaveDeps) {
           voteAverage: metaInfo.voteAverage || null,
           // IMDb ID per provider custom rating: evita getExternalIds sui salvati.
           imdbId: metaInfo.imdb_id || null,
+          // QID Wikidata per il fast-path REST awards (stesso pattern imdbId).
+          wikidataId: metaInfo.wikidata_id || null,
           trendRank: trendRank ?? undefined,
           trendPeriod: "day",
           // Solo scelta manuale: l'auto-rilevato coincide con autoAccentColor e

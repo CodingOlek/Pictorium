@@ -174,6 +174,16 @@ describe("mappingSchema", () => {
       expect(result.data.trendRank).toBe(3)
     }
   })
+
+  it("accepts wikidataId and rejects garbage QIDs", () => {
+    const base = { tmdbId: 1405, mediaType: "tv", title: "Dexter", posterPath: "/d.jpg" }
+    const ok = mappingSchema.safeParse({ ...base, wikidataId: "Q23577" })
+    expect(ok.success).toBe(true)
+    if (ok.success) expect(ok.data.wikidataId).toBe("Q23577")
+    // Mapping vecchi senza campo: restano validi (SPARQL-fallback).
+    expect(mappingSchema.safeParse(base).success).toBe(true)
+    expect(mappingSchema.safeParse({ ...base, wikidataId: "nope" }).success).toBe(false)
+  })
 })
 
 describe("getUpcomingReleaseLabel", () => {

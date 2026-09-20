@@ -31,6 +31,9 @@ export const mappingSchema = z.object({
   badgeRating: z.boolean().nullable().optional(),
   customRatings: z.boolean().nullable().optional(),
   imdbId: z.string().regex(/^tt\d{1,20}$/).nullable().optional(),
+  // QID Wikidata per il fast-path REST awards (stesso pattern imdbId).
+  // Opzionale: i mapping vecchi senza campo restano validi (SPARQL-fallback).
+  wikidataId: z.string().regex(/^Q\d{1,20}$/).nullable().optional(),
   genreName: z.string().nullable().optional(),
   voteAverage: z.number().min(0).max(10).nullable().optional(),
   trendRank: z.number().int().min(0).nullable().optional(),
@@ -139,6 +142,8 @@ export const posterQuerySchema = z.object({
   rw: boundedQueryString(12),
   sash: boundedQueryString(64),
   imdbId: z.string().regex(/^tt\d{1,20}$/).optional(),
+  // QID Wikidata per il fast-path REST awards (validato anche al sito d'uso).
+  wikidata_id: z.string().regex(/^Q\d{1,20}$/).optional(),
   rank: intQueryString(7),
   animerank: intQueryString(7),
   scale: boundedQueryString(12),

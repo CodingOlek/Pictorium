@@ -37,18 +37,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // mdblist_key e rsrc cambiano il voto medio → parte del cache key.
   const mdblistHash = mdblistKey ? crypto.createHash("sha1").update(mdblistKey).digest("hex").slice(0, 8) : ""
   const rsrcKey = ratingSources ? ratingSources.slice().sort().join(",") : ""
+  // v12: il body include anche wikidata_id (fast-path REST awards). Le entry
+  // v11 in cache hanno shape senza e scadrebbero comunque per TTL, ma il bump
+  // rende deterministico il cutover invece di lasciarlo alla scadenza.
   const cacheKey = rsrcKey
-    ? `details:v11:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}:${rsrcKey}`
-    : `details:v11:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}`
+    ? `details:v12:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}:${rsrcKey}`
+    : `details:v12:${type}:${tmdbId}:${language}:${mdblistHash || "nomk"}`
   interface Genre { id: number; name: string }
   interface Episode { id: number; name: string; air_date: string | null; episode_number: number; season_number: number }
 
-  const cached = cacheGet<{ title?: string; name?: string; genres: Genre[]; voteAverage: number; voteCount: number; type?: string; status?: string; release_date?: string; first_air_date?: string; last_air_date?: string; next_episode_to_air?: Episode | null; number_of_seasons?: number; number_of_episodes?: number; networks?: { id: number; name: string; logo_path: string | null; origin_country: string }[]; production_companies?: { id: number; name: string; logo_path: string | null; origin_country: string }[]; imdb_id?: string | null; original_language?: string }>(cacheKey)
+  const cached = cacheGet<{ title?: string; name?: string; genres: Genre[]; voteAverage: number; voteCount: number; type?: string; status?: string; release_date?: string; first_air_date?: string; last_air_date?: string; next_episode_to_air?: Episode | null; number_of_seasons?: number; number_of_episodes?: number; networks?: { id: number; name: string; logo_path: string | null; origin_country: string }[]; production_companies?: { id: number; name: string; logo_path: string | null; origin_country: string }[]; imdb_id?: string | null; wikidata_id?: string | null; original_language?: string }>(cacheKey)
   if (cached) return Response.json(cached)
   try {
     const [data, extIds] = await Promise.all([
       getDetails(mediaType, tmdbId, language, apiKey),
-      getExternalIds(mediaType, tmdbId, apiKey).catch(() => ({ imdb_id: null })),
+      getExternalIds(mediaType, tmdbId, apiKey).catch(() => ({ imdb_id: null, wikidata_id: null })),
     ])
     const imdbId = extIds.imdb_id
     let aggregatedData: Awaited<ReturnType<typeof fetchAggregatedRating>> = null
@@ -69,7 +72,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           return avgVote ?? data.vote_average ?? 0
         })())
       : data.vote_average ?? 0
-    const body = { title: data.title, name: data.name, genres: data.genres || [], voteAverage: rating, voteCount: data.vote_count, type: data.type, status: data.status, release_date: data.release_date, first_air_date: data.first_air_date, last_air_date: data.last_air_date, next_episode_to_air: data.next_episode_to_air, number_of_seasons: data.number_of_seasons, number_of_episodes: data.number_of_episodes, networks: data.networks, production_companies: data.production_companies, imdb_id: extIds.imdb_id, original_language: data.original_language, aggregatedRatings: aggregatedData }
+    // wikidata_id: già fetchato qui sopra via getExternalIds (zero RTT extra) —
+    // serve al client per il param wikidata_id della preview (fast-path REST
+    // awards senza passare dallo SPARQL lento).
+    const body = { title: data.title, name: data.name, genres: data.genres || [], voteAverage: rating, voteCount: data.vote_count, type: data.type, status: data.status, release_date: data.release_date, first_air_date: data.first_air_date, last_air_date: data.last_air_date, next_episode_to_air: data.next_episode_to_air, number_of_seasons: data.number_of_seasons, number_of_episodes: data.number_of_episodes, networks: data.networks, production_companies: data.production_companies, imdb_id: extIds.imdb_id, wikidata_id: extIds.wikidata_id ?? null, original_language: data.original_language, aggregatedRatings: aggregatedData }
     cacheSet(cacheKey, body, ["tmdb", "details"])
     return Response.json(body)
   } catch {

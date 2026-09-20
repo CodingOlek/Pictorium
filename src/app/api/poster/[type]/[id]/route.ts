@@ -13,7 +13,7 @@ import { getServerDefaults, getServerDefaultsForUser } from "@/lib/server-defaul
 import { getRegionDef, normalizeRegion, parseRegion, defaultRegionForLang } from "@/lib/regions"
 import { BEST_FIT_GLOBAL } from "@/lib/best-fit-config"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
-import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel } from "@/lib/awards"
+import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel, isValidWikidataQid } from "@/lib/awards"
 import { createT } from "@/lib/i18n"
 import type { EnrichedAnimeItem } from "@/lib/validation"
 import { fetchMDBList, type MDBListEntry } from "@/lib/mdblist"
@@ -555,9 +555,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   let tmdbNetworksDetailed: { name: string; logoPath: string | null }[] = []
   let productionCompaniesDetailed: { name: string; logoPath: string | null }[] = []
   let imdbId: string | null = pathImdbId
-  // QID Wikidata per il fast-path REST (zero RTT: già in external_ids via
-  // append). Solo ramo non-mappato; mapping/query restano SPARQL-fallback.
+  // QID Wikidata per il fast-path REST awards (wbgetentities, ~150ms) invece
+  // della lotteria SPARQL (4-13s contro race da 2.5s). Catena: query
+  // `wikidata_id` (la preview lo ha già dai details, zero RTT) > mapping
+  // salvato > session cache TMDB del processo > ramo else (details +
+  // external_ids in append). Senza QID ovunque: fallback SPARQL invariato.
   let wikidataId: string | null = null
+  {
+    const queryWikidataId = req.nextUrl.searchParams.get("wikidata_id")
+    const mappingWikidataId = mapping?.wikidataId ?? null
+    const sessionWikidataId = getTMDBSessionCache(mediaType, tmdbId)?.externalIds?.wikidata_id ?? null
+    if (isValidWikidataQid(queryWikidataId)) wikidataId = queryWikidataId
+    else if (isValidWikidataQid(mappingWikidataId)) wikidataId = mappingWikidataId
+    else if (isValidWikidataQid(sessionWikidataId)) wikidataId = sessionWikidataId
+  }
 
   const queryPoster = req.nextUrl.searchParams.get("poster")
   const queryLogo = req.nextUrl.searchParams.get("logo")
@@ -692,7 +703,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       // poi il primo backdrops di /images (già 16:9 nativi).
       autoBackdropPath = details.backdrop_path || images.backdrops[0]?.file_path || null
       imdbId = extIds.imdb_id
-      wikidataId = extIds.wikidata_id ?? null
+      // Non sovrascrivere un QID già risolto a monte (query > mapping >
+      // session): il fetch qui è l'ultima ruota, non la prima.
+      if (!wikidataId) wikidataId = extIds.wikidata_id ?? null
       // A1: fetch deferito — la media TMDB+IMDb parte subito ma non blocca.
       ratingAbort = imdbId ? new AbortController() : null
       aggregatedRating = imdbId

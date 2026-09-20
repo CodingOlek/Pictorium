@@ -12,6 +12,7 @@ import { resolveStreamQuality } from "@/lib/stream-quality"
 import { __resetTMDBSessionCache } from "@/lib/tmdb-session-cache"
 import type { Mapping } from "@/lib/types"
 import { fetchCustomRatings } from "@/lib/custom-rating"
+import { fetchAllWikidata } from "@/lib/awards"
 import { renderMultiRatings } from "@/lib/multi-rating-renderer"
 import { fetchAggregatedRating } from "@/lib/ratings"
 import { RENDER_VERSION } from "@/lib/render-version"
@@ -65,6 +66,8 @@ vi.mock("@/lib/awards", () => ({
   matchTMDBStudios: vi.fn(() => []),
   matchDirectorName: vi.fn((name: string | null) => name),
   directorBadgeLabel: vi.fn((name: string | null) => name),
+  // La route lo importa davvero: senza, la chain wikidataId lancia TypeError.
+  isValidWikidataQid: (v: unknown): v is string => typeof v === "string" && /^Q\d+$/.test(v),
 }))
 
 vi.mock("@/lib/mdblist", () => ({
@@ -633,6 +636,72 @@ describe("GET /api/poster/[type]/[id] with saved mappings", () => {
     expect(mockedGetDetails.mock.calls.length).toBe(1)
     expect(mockedGetImages.mock.calls.length).toBe(imagesAfterFirst)
     expect(mockedGetExternalIds.mock.calls.length).toBe(extAfterFirst)
+  })
+
+  // Catena wikidataId (fast-path REST awards): query > mapping > session >
+  // ramo else. Senza, preview e mapping cadono nella lotteria SPARQL
+  // (Dexter: Emmy a intermittenza). ID unici: la poster cache runtime non
+  // viene resettata tra i test e la chiave include l'id.
+  async function qidPoster() {
+    return imageBuffer("#101010", 500, 750)
+  }
+
+  it("passes query wikidata_id to fetchAllWikidata in the preview branch", async () => {
+    const poster = await qidPoster()
+    mockedGetById.mockResolvedValue(null)
+    mockedGetDetails.mockResolvedValue({ id: 61001, title: "Qid Preview", genres: [], vote_average: 0, vote_count: 0 })
+    mockedGetImages.mockResolvedValue({
+      id: 61001,
+      posters: [{ file_path: "/qid.jpg", iso_639_1: null, vote_average: 8, vote_count: 10, width: 500, height: 750, aspect_ratio: 0.667 }],
+      logos: [],
+      backdrops: [],
+    })
+    mockedGetExternalIds.mockResolvedValue({ imdb_id: null })
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(poster), {
+      headers: { "content-type": "image/png" },
+    }))
+    vi.mocked(fetchAllWikidata).mockClear()
+    const res = await GET(new NextRequest("http://localhost:3000/api/poster/movie/61001?poster=/qid.jpg&ranking=1&wikidata_id=Q23577&preview=1"), {
+      params: Promise.resolve({ type: "movie", id: "61001" }),
+    })
+    expect(res.status).toBe(200)
+    expect(vi.mocked(fetchAllWikidata)).toHaveBeenCalledWith(61001, "movie", expect.anything(), { wikidataId: "Q23577" })
+  })
+
+  it("uses the saved mapping wikidataId without a query param", async () => {
+    const poster = await qidPoster()
+    mockedGetById.mockResolvedValue({
+      tmdbId: 61002, mediaType: "movie", title: "Qid Saved", posterPath: "/qid-saved.jpg",
+      logoPath: null, originalPosterPath: null, language: "it",
+      rankingBadges: true, wikidataId: "Q23577", updatedAt: "2026-09-20T00:00:00.000Z",
+    })
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(poster), {
+      headers: { "content-type": "image/png" },
+    }))
+    vi.mocked(fetchAllWikidata).mockClear()
+    const res = await GET(new NextRequest("http://localhost:3000/api/poster/movie/61002"), {
+      params: Promise.resolve({ type: "movie", id: "61002" }),
+    })
+    expect(res.status).toBe(200)
+    expect(vi.mocked(fetchAllWikidata)).toHaveBeenCalledWith(61002, "movie", expect.anything(), { wikidataId: "Q23577" })
+  })
+
+  it("falls back to null wikidataId for legacy mappings (SPARQL preserved)", async () => {
+    const poster = await qidPoster()
+    mockedGetById.mockResolvedValue({
+      tmdbId: 61003, mediaType: "movie", title: "Qid Legacy", posterPath: "/qid-legacy.jpg",
+      logoPath: null, originalPosterPath: null, language: "it",
+      rankingBadges: true, updatedAt: "2026-09-20T00:00:00.000Z",
+    })
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(poster), {
+      headers: { "content-type": "image/png" },
+    }))
+    vi.mocked(fetchAllWikidata).mockClear()
+    const res = await GET(new NextRequest("http://localhost:3000/api/poster/movie/61003"), {
+      params: Promise.resolve({ type: "movie", id: "61003" }),
+    })
+    expect(res.status).toBe(200)
+    expect(vi.mocked(fetchAllWikidata)).toHaveBeenCalledWith(61003, "movie", expect.anything(), { wikidataId: null })
   })
 })
 

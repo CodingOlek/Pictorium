@@ -55,6 +55,27 @@ describe("GET /api/tmdb/[id]/details (voto medio TMDB+IMDb)", () => {
     expect(body.voteAverage).toBe(7.3)
   })
 
+  it("exposes wikidata_id from external_ids (preview fast-path, zero extra RTT)", async () => {
+    ;(getDetails as ReturnType<typeof vi.fn>).mockResolvedValue(BASE_DETAILS)
+    ;(getExternalIds as ReturnType<typeof vi.fn>).mockResolvedValue({ imdb_id: "tt123", wikidata_id: "Q23577" })
+
+    const res = await GET(makeReq(), { params: Promise.resolve({ id: "123" }) })
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(body.wikidata_id).toBe("Q23577")
+    expect(body.imdb_id).toBe("tt123")
+  })
+
+  it("nulls wikidata_id when TMDB has no link (SPARQL fallback preserved)", async () => {
+    ;(getDetails as ReturnType<typeof vi.fn>).mockResolvedValue(BASE_DETAILS)
+    ;(getExternalIds as ReturnType<typeof vi.fn>).mockResolvedValue({ imdb_id: "tt123" })
+
+    const res = await GET(makeReq(), { params: Promise.resolve({ id: "123" }) })
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(body.wikidata_id).toBeNull()
+  })
+
   it("uses the TMDB+IMDb average when the aggregated rating is available", async () => {
     ;(getDetails as ReturnType<typeof vi.fn>).mockResolvedValue(BASE_DETAILS)
     ;(getExternalIds as ReturnType<typeof vi.fn>).mockResolvedValue({ imdb_id: "tt123" })
@@ -87,8 +108,8 @@ describe("GET /api/tmdb/[id]/details (voto medio TMDB+IMDb)", () => {
     expect(keys).toHaveLength(2)
     // Chiavi diverse → non c'è cache hit incrociato con un'altra chiave mdblist.
     expect(keys[0]).not.toBe(keys[1])
-    // Prefisso standard details:v11.
-    expect(keys[0]).toMatch(/^details:v11:movie:123:it-IT:/)
+    // Prefisso standard details:v12 (v11 senza wikidata_id nel body).
+    expect(keys[0]).toMatch(/^details:v12:movie:123:it-IT:/)
     // La chiave API non deve apparire in chiaro nel cache key (hash sha1 a 8 hex).
     expect(keys[0]).not.toContain("keyAAA")
     expect(keys[1]).not.toContain("keyBBB")

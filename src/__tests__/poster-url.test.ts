@@ -175,6 +175,17 @@ describe("buildPreviewUrl", () => {
     expect(url).not.toContain("u=")
   })
 
+  it("includes wikidata_id for the REST fast-path with a valid QID", () => {
+    const url = buildPreviewUrl({ ...basePosterState, metaInfo: { ...basePosterState.metaInfo, wikidata_id: "Q23577" } }, baseBadgeParams)
+    expect(url).toContain("wikidata_id=Q23577")
+  })
+
+  it("omits wikidata_id without a valid QID", () => {
+    expect(buildPreviewUrl(basePosterState, baseBadgeParams)).not.toContain("wikidata_id=")
+    const url = buildPreviewUrl({ ...basePosterState, metaInfo: { ...basePosterState.metaInfo, wikidata_id: "nope" } }, baseBadgeParams)
+    expect(url).not.toContain("wikidata_id=")
+  })
+
   it("includes poster param from previewPoster", () => {
     const url = buildPreviewUrl(basePosterState, baseBadgeParams)
     expect(url).toContain("poster=%2Fposter.jpg")
