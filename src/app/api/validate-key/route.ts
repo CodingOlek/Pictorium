@@ -92,5 +92,26 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
   }
 
+  if (provider === "simkl") {
+    // Stesso code path di produzione (lib/simkl.ts): /redirect con redirect
+    // manuale — 301/302 + Location = Client ID funzionante.
+    try {
+      const res = await fetch("https://api.simkl.com/redirect?imdb=tt0111161", {
+        method: "GET",
+        redirect: "manual",
+        headers: { "simkl-api-key": cleanKey },
+        signal: AbortSignal.timeout(6000),
+      })
+      const location = res.headers.get("location")
+      if ((res.status === 301 || res.status === 302) && location) {
+        return Response.json({ valid: true })
+      }
+      return Response.json({ valid: false, message: "Chiave Simkl non valida" })
+    } catch (e) {
+      log.warn("Simkl key validation failed", { error: e instanceof Error ? e.message : String(e) })
+      return invalidOrUnreachable("Simkl")
+    }
+  }
+
   return Response.json({ valid: false, message: "Unknown provider" }, { status: 400 })
 }

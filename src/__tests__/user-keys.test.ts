@@ -100,6 +100,35 @@ describe("user-keys encryption", () => {
     expect(await keys.getUserKeys(UUID_A)).toEqual({})
     expect(await keys.getUserKeysStatus(UUID_A)).toMatchObject({ tmdb: true })
   })
+
+  it("soft-disable: flag senza toccare il materiale, risoluzione ed reveal", async () => {
+    vi.resetModules()
+    const keys = await import("@/lib/user-keys")
+    await keys.setUserKeys(UUID_A, { tmdb: NS_TMDB_KEY, mdblist: "ns-mdblist-1" })
+    // Disattiva solo tmdb: presenza invariata, risoluzione esclusa.
+    await keys.setUserKeys(UUID_A, { tmdb: { disabled: true } })
+    expect(await keys.getUserKeysDisabled(UUID_A)).toEqual({ tmdb: true, mdblist: false, tvdb: false, simkl: false })
+    expect(await keys.getUserKeysStatus(UUID_A)).toEqual({ tmdb: true, mdblist: true, tvdb: false, simkl: false })
+    expect(await keys.getUserKeys(UUID_A)).toMatchObject({ mdblist: "ns-mdblist-1" })
+    expect(await keys.getUserKeys(UUID_A)).not.toHaveProperty("tmdb")
+    // Reveal esplicito vede anche le disattivate (serve alla riattivazione).
+    expect(await keys.getUserKeys(UUID_A, { includeDisabled: true })).toMatchObject({ tmdb: NS_TMDB_KEY })
+    // Riattiva: il materiale è ancora lì, niente ridigitazione.
+    await keys.setUserKeys(UUID_A, { tmdb: { disabled: false } })
+    expect(await keys.getUserKeysDisabled(UUID_A)).toMatchObject({ tmdb: false })
+    expect(await keys.getUserKeys(UUID_A)).toMatchObject({ tmdb: NS_TMDB_KEY })
+  })
+
+  it("flag senza env: passa (niente da cifrare); oggetti malformati → errore", async () => {
+    vi.resetModules()
+    const keys = await import("@/lib/user-keys")
+    await keys.setUserKeys(UUID_A, { tmdb: NS_TMDB_KEY })
+    delete process.env.PROFILE_ENCRYPTION_KEY
+    await expect(keys.setUserKeys(UUID_A, { tmdb: { disabled: true } })).resolves.toBeUndefined()
+    expect(await keys.getUserKeysDisabled(UUID_A)).toMatchObject({ tmdb: true })
+    await expect(keys.setUserKeys(UUID_A, { tmdb: {} as never })).rejects.toThrowError(keys.InvalidUserKeyError)
+    await expect(keys.setUserKeys(UUID_A, { tmdb: { disabled: "sì" } as never })).rejects.toThrowError(keys.InvalidUserKeyError)
+  })
 })
 
 describe("resolveUserApiKeys", () => {

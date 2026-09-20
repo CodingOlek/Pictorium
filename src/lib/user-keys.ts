@@ -57,6 +57,9 @@ interface EncBundle {
 interface KeysFile {
   version: 1
   keys: Partial<Record<UserKeyKind, EncBundle>>
+  /** Soft-disable per kind (plaintext, mai segreti): la chiave resta cifrata
+   * a riposo ma non viene usata per la risoluzione. Assente = tutto attivo. */
+  disabled?: Partial<Record<UserKeyKind, boolean>>
   updatedAt: string
 }
 
@@ -123,8 +126,11 @@ async function readKeysFile(userId: string): Promise<KeysFile | null> {
  * Chiavi decifrate del namespace (solo memoria, mai loggate).
  * Bundle non decifrabili (env ruotata/rimossa — v1 non supporta rotazione) →
  * skippati con error log e trattati come assenti (degraded, mai throw).
+ * Le kind disattivate (soft-disable) sono escluse di default: la risoluzione
+ * (cataloghi, poster, meta) non le vede. Solo azioni esplicite del
+ * proprietario (reveal, riattivazione) usano `includeDisabled: true`.
  */
-export async function getUserKeys(userId: string): Promise<UserKeys> {
+export async function getUserKeys(userId: string, opts?: { includeDisabled?: boolean }): Promise<UserKeys> {
   assertValidUserId(userId)
   const file = await readKeysFile(userId)
   if (!file) return {}
@@ -133,8 +139,10 @@ export async function getUserKeys(userId: string): Promise<UserKeys> {
     log.error("user keys present but PROFILE_ENCRYPTION_KEY is missing/invalid — treating as key-missing")
     return {}
   }
+  const disabled = file.disabled ?? {}
   const out: UserKeys = {}
   for (const kind of USER_KEY_KINDS) {
+    if (!opts?.includeDisabled && disabled[kind] === true) continue
     const bundle = file.keys[kind]
     if (!isValidBundle(bundle)) continue
     try {
@@ -146,6 +154,19 @@ export async function getUserKeys(userId: string): Promise<UserKeys> {
     }
   }
   return out
+}
+
+/** Flag soft-disable per kind (tutto false se mai impostato). */
+export async function getUserKeysDisabled(userId: string): Promise<Record<UserKeyKind, boolean>> {
+  assertValidUserId(userId)
+  const file = await readKeysFile(userId)
+  const disabled = file?.disabled ?? {}
+  return {
+    tmdb: disabled.tmdb === true,
+    mdblist: disabled.mdblist === true,
+    tvdb: disabled.tvdb === true,
+    simkl: disabled.simkl === true,
+  }
 }
 
 /** Solo presenza per kind (booleans): nessun valore, nessuna decifratura. */
@@ -213,20 +234,43 @@ function normalizeKeyInput(kind: string, value: unknown): string | null {
 
 /**
  * Salva (merge) le chiavi del namespace. `null`/`""` = cancella la kind.
+ * Forma oggetto per il soft-disable senza toccare il materiale:
+ * `{ value?: string | null, disabled?: boolean }` (campo assente = invariato).
  * Richiede cifratura disponibile quando almeno una kind va scritta (fail-closed:
- * mai chiavi in chiaro a riposo). Le sole cancellazioni passano anche senza env.
+ * mai chiavi in chiaro a riposo). Le sole cancellazioni e i soli flag passano
+ * anche senza env (niente da cifrare).
  */
 export async function setUserKeys(userId: string, input: Partial<Record<UserKeyKind, unknown>>): Promise<void> {
   assertValidUserId(userId)
   const writes: Partial<Record<UserKeyKind, string>> = {}
   const deletes: UserKeyKind[] = []
+  const flagSets: Partial<Record<UserKeyKind, boolean>> = {}
+  const flagClears: UserKeyKind[] = []
   for (const kind of USER_KEY_KINDS) {
     if (!(kind in input)) continue
-    const normalized = normalizeKeyInput(kind, input[kind])
+    const raw = input[kind]
+    if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+      const obj = raw as Record<string, unknown>
+      const hasValue = "value" in obj
+      const hasDisabled = "disabled" in obj
+      if (!hasValue && !hasDisabled) throw new InvalidUserKeyError(kind)
+      if (hasDisabled) {
+        if (typeof obj.disabled !== "boolean") throw new InvalidUserKeyError(kind)
+        if (obj.disabled) flagSets[kind] = true
+        else flagClears.push(kind)
+      }
+      if (hasValue) {
+        const normalized = normalizeKeyInput(kind, obj.value)
+        if (normalized === null) deletes.push(kind)
+        else writes[kind] = normalized
+      }
+      continue
+    }
+    const normalized = normalizeKeyInput(kind, raw)
     if (normalized === null) deletes.push(kind)
     else writes[kind] = normalized
   }
-  const current = (await readKeysFile(userId)) ?? { version: 1 as const, keys: {}, updatedAt: new Date().toISOString() }
+  const current: KeysFile = (await readKeysFile(userId)) ?? { version: 1 as const, keys: {}, updatedAt: new Date().toISOString() }
   for (const kind of deletes) delete current.keys[kind]
   if (Object.keys(writes).length > 0) {
     const key = encryptionKey()
@@ -235,9 +279,14 @@ export async function setUserKeys(userId: string, input: Partial<Record<UserKeyK
       current.keys[kind] = encryptSecret(value, key)
     }
   }
+  const disabled = current.disabled ?? {}
+  for (const [kind] of Object.entries(flagSets) as [UserKeyKind, boolean][]) disabled[kind] = true
+  for (const kind of flagClears) delete disabled[kind]
+  if (Object.keys(disabled).length > 0) current.disabled = disabled
+  else delete current.disabled
   current.updatedAt = new Date().toISOString()
-  // Mai i valori nei log: solo le kind toccate.
-  log.info("User keys updated", { kinds: [...Object.keys(writes), ...deletes.map((k) => `-${k}`)] })
+  // Mai i valori nei log: solo le kind toccate (~ = flag soft-disable).
+  log.info("User keys updated", { kinds: [...Object.keys(writes), ...deletes.map((k) => `-${k}`), ...Object.keys(flagSets).map((k) => `~${k}`), ...flagClears.map((k) => `~-${k}`)] })
   if (useKv) {
     const { kv } = await import("@vercel/kv")
     await kv.set(keysKvKey(userId), current)

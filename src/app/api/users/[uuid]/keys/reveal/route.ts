@@ -44,7 +44,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<Route
   if (typeof kind !== "string" || !(USER_KEY_KINDS as readonly string[]).includes(kind)) {
     return Response.json({ error: "Invalid kind: use tmdb, mdblist, tvdb or simkl" }, { status: 400 })
   }
-  const value = (await getUserKeys(userId))[kind as UserKeyKind]
+  // Azione esplicita del proprietario: restituisce anche le kind
+  // disattivate (serve alla riattivazione senza ridigitare).
+  const value = (await getUserKeys(userId, { includeDisabled: true }))[kind as UserKeyKind]
   if (!value) return Response.json({ error: "Key not set" }, { status: 404 })
   return Response.json({ kind, value })
 }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/user-auth"
 import { isSameOrigin, originMismatchResponse } from "@/lib/auth"
 import {
+  getUserKeysDisabled,
   getUserKeysHealth,
   getUserKeysStatus,
   InvalidUserKeyError,
@@ -25,13 +26,15 @@ type RouteParams = { uuid: string }
 /**
  * Chiavi API del namespace (multi-user, slice 2).
  *
- * GET → solo presenza per kind (`{tmdb, mdblist, tvdb, simkl}` booleani): MAI valori,
- * MAI nei log. PUT → salva/cancella (stringa = imposta, `""`/`null` = cancella,
- * campo assente = invariato). POST `/reveal` → restituisce UNA chiave al
- * proprietario autenticato (sotto): unica eccezione all'eco, rate-limitata e
- * mai loggata. La cifratura a riposo è AES-256-GCM con
- * PROFILE_ENCRYPTION_KEY: senza env valida il salvataggio è rifiutato
- * fail-closed (503), mai chiavi in chiaro.
+ * GET → solo presenza per kind (`{tmdb, mdblist, tvdb, simkl}` booleani) + flag
+ * soft-disable (`disabled`): MAI valori, MAI nei log. PUT → salva/cancella
+ * (stringa = imposta, `""`/`null` = cancella, campo assente = invariato) e
+ * soft-disable (`{ value?, disabled? }`: il flag non tocca il materiale).
+ * POST `/reveal` → restituisce UNA chiave al proprietario autenticato (sotto):
+ * unica eccezione all'eco, rate-limitata e mai loggata. La cifratura a riposo
+ * è AES-256-GCM con PROFILE_ENCRYPTION_KEY: senza env valida il salvataggio
+ * è rifiutato fail-closed (503), mai chiavi in chiaro. I soli flag e le sole
+ * cancellazioni passano anche senza env.
  */
 
 async function checkAccess(req: NextRequest, uuid: string): Promise<{ userId: string } | Response> {
@@ -52,10 +55,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const access = await checkAccess(req, uuid)
   if (access instanceof Response) return access
   const { hasUserPassword } = await import("@/lib/user-auth")
-  // Stato onesto: presenza (contratto storico) + decifrabilità (env corrente).
-  // I client vecchi leggono i booleani top-level, quelli nuovi usano `health`.
+  // Stato onesto: presenza (contratto storico) + decifrabilità (env corrente)
+  // + soft-disable. I client vecchi leggono i booleani top-level, quelli nuovi
+  // usano `health` e `disabled`.
   const health = await getUserKeysHealth(access.userId)
-  return Response.json({ ...(await getUserKeysStatus(access.userId)), health, hasPassword: await hasUserPassword(access.userId) })
+  return Response.json({ ...(await getUserKeysStatus(access.userId)), disabled: await getUserKeysDisabled(access.userId), health, hasPassword: await hasUserPassword(access.userId) })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<RouteParams> }) {
@@ -93,5 +97,5 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<RouteP
     }
     throw e
   }
-  return Response.json({ ok: true, keys: await getUserKeysStatus(access.userId) })
+  return Response.json({ ok: true, keys: await getUserKeysStatus(access.userId), disabled: await getUserKeysDisabled(access.userId) })
 }

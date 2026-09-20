@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest } from "next/server"
 import { POST } from "@/app/api/validate-key/route"
 
+// Il bucket validate-key (10 token) si esaurirebbe tra i test: qui si testa la
+// logica di validazione provider, il rate limiting ha i suoi file dedicati.
+vi.mock("@/lib/rate-limit", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/lib/rate-limit")>()
+  return { ...mod, rateLimit: vi.fn(async () => ({ ok: true, retAfter: 0 })) }
+})
+
 describe("POST /api/validate-key", () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -138,6 +145,38 @@ describe("POST /api/validate-key", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: "tvdb", key: "bad-tvdb-key" }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.valid).toBe(false)
+  })
+
+  it("validates valid Simkl key (301 + Location)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: "https://api.simkl.com/movies/123" } })
+    )
+
+    const req = new NextRequest("http://localhost:3000/api/validate-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "simkl", key: "valid-simkl-key" }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.valid).toBe(true)
+  })
+
+  it("validates invalid Simkl key", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Invalid client id" }), { status: 401 })
+    )
+
+    const req = new NextRequest("http://localhost:3000/api/validate-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "simkl", key: "bad-simkl-key" }),
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
