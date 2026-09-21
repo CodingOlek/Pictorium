@@ -173,32 +173,23 @@ Attivando `PICTORIUM_MULTI_USER=1`, l'istanza permette a più utenti di condivid
 
 ### 🐳 Docker & Compose
 
-Crea un file `docker-compose.yml`:
+Usa il `docker-compose.yml` già incluso nel repo (hardening, healthcheck e volume persistente `posterium-data` già configurati) — non serve scriverne uno a mano:
 
-```yaml
-services:
-  pictorium:
-    image: eful97/pictorium:latest
-    container_name: pictorium
-    restart: unless-stopped
-    ports:
-      - "${PICTORIUM_HOST_PORT:-8080}:8080"
-    environment:
-      - PICTORIUM_TMDB_KEY=la_tua_chiave_tmdb
-      - PICTORIUM_ADMIN_TOKEN=scegli_un_segreto_lungo
-    volumes:
-      - posterium-data:/data
-
-volumes:
-  posterium-data:
+```bash
+git clone https://github.com/Eful97/Pictorium && cd Pictorium
+cp .env.example .env
 ```
 
-> Le route admin sono chiuse di default: incolla il token in **Impostazioni → Token admin** (solo sessione) per usare warmup, cache e salvataggi dalla UI. Solo su LAN fidata puoi usare `PICTORIUM_PUBLIC_INSTANCE=1` al posto del token. Non rinominare il volume (`posterium-data` è il nome usato anche dal `docker-compose.yml` del repo).
+Compila nel `.env` almeno `PICTORIUM_TMDB_KEY` e `PICTORIUM_ADMIN_TOKEN` (un segreto lungo a tua scelta), poi:
 
-Avvia il container:
 ```bash
 docker compose up -d
 ```
+
+> Il primo avvio compila l'immagine in locale (qualche minuto, di più su ARM). Le route admin sono chiuse di default: incolla il token in **Impostazioni → Token admin** (solo sessione) per usare warmup, cache e salvataggi dalla UI. Solo su LAN fidata puoi usare `PICTORIUM_PUBLIC_INSTANCE=1` al posto del token.
+>
+> Se venivi dal vecchio esempio con volume `pictorium-data` e hai già salvataggi, copiali prima di passare al compose del repo: `docker run --rm -v pictorium-data:/from -v posterium-data:/to alpine cp -a /from/. /to/`
+
 L'interfaccia e il manifest Stremio saranno disponibili su `http://<IP-SERVER>:8080`.
 
 ---
@@ -218,11 +209,9 @@ L'interfaccia e il manifest Stremio saranno disponibili su `http://<IP-SERVER>:8
 ```bash
 sudo apt update && sudo apt install -y docker.io docker-compose-v2
 git clone https://github.com/Eful97/Pictorium && cd Pictorium
-echo "PICTORIUM_TMDB_KEY=la_tua_chiave" >> .env
-echo "PICTORIUM_ADMIN_TOKEN=scegli_un_segreto_lungo" >> .env
-sudo docker compose up -d
+cp .env.example .env
 ```
-Poi incolla il token in **Impostazioni → Token admin** (solo sessione). Su istanza esposta non usare `PICTORIUM_PUBLIC_INSTANCE=1`.
+Compila `PICTORIUM_TMDB_KEY` e `PICTORIUM_ADMIN_TOKEN` nel `.env`, poi `sudo docker compose up -d` (usa il compose del repo). Poi incolla il token in **Impostazioni → Token admin** (solo sessione). Su istanza esposta non usare `PICTORIUM_PUBLIC_INSTANCE=1`.
 
 #### 🖥️ VPS + Caddy (HTTPS Automatico)
 ```caddyfile

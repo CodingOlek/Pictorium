@@ -173,32 +173,23 @@ When `PICTORIUM_MULTI_USER=1` is enabled, multiple users can share a single serv
 
 ### 🐳 Docker & Compose
 
-Create a `docker-compose.yml` file:
+Use the `docker-compose.yml` already included in the repo (hardening, healthcheck and persistent `posterium-data` volume preconfigured) — no need to write one by hand:
 
-```yaml
-services:
-  pictorium:
-    image: eful97/pictorium:latest
-    container_name: pictorium
-    restart: unless-stopped
-    ports:
-      - "${PICTORIUM_HOST_PORT:-8080}:8080"
-    environment:
-      - PICTORIUM_TMDB_KEY=your_tmdb_api_key
-      - PICTORIUM_ADMIN_TOKEN=choose_a_long_secret
-    volumes:
-      - posterium-data:/data
-
-volumes:
-  posterium-data:
+```bash
+git clone https://github.com/Eful97/Pictorium && cd Pictorium
+cp .env.example .env
 ```
 
-> Admin routes are closed by default: paste the token in **Settings → Admin token** (session only) to use warmup, cache and saves from the UI. Only on a trusted LAN you may use `PICTORIUM_PUBLIC_INSTANCE=1` instead of the token. Do not rename the volume (`posterium-data` is the name used by the repo's `docker-compose.yml`).
+Fill in at least `PICTORIUM_TMDB_KEY` and `PICTORIUM_ADMIN_TOKEN` (a long secret of your choice) in `.env`, then:
 
-Start the container:
 ```bash
 docker compose up -d
 ```
+
+> The first start builds the image locally (a few minutes, longer on ARM). Admin routes are closed by default: paste the token in **Settings → Admin token** (session only) to use warmup, cache and saves from the UI. Only on a trusted LAN you may use `PICTORIUM_PUBLIC_INSTANCE=1` instead of the token.
+>
+> If you came from the old example with a `pictorium-data` volume and already have saves, copy them before switching to the repo compose: `docker run --rm -v pictorium-data:/from -v posterium-data:/to alpine cp -a /from/. /to/`
+
 Your instance and Stremio manifest will be accessible at `http://<SERVER-IP>:8080`.
 
 ---
@@ -218,11 +209,9 @@ Your instance and Stremio manifest will be accessible at `http://<SERVER-IP>:808
 ```bash
 sudo apt update && sudo apt install -y docker.io docker-compose-v2
 git clone https://github.com/Eful97/Pictorium && cd Pictorium
-echo "PICTORIUM_TMDB_KEY=your_tmdb_key" >> .env
-echo "PICTORIUM_ADMIN_TOKEN=choose_a_long_secret" >> .env
-sudo docker compose up -d
+cp .env.example .env
 ```
-Then paste the token in **Settings → Admin token** (session only). On an exposed instance do not use `PICTORIUM_PUBLIC_INSTANCE=1`.
+Fill in `PICTORIUM_TMDB_KEY` and `PICTORIUM_ADMIN_TOKEN` in `.env`, then `sudo docker compose up -d` (uses the repo compose). Then paste the token in **Settings → Admin token** (session only). On an exposed instance do not use `PICTORIUM_PUBLIC_INSTANCE=1`.
 
 #### 🖥️ VPS + Caddy (Automatic HTTPS)
 ```caddyfile
