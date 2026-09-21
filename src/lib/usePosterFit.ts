@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 import type { TMDBImage, PosterShape } from "@/lib/types"
+import { userFetch } from "@/lib/http"
+import { currentPathUuid } from "@/lib/user-token"
 
 interface PosterFitMetrics {
   cleanliness: number
@@ -128,7 +130,7 @@ export function usePosterFit(input: UsePosterFitInput): UsePosterFitResult {
         if (!inp.selectedLogo) return
 
         const posterPaths = inp.cleanPosters.map((p) => p.file_path)
-        const res = await fetch("/api/poster-fit", {
+        const res = await userFetch("/api/poster-fit", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -148,12 +150,12 @@ export function usePosterFit(input: UsePosterFitInput): UsePosterFitResult {
         })
 
         if (!res.ok) {
-          // 401: la route admin è chiusa in produzione senza
-          // PICTORIUM_PUBLIC_INSTANCE=1 (o ADMIN_TOKEN). In locale (dev) le
-          // route admin sono aperte, quindi il best-fit funziona solo in dev
-          // finché il flag manca — messaggio esplicito invece del silenzio.
           if (res.status === 401) {
-            setError("Best-fit non disponibile: l'istanza non è in modalità pubblica (imposta PICTORIUM_PUBLIC_INSTANCE=1).")
+            if (currentPathUuid()) {
+              setError("Best-fit non disponibile: sblocca il tuo profilo per abilitare l'analisi automatica.")
+            } else {
+              setError("Best-fit protetto: sblocca con il token admin (oppure imposta PICTORIUM_PUBLIC_INSTANCE=1 se istanza senza token).")
+            }
           } else {
             setError(`Analisi best-fit fallita (HTTP ${res.status})`)
           }

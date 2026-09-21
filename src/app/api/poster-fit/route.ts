@@ -6,6 +6,7 @@ import { BEST_FIT_GLOBAL } from "@/lib/best-fit-config"
 import { createLogger } from "@/lib/logger"
 import { readJsonBody, BodyTooLargeError } from "@/lib/read-body"
 import { checkAdminToken, isSameOrigin, adminAuthResponse, originMismatchResponse } from "@/lib/auth"
+import { checkUserAuth, getScopedUserId, extractUserParam, invalidUserResponse, isMultiUserEnabled, userAuthResponse, userRateLimitKey } from "@/lib/user-auth"
 import { initSharp } from "@/lib/sharp-config"
 import { timedFetch } from "@/lib/outbound-stats"
 import { cachedImageBytes } from "@/lib/image-bytes-cache"
@@ -70,16 +71,39 @@ const MAX_BODY_BYTES = 50_000
 const POSTER_SIZES = new Set(["w342", "w500", "w780", "w300"])
 const FIT_SHAPES = new Set(["poster", "landscape"])
 
+/**
+ * Namespace della richiesta (multi-user): `?u=`/`?user=` validato, solo con
+ * flag ON. Stesso pattern di mappings/defaults.
+ */
+function resolveScope(req: NextRequest): { scoped: string | null; error?: Response } {
+  const rawUser = extractUserParam(req)
+  if (rawUser && isMultiUserEnabled() && !getScopedUserId(rawUser)) {
+    return { scoped: null, error: invalidUserResponse() }
+  }
+  return { scoped: getScopedUserId(rawUser) }
+}
+
 export async function POST(req: NextRequest) {
-  const rl = await rateLimit(rateLimitKey(req), "search")
+  const { scoped, error } = resolveScope(req)
+  // Il rate-limit protegge anche contro lo spam di 400 (bad uuid): mai
+  // ritornare l'errore di scope prima del rate-limit.
+  const rl = await rateLimit(error ? rateLimitKey(req) : (scoped ? userRateLimitKey(req, scoped) : rateLimitKey(req)), "search")
   if (!rl.ok) return rateLimitResponse(rl.retAfter)
+  if (error) return error
   // S10: endpoint CPU/network-heavy (fetch di fino a 17 immagini + analisi
   // sharp). Protetto come le altre route admin: senza auth un attaccante lo
   // userebbe come amplificatore di richieste verso image.tmdb.org e consumo
   // CPU. Su istanza pubblica (PICTORIUM_PUBLIC_INSTANCE=1) resta aperto per
-  // l'editor; con ADMIN_TOKEN configurato richiede il token.
-  if (!checkAdminToken(req)) return adminAuthResponse()
-  if (!isSameOrigin(req)) return originMismatchResponse()
+  // l'editor; con ADMIN_TOKEN configurato richiede il token. Su istanza
+  // multi-user il proprietario dello spazio (`?u=` + secret/password) passa
+  // dal ramo scoped senza bisogno del flag public né del token globale.
+  if (scoped) {
+    if (!(await checkUserAuth(req, scoped))) return userAuthResponse()
+    if (!isSameOrigin(req)) return originMismatchResponse()
+  } else {
+    if (!checkAdminToken(req)) return adminAuthResponse()
+    if (!isSameOrigin(req)) return originMismatchResponse()
+  }
 
   // Override globale dell'istanza (PICTORIUM_BEST_FIT_ENABLED): se disabilitato
   // il best-fit non viene nemmeno calcolato — risposta vuota con flag.
