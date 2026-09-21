@@ -184,14 +184,16 @@ services:
     ports:
       - "${PICTORIUM_HOST_PORT:-8080}:8080"
     environment:
-      - PICTORIUM_PUBLIC_INSTANCE=1
       - PICTORIUM_TMDB_KEY=la_tua_chiave_tmdb
+      - PICTORIUM_ADMIN_TOKEN=scegli_un_segreto_lungo
     volumes:
-      - pictorium-data:/data
+      - posterium-data:/data
 
 volumes:
-  pictorium-data:
+  posterium-data:
 ```
+
+> Le route admin sono chiuse di default: incolla il token in **Impostazioni → Token admin** (solo sessione) per usare warmup, cache e salvataggi dalla UI. Solo su LAN fidata puoi usare `PICTORIUM_PUBLIC_INSTANCE=1` al posto del token. Non rinominare il volume (`posterium-data` è il nome usato anche dal `docker-compose.yml` del repo).
 
 Avvia il container:
 ```bash
@@ -216,10 +218,11 @@ L'interfaccia e il manifest Stremio saranno disponibili su `http://<IP-SERVER>:8
 ```bash
 sudo apt update && sudo apt install -y docker.io docker-compose-v2
 git clone https://github.com/Eful97/Pictorium && cd Pictorium
-echo "PICTORIUM_PUBLIC_INSTANCE=1" > .env
 echo "PICTORIUM_TMDB_KEY=la_tua_chiave" >> .env
+echo "PICTORIUM_ADMIN_TOKEN=scegli_un_segreto_lungo" >> .env
 sudo docker compose up -d
 ```
+Poi incolla il token in **Impostazioni → Token admin** (solo sessione). Su istanza esposta non usare `PICTORIUM_PUBLIC_INSTANCE=1`.
 
 #### 🖥️ VPS + Caddy (HTTPS Automatico)
 ```caddyfile
@@ -227,6 +230,7 @@ tuodominio.com {
     reverse_proxy pictorium:8080
 }
 ```
+Su dominio pubblico proteggi l'editor con `PICTORIUM_ADMIN_TOKEN` (sblocco in Impostazioni → Token admin), non con `PICTORIUM_PUBLIC_INSTANCE=1`.
 
 #### 📱 Termux (Android)
 ```bash
@@ -244,13 +248,13 @@ npm install --ignore-scripts && npm run build && npm start
 
 | Variabile | Default | Descrizione |
 |---|:---:|---|
-| `PICTORIUM_PUBLIC_INSTANCE` | `0` | Se `1`, consente l'uso dell'editor senza richiedere un token admin. Consigliato per Homelab o uso personale. |
-| `PICTORIUM_ADMIN_TOKEN` | *(opzionale)* | Token segreto per proteggere l'editor quando `PUBLIC_INSTANCE=0`. |
+| `PICTORIUM_PUBLIC_INSTANCE` | `0` | Se `1`, le route admin restano aperte senza token (LAN fidata, demo pubbliche). Su istanze esposte lasciare `0` e usare il token qui sotto. |
+| `PICTORIUM_ADMIN_TOKEN` | *(opzionale)* | Segreto per istanze private (`PUBLIC_INSTANCE=0`): incollalo in Impostazioni → Token admin (solo sessione, muore col tab) per abilitare warmup, svuotamento cache e salvataggi dalla UI. |
 | `PICTORIUM_TMDB_KEY` | *(opzionale)* | Chiave API TMDB d'istanza per generare poster e cataloghi automaticamente. |
 | `PICTORIUM_TVDB_API_KEY` | *(opzionale)* | Chiave TheTVDB per ordinamenti stagioni alternativi ed episodi. |
 | `PICTORIUM_MDBLIST_KEY` | *(opzionale)* | Chiave MDBList per liste personalizzate e cataloghi anime. |
 | `PICTORIUM_REGION` | `IT` | Nazione predefinita per classifiche e disponibilità streaming (`IT`, `US`, `GB`, `FR`, `DE`, `ES`, ecc.). |
-| `PICTORIUM_DATA_DIR` | `./data` | Percorso della cartella per salvare configurazioni e poster su disco. |
+| `PICTORIUM_DATA_DIR` | `./data` | Percorso della cartella per salvare configurazioni e poster su disco. In Docker deve puntare a un volume persistente (`/data`, volume `posterium-data`, scrivibile da uid 1000): il file nasce al primo save, quindi "not found" con 0 poster a installazione fresca è normale. |
 | `KV_REST_API_URL` / `TOKEN` | *(vuoto)* | Credenziali Upstash Redis per deploy serverless su Vercel. |
 
 ### Modalità Multi-Utente

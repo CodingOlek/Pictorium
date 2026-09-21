@@ -19,6 +19,7 @@ import { RatingSourceIcon } from "@/components/RatingSourceIcon"
 import { UserKeysSection } from "@/components/UserKeysSection"
 import { UserSpaceSection } from "@/components/UserSpaceSection"
 import { isMultiUserServer } from "@/lib/guest-guard"
+import { adminAuthHeaders, clearAdminToken, hasAdminToken, setAdminToken } from "@/lib/admin-token"
 import { currentPathUuid } from "@/lib/user-token"
 import { consumeSettingsTab, type SettingsTabId } from "@/lib/settings-tab"
 import {
@@ -156,11 +157,54 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
     }
   }
 
+  // Token admin di sessione (istanza privata con PICTORIUM_ADMIN_TOKEN):
+  // senza sblocco, warmup/clear/save rispondono 401 (fail-closed) — vedi
+  // admin-token.ts. Solo sessione: muore col tab, mai su disco.
+  // Presenza di ADMIN_TOKEN sul server (da GET /api/auth/pin): la card Token
+  // admin si mostra solo quando serve davvero. null = ancora ignoto: si mostra
+  // come oggi (fail-open display, mai togliere UI su rete lenta).
+  const [adminTokenConfigured, setAdminTokenConfigured] = useState<boolean | null>(null)
+  const [adminInput, setAdminInput] = useState("")
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(() => hasAdminToken())
+  const [adminBusy, setAdminBusy] = useState(false)
+
+  const unlockAdmin = async () => {
+    const v = adminInput.trim()
+    if (!v || adminBusy) return
+    setAdminBusy(true)
+    try {
+      setAdminToken(v)
+      const res = await fetch("/api/cache/status", { headers: adminAuthHeaders() })
+      if (res.ok) {
+        setAdminInput("")
+        setAdminUnlocked(true)
+        toast.success(t("ui.adminTokenUnlocked"))
+      } else {
+        clearAdminToken()
+        setAdminUnlocked(false)
+        toast.error(res.status === 401 ? t("ui.adminTokenInvalid") : t("ui.pinConnError"))
+      }
+    } catch {
+      clearAdminToken()
+      setAdminUnlocked(false)
+      toast.error(t("ui.pinConnError"))
+    } finally {
+      setAdminBusy(false)
+    }
+  }
+
+  const lockAdmin = () => {
+    clearAdminToken()
+    setAdminInput("")
+    setAdminUnlocked(false)
+  }
+
   const refreshPin = () => {
     fetch("/api/auth/pin")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data && typeof data.hasPin === "boolean") setPinConfig(data)
+        if (data && typeof data.hasAdminToken === "boolean") setAdminTokenConfigured(data.hasAdminToken)
       })
       .catch(() => null)
   }
@@ -1510,6 +1554,65 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
 
       {/* (spazio utente, UUID e chiavi: nel tab Spazio dedicato sotto) */}
 
+      {/* Token admin — solo quando il server ha PICTORIUM_ADMIN_TOKEN: senza
+          sblocco, warmup/clear/save rispondono 401. Solo sessione (muore col
+          tab, mai su disco). Su istanze pubbliche non serve: la card sparisce. */}
+      {adminTokenConfigured !== false && (
+      <div className="bg-surface/50 border border-surface2/60 rounded-xl p-3.5 space-y-2.5 shadow-sm">
+        <div className="flex items-center justify-between text-[11px] font-medium text-muted px-0.5">
+          <span className="flex items-center gap-1.5 text-zinc-200 font-semibold">
+            <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+            <span>{t("ui.adminTokenTitle")}</span>
+          </span>
+          <span
+            className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+              adminUnlocked
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                : "bg-white/5 text-zinc-400 border-white/5"
+            }`}
+          >
+            {adminUnlocked ? t("ui.adminTokenActive") : t("ui.adminTokenNotSet")}
+          </span>
+        </div>
+        <p className="text-[10px] text-muted leading-tight">
+          {t("ui.adminTokenDesc")}
+        </p>
+        {adminUnlocked ? (
+          <button
+            type="button"
+            onClick={lockAdmin}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 active:scale-[0.98] transition-all border border-rose-500/20 cursor-pointer"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            {t("ui.adminTokenLock")}
+          </button>
+        ) : (
+          <div className="flex gap-2 pt-1">
+            <input
+              type="password"
+              autoComplete="off"
+              value={adminInput}
+              onChange={(e) => setAdminInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void unlockAdmin()
+              }}
+              placeholder={t("ui.adminTokenPlaceholder")}
+              aria-label={t("ui.adminTokenTitle")}
+              className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-amber-500/50"
+            />
+            <button
+              type="button"
+              onClick={() => void unlockAdmin()}
+              disabled={!adminInput.trim() || adminBusy}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 text-black text-xs font-semibold hover:bg-amber-400 active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+            >
+              {t("ui.adminTokenUnlock")}
+            </button>
+          </div>
+        )}
+      </div>
+      )}
+
       {/* Sicurezza & Accesso PIN — nascosta con multi-user ON (lì il cancello
           è la password dello spazio e l'admin è ADMIN_TOKEN): niente doppio
           lucchetto. Si mostra finché lo stato è ignoto (fail-open display). */}
@@ -1624,7 +1727,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
                       try {
                         const res = await fetch("/api/auth/pin", {
                           method: "PUT",
-                          headers: { "Content-Type": "application/json" },
+                          headers: { "Content-Type": "application/json", ...adminAuthHeaders() },
                           body: JSON.stringify({ currentPin: curPinInput, newPin: newPinInput }),
                         })
                         if (res.ok) {
@@ -1681,7 +1784,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
                       try {
                         const res = await fetch("/api/auth/pin", {
                           method: "DELETE",
-                          headers: { "Content-Type": "application/json" },
+                          headers: { "Content-Type": "application/json", ...adminAuthHeaders() },
                           body: JSON.stringify({ currentPin: curPinInput }),
                         })
                         if (res.ok) {

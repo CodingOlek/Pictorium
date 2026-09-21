@@ -44,8 +44,11 @@ services:
       - PICTORIUM_MULTI_USER_ALLOW_ENV_FALLBACK=${PICTORIUM_MULTI_USER_ALLOW_ENV_FALLBACK:-}
       - PICTORIUM_USER_RETENTION_DAYS=${PICTORIUM_USER_RETENTION_DAYS:-}
       # ── Opzionali — Admin & Sicurezza ──
-      # Senza ADMIN_TOKEN né PICTORIUM_PUBLIC_INSTANCE=1 l'editor resta chiuso
-      # (fail-closed); gli endpoint poster/cataloghi restano sempre aperti.
+      # PUBLIC_INSTANCE=1: route admin aperte senza token (LAN fidata/demo).
+      # Su istanze esposte lascia vuoto/0 + ADMIN_TOKEN, poi incolla il token
+      # in Impostazioni → Token admin (solo sessione) per usare la UI.
+      # Senza entrambi, l'editor resta chiuso (fail-closed); gli endpoint
+      # poster/cataloghi restano sempre aperti.
       - PICTORIUM_PUBLIC_INSTANCE=${PICTORIUM_PUBLIC_INSTANCE:-}
       - PICTORIUM_ADMIN_TOKEN=${PICTORIUM_ADMIN_TOKEN:-${POSTERIUM_ADMIN_TOKEN:-}}
       - POSTERIUM_ADMIN_TOKEN=${POSTERIUM_ADMIN_TOKEN:-}
@@ -113,6 +116,8 @@ services:
       - no-new-privileges:true
     volumes:
       # Nome volume legacy (posterium-*) tenuto per non orfanare i /data esistenti.
+      # Non rinominarlo tra un recreate e l'altro: nomi diversi = volumi diversi
+      # (lo storage sembrerebbe vuoto/"0 poster"). Deve restare scrivibile da uid 1000.
       - posterium-data:/data
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:8080/api/health?probe=1').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]

@@ -149,6 +149,7 @@ describe("PIN Authentication & Security", () => {
       expect(res.status).toBe(200)
       expect(json.hasPin).toBe(false)
       expect(json.authenticated).toBe(true)
+      expect(typeof json.hasAdminToken).toBe("boolean")
     })
 
     it("PUT: imposta un nuovo PIN con successo", async () => {

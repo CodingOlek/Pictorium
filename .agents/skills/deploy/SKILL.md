@@ -29,7 +29,9 @@ operator/agent checklist.
 > unless `PICTORIUM_PUBLIC_INSTANCE=1` is set or an admin token is configured.
 > Without the flag the editor cannot save posters and the 1-click best-fit
 > returns nothing on HF/Vercel while working in local dev. Set the flag on any
-> public multi-user instance (HF, Vercel, public VPS).
+> public multi-user instance (HF, Vercel, public VPS). On private instances
+> with an admin token, paste it in Settings → Admin token (session-only
+> unlock, `x-admin-token` auto-attached to `/api/` calls) instead of the flag.
 >
 > **Best-fit global switch**: `PICTORIUM_BEST_FIT_ENABLED` (`0`/`false`/
 > `off` → always disabled, `1`/`true`/`on` → always enabled, unset → auto)

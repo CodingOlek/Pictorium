@@ -250,4 +250,48 @@ describe("SettingsPanel", () => {
     expect(tmdbBtn.className).toContain("bg-white/20")
     expect(tvdbBtn.className).not.toContain("bg-white/20")
   })
+
+  it("mostra la card Token admin solo quando il server ha ADMIN_TOKEN", async () => {
+    resetGuestGuardForTests()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) =>
+        String(url).includes("/api/auth/pin")
+          ? { ok: true, json: async () => ({ hasPin: false, hasAdminToken: true }) }
+          : { ok: false, json: async () => ({}) },
+      ),
+    )
+    renderWithCtx(
+      <SettingsPanel
+        setSettingsOpen={() => {}}
+        exportData={() => {}}
+        importData={() => {}}
+      />
+    )
+    expect(await screen.findByText("ui.adminTokenTitle")).toBeInTheDocument()
+    resetGuestGuardForTests()
+  })
+
+  it("nasconde la card Token admin quando il server non ha ADMIN_TOKEN", async () => {
+    resetGuestGuardForTests()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) =>
+        String(url).includes("/api/auth/pin")
+          ? { ok: true, json: async () => ({ hasPin: false, hasAdminToken: false }) }
+          : { ok: false, json: async () => ({}) },
+      ),
+    )
+    renderWithCtx(
+      <SettingsPanel
+        setSettingsOpen={() => {}}
+        exportData={() => {}}
+        importData={() => {}}
+      />
+    )
+    // Flush del fetch async, poi la card deve mancare (niente rumore UI).
+    expect(await screen.findAllByText("ui.genreRatingBadge")).not.toHaveLength(0)
+    expect(screen.queryByText("ui.adminTokenTitle")).not.toBeInTheDocument()
+    resetGuestGuardForTests()
+  })
 })

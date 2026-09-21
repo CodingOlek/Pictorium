@@ -16,7 +16,11 @@ import { readJsonBody, BodyTooLargeError, DEFAULT_MAX_BODY_BYTES } from "@/lib/r
 export async function GET(req: NextRequest) {
   const hasPin = await hasPinConfigured()
   const authenticated = hasPin ? await verifySessionFromRequest(req) : true
-  return Response.json({ hasPin, authenticated })
+  // Flag pubblico (solo booleano, come hasInstanceKeys in /api/defaults): dice
+  // al client se mostrare lo sblocco "Token admin" in Impostazioni. Il valore
+  // resta dietro requireAdminToken/checkAdminToken — un booleano non espone
+  // alcun segreto (e lo stato 401/aperto delle route lo rivela già da sé).
+  return Response.json({ hasPin, authenticated, hasAdminToken: hasAdminTokenConfigured() })
 }
 
 export async function POST(req: NextRequest) {

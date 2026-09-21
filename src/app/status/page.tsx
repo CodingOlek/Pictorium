@@ -328,10 +328,17 @@ export default function StatusPage() {
               <div className="space-y-1">
                 {data.storage.mode === "kv"
                   ? <StatusRow label={t("ui.statusStorageMode")} ok extra={t("ui.statusStorageKv")} />
-                  : <>
-                      <StatusRow label={t("ui.statusStorageMode")} ok={!!data.storage.dataFileExists} extra={t("ui.statusStorageFile")} />
-                      <StatusRow label={t("ui.statusDataFile")} ok={!!data.storage.dataFileExists} extra={data.storage.dataFileExists ? t("ui.statusDataFileName") : t("ui.statusNotFound")} />
-                    </>
+                  : (() => {
+                      // Installazione fresca: il file nasce al primo save —
+// "not found" con 0 poster è lo stato iniziale sano, non un
+// errore (pallino neutro invece che rosso).
+                      const freshInstall = !data.storage.dataFileExists && data.storage.mappingsCount === 0
+                      const fileOk = freshInstall ? null : !!data.storage.dataFileExists
+                      return (<>
+                        <StatusRow label={t("ui.statusStorageMode")} ok={fileOk} extra={t("ui.statusStorageFile")} />
+                        <StatusRow label={t("ui.statusDataFile")} ok={fileOk} extra={data.storage.dataFileExists ? t("ui.statusDataFileName") : t("ui.statusNotFound")} />
+                      </>)
+                    })()
                 }
                 <StatusRow label={t("ui.statusSavedPosters")} ok={data.storage.mappingsCount > 0 || data.storage.mode === "kv" || !data.storage.dataFileExists} extra={<>{t("ui.statusPosterCount", { count: data.storage.mappingsCount })}</>} />
               </div>

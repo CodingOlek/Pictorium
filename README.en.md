@@ -184,14 +184,16 @@ services:
     ports:
       - "${PICTORIUM_HOST_PORT:-8080}:8080"
     environment:
-      - PICTORIUM_PUBLIC_INSTANCE=1
       - PICTORIUM_TMDB_KEY=your_tmdb_api_key
+      - PICTORIUM_ADMIN_TOKEN=choose_a_long_secret
     volumes:
-      - pictorium-data:/data
+      - posterium-data:/data
 
 volumes:
-  pictorium-data:
+  posterium-data:
 ```
+
+> Admin routes are closed by default: paste the token in **Settings → Admin token** (session only) to use warmup, cache and saves from the UI. Only on a trusted LAN you may use `PICTORIUM_PUBLIC_INSTANCE=1` instead of the token. Do not rename the volume (`posterium-data` is the name used by the repo's `docker-compose.yml`).
 
 Start the container:
 ```bash
@@ -216,10 +218,11 @@ Your instance and Stremio manifest will be accessible at `http://<SERVER-IP>:808
 ```bash
 sudo apt update && sudo apt install -y docker.io docker-compose-v2
 git clone https://github.com/Eful97/Pictorium && cd Pictorium
-echo "PICTORIUM_PUBLIC_INSTANCE=1" > .env
 echo "PICTORIUM_TMDB_KEY=your_tmdb_key" >> .env
+echo "PICTORIUM_ADMIN_TOKEN=choose_a_long_secret" >> .env
 sudo docker compose up -d
 ```
+Then paste the token in **Settings → Admin token** (session only). On an exposed instance do not use `PICTORIUM_PUBLIC_INSTANCE=1`.
 
 #### 🖥️ VPS + Caddy (Automatic HTTPS)
 ```caddyfile
@@ -227,6 +230,7 @@ yourdomain.com {
     reverse_proxy pictorium:8080
 }
 ```
+On a public domain protect the editor with `PICTORIUM_ADMIN_TOKEN` (unlock in Settings → Admin token), not with `PICTORIUM_PUBLIC_INSTANCE=1`.
 
 #### 📱 Termux (Android)
 ```bash
@@ -244,13 +248,13 @@ npm install --ignore-scripts && npm run build && npm start
 
 | Variable | Default | Description |
 |---|:---:|---|
-| `PICTORIUM_PUBLIC_INSTANCE` | `0` | Set `1` to allow open editor usage without requiring admin tokens. Recommended for Homelab or personal use. |
-| `PICTORIUM_ADMIN_TOKEN` | *(optional)* | Secret token to protect the editor when `PUBLIC_INSTANCE=0`. |
+| `PICTORIUM_PUBLIC_INSTANCE` | `0` | Set `1` to leave admin routes open without a token (trusted LAN, public demos). On exposed instances keep `0` and use the token below. |
+| `PICTORIUM_ADMIN_TOKEN` | *(optional)* | Secret for private instances (`PUBLIC_INSTANCE=0`): paste it in Settings → Admin token (session only, dies with the tab) to enable warmup, cache clear and saves from the UI. |
 | `PICTORIUM_TMDB_KEY` | *(optional)* | Server-side TMDB API key to render posters and catalogs without client keys. |
 | `PICTORIUM_TVDB_API_KEY` | *(optional)* | TheTVDB key for alternate season ordering and episode descriptions. |
 | `PICTORIUM_MDBLIST_KEY` | *(optional)* | MDBList key for custom lists and anime catalogs. |
 | `PICTORIUM_REGION` | `IT` | Default country for streaming charts and availability (`IT`, `US`, `GB`, `FR`, `DE`, `ES`, etc.). |
-| `PICTORIUM_DATA_DIR` | `./data` | Directory path for persisting settings and saved posters on disk. |
+| `PICTORIUM_DATA_DIR` | `./data` | Directory path for persisting settings and saved posters on disk. In Docker it must point at a persistent volume (`/data`, `posterium-data` volume, writable by uid 1000): the data file is created on first save, so "not found" with 0 posters on a fresh install is normal. |
 | `KV_REST_API_URL` / `TOKEN` | *(empty)* | Upstash Redis credentials for Vercel serverless deployments. |
 
 ### Multi-User Mode

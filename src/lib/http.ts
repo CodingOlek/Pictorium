@@ -1,4 +1,5 @@
 import { currentPathUuid, getStoredUserPassword, getStoredUserToken, isUserUnlocked, retryWithPasswordAuth } from "./user-token"
+import { applyAdminAuthHeaders } from "./admin-token"
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -76,7 +77,7 @@ export function scopedApiInit(
  */
 export async function userFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const scoped = scopedApiInit(input, init)
-  const scopedInit = { ...init, headers: scoped.headers }
+  const scopedInit = { ...init, headers: applyAdminAuthHeaders(scoped.path, scoped.headers) }
   const res = await fetch(scoped.path, scopedInit)
   // Secret stantio + password fresca: un solo retry con password (butta il
   // secret se il retry passa). Senza entrambe le credenziali è passthrough.
@@ -95,7 +96,7 @@ export async function http<T = unknown>(path: string, opts: ApiOptions = {}): Pr
   // path scoped quando si è su un link `/u/<uuid>`. Fuori da lì è passthrough.
   const scoped = scopedApiInit(path, { headers: fetchOpts.headers })
   path = scoped.path
-  const scopedOpts = { ...fetchOpts, headers: scoped.headers }
+  const scopedOpts = { ...fetchOpts, headers: applyAdminAuthHeaders(path, scoped.headers) }
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController()
