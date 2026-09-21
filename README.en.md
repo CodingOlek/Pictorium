@@ -186,7 +186,7 @@ Fill in at least `PICTORIUM_TMDB_KEY` and `PICTORIUM_ADMIN_TOKEN` (a long secret
 docker compose up -d
 ```
 
-> The first start builds the image locally (a few minutes, longer on ARM). Admin routes are closed by default: paste the token in **Settings → Admin token** (session only) to use warmup, cache and saves from the UI. Only on a trusted LAN you may use `PICTORIUM_PUBLIC_INSTANCE=1` instead of the token.
+> The first start builds the image locally (a few minutes, longer on ARM). To start immediately with the prebuilt image: `docker compose pull pictorium && docker compose up -d --no-build`. Admin routes are closed by default: paste the token in **Settings → Admin token** (session only) to use warmup, cache and saves from the UI. Only on a trusted LAN you may use `PICTORIUM_PUBLIC_INSTANCE=1` instead of the token.
 >
 > If you came from the old example with a `pictorium-data` volume and already have saves, copy them before switching to the repo compose: `docker run --rm -v pictorium-data:/from -v posterium-data:/to alpine cp -a /from/. /to/`
 

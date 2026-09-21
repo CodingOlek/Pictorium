@@ -186,7 +186,7 @@ Compila nel `.env` almeno `PICTORIUM_TMDB_KEY` e `PICTORIUM_ADMIN_TOKEN` (un seg
 docker compose up -d
 ```
 
-> Il primo avvio compila l'immagine in locale (qualche minuto, di più su ARM). Le route admin sono chiuse di default: incolla il token in **Impostazioni → Token admin** (solo sessione) per usare warmup, cache e salvataggi dalla UI. Solo su LAN fidata puoi usare `PICTORIUM_PUBLIC_INSTANCE=1` al posto del token.
+> Il primo avvio compila l'immagine in locale (qualche minuto, di più su ARM). Per partire subito con l'immagine precompilata: `docker compose pull pictorium && docker compose up -d --no-build`. Le route admin sono chiuse di default: incolla il token in **Impostazioni → Token admin** (solo sessione) per usare warmup, cache e salvataggi dalla UI. Solo su LAN fidata puoi usare `PICTORIUM_PUBLIC_INSTANCE=1` al posto del token.
 >
 > Se venivi dal vecchio esempio con volume `pictorium-data` e hai già salvataggi, copiali prima di passare al compose del repo: `docker run --rm -v pictorium-data:/from -v posterium-data:/to alpine cp -a /from/. /to/`
 
