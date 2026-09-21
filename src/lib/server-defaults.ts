@@ -9,6 +9,7 @@ import type { SashBucket } from "@/lib/badge-priority"
 import { isBadgeStyle, isRankingBadgeStyle } from "@/lib/badge-styles"
 import { normalizeRegion } from "@/lib/regions"
 import { envWithFallback } from "@/lib/env-compat"
+import { atomicWriteFile } from "@/lib/atomic-write"
 
 const log = createLogger("server-defaults")
 
@@ -291,7 +292,7 @@ export async function setServerDefaults(d: ServerDefaults): Promise<void> {
     await existing
     try {
       await fs.mkdir(DATA_DIR, { recursive: true })
-      await fs.writeFile(FILE, JSON.stringify(d, null, 2))
+      await atomicWriteFile(FILE, JSON.stringify(d, null, 2))
       cached = { ...d }
     } catch (error) {
       logDefaultsError("failed to write defaults", error)
@@ -416,7 +417,7 @@ export async function setServerDefaultsForUser(userId: string, d: ServerDefaults
   const run = existing.then(async () => {
     try {
       await fs.mkdir(path.dirname(userDefaultsFile(userId)), { recursive: true })
-      await fs.writeFile(userDefaultsFile(userId), JSON.stringify(d, null, 2))
+      await atomicWriteFile(userDefaultsFile(userId), JSON.stringify(d, null, 2))
       userDefaultsCacheSet(userId, d)
     } catch (error) {
       logDefaultsError("failed to write user defaults", error)

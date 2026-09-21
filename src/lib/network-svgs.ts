@@ -6,6 +6,12 @@ const log = createLogger("network-svgs")
 
 /** Cache for pre-rendered network logos — keyed by networkKey:pw */
 const networkLogoCache = new Map<string, { png: Buffer; w: number; h: number }>()
+// I PNG pesano KB l'uno ma la Map è unbounded: cap FIFO per i long-running.
+const NETWORK_LOGO_CACHE_MAX = 200
+function networkLogoCacheSet(key: string, value: { png: Buffer; w: number; h: number }): void {
+  if (networkLogoCache.size >= NETWORK_LOGO_CACHE_MAX) networkLogoCache.delete(networkLogoCache.keys().next().value!)
+  networkLogoCache.set(key, value)
+}
 
 export interface NetworkSvgResult {
   svg: string
@@ -374,7 +380,7 @@ async function loadNetworkPng(networkKey: string, pw: number, topLight: boolean 
       .toBuffer()
 
     const result = { png: finalPng, w: canvasW, h: canvasH }
-    networkLogoCache.set(cacheKey, result)
+    networkLogoCacheSet(cacheKey, result)
     return result
   } catch (e) {
     log.error(`Failed to load PNG for ${networkKey}`, { error: e instanceof Error ? e.message : String(e) })
@@ -512,7 +518,7 @@ async function loadTmdbNetworkPng(logoPath: string, pw: number, topLight: boolea
       .png().toBuffer()
 
     const result = { png: finalPng, w: canvasW, h: canvasH }
-    networkLogoCache.set(cacheKey, result)
+    networkLogoCacheSet(cacheKey, result)
     return result
   } catch (e) {
     log.error(`Failed to load TMDB PNG ${logoPath}`, { error: e instanceof Error ? e.message : String(e) })
@@ -558,7 +564,7 @@ async function loadTmdbNetworkRawPng(logoPath: string, pw: number, topLight: boo
       .png().toBuffer()
 
     const result = { png: finalPng, w: canvasW, h: canvasH }
-    networkLogoCache.set(cacheKey, result)
+    networkLogoCacheSet(cacheKey, result)
     return result
   } catch (e) {
     log.error(`Failed to load TMDB raw PNG ${logoPath}`, { error: e instanceof Error ? e.message : String(e) })
@@ -723,7 +729,7 @@ async function loadNetworkRawPng(networkKey: string, pw: number, topLight: boole
       .toBuffer()
 
     const result = { png: finalPng, w: canvasW, h: canvasH }
-    networkLogoCache.set(cacheKey, result)
+    networkLogoCacheSet(cacheKey, result)
     return result
   } catch (e) {
     log.error(`Failed to load raw PNG for ${networkKey}`, { error: e instanceof Error ? e.message : String(e) })

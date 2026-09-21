@@ -6,6 +6,7 @@ import { envWithFallback } from "@/lib/env-compat"
 import { createLogger } from "@/lib/logger"
 import { cacheExpire } from "@/lib/cache"
 import { userDir } from "@/lib/user-auth"
+import { atomicWriteFile } from "@/lib/atomic-write"
 
 const log = createLogger("user-activity")
 
@@ -40,7 +41,7 @@ async function persistActivity(userId: string, now: number): Promise<void> {
     return
   }
   await fsp.mkdir(userDir(userId), { recursive: true })
-  await fsp.writeFile(activityFile(userId), payload)
+  await atomicWriteFile(activityFile(userId), payload)
 }
 
 /** Registra attività di lettura (non bloccante, throttled 1/die). */

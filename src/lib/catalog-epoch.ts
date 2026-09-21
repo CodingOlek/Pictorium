@@ -2,6 +2,7 @@ import fsp from "node:fs/promises"
 import path from "node:path"
 import { DATA_DIR } from "@/lib/data-dir"
 import { createLogger } from "@/lib/logger"
+import { atomicWriteFile } from "@/lib/atomic-write"
 
 /**
  * Epoch globale dei cataloghi Stremio (F3).
@@ -95,7 +96,7 @@ export async function bumpCatalogEpoch(userId?: string | null): Promise<string> 
       await kv.set(KV_KEY, next)
     } else {
       await fsp.mkdir(DATA_DIR, { recursive: true })
-      await fsp.writeFile(FILE, JSON.stringify({ epoch: next }))
+      await atomicWriteFile(FILE, JSON.stringify({ epoch: next }))
     }
   } catch (e) {
     // L'epoch è un'ottimizzazione di invalidazione, mai un hard-fail del save:
@@ -165,7 +166,7 @@ async function bumpUserEpoch(userId: string): Promise<string> {
       await kv.set(userEpochKvKey(userId), next)
     } else {
       await fsp.mkdir(path.dirname(userEpochFile(userId)), { recursive: true })
-      await fsp.writeFile(userEpochFile(userId), JSON.stringify({ epoch: next }))
+      await atomicWriteFile(userEpochFile(userId), JSON.stringify({ epoch: next }))
     }
   } catch (e) {
     log.warn("user epoch persist failed", { error: e instanceof Error ? e.message : String(e) })

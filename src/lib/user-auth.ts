@@ -5,6 +5,7 @@ import { DATA_DIR } from "@/lib/data-dir"
 import { envWithFallback } from "@/lib/env-compat"
 import { createLogger } from "@/lib/logger"
 import { rateLimitKey } from "@/lib/rate-limit"
+import { atomicWriteFile } from "@/lib/atomic-write"
 
 const log = createLogger("user-auth")
 
@@ -144,7 +145,7 @@ async function writeAuthRecord(userId: string, record: UserAuthRecord): Promise<
     return
   }
   await fsp.mkdir(userDir(userId), { recursive: true })
-  await fsp.writeFile(userAuthFile(userId), JSON.stringify(record), { mode: 0o600 })
+  await atomicWriteFile(userAuthFile(userId), JSON.stringify(record), { mode: 0o600 })
 }
 
 function hashUserPassword(password: string, salt?: string): string {

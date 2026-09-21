@@ -355,6 +355,7 @@ async function loadNetworkLogoForPill(networkKey: string, targetH: number, fg: s
   const memo = pillLogoMemo.get(memoKey)
   if (memo) return memo
   const p = loadNetworkLogoForPillUncached(networkKey, targetH, fg)
+  p.catch(() => { if (pillLogoMemo.get(memoKey) === p) pillLogoMemo.delete(memoKey) })
   if (pillLogoMemo.size >= PILL_LOGO_MEMO_MAX) pillLogoMemo.delete(pillLogoMemo.keys().next().value!)
   pillLogoMemo.set(memoKey, p)
   return p

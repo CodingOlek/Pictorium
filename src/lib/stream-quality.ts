@@ -33,6 +33,12 @@ export interface StreamQualityResult {
 }
 
 const qualityCache = new Map<string, { quality: StreamQualityResult; timestamp: number }>()
+// Entry da ~100B ma chiavi per-titolo: cap FIFO per i processi long-running.
+const STREAM_QUALITY_CACHE_MAX = 2000
+function qualityCacheSet(key: string, value: { quality: StreamQualityResult; timestamp: number }): void {
+  if (qualityCache.size >= STREAM_QUALITY_CACHE_MAX) qualityCache.delete(qualityCache.keys().next().value!)
+  qualityCache.set(key, value)
+}
 
 /** True se l'errore è uno scatto di deadline (AbortSignal.timeout / race). */
 export function isQualityTimeout(err: unknown): boolean {
@@ -174,7 +180,7 @@ export async function resolveStreamQuality(
   }
 
   const store = (r: StreamQualityResult): StreamQualityResult => {
-    qualityCache.set(cacheKey, { quality: r, timestamp: Date.now() })
+    qualityCacheSet(cacheKey, { quality: r, timestamp: Date.now() })
     return r
   }
 

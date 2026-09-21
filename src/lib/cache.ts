@@ -273,6 +273,9 @@ export function cacheGetStale<T>(key: string): { data: T | null; stale: boolean 
 export function cacheSet<T>(key: string, data: T, tags: string[] = [], ttlMs?: number): void {
   if (!cleanupActive) startCleanup()
   const incomingBytes = estimateBytes(data)
+  // Entry singola fuori budget: scartata invece di wipeare l'intera cache
+  // (byteTarget 0 in makeSpace svuoterebbe tutto per un solo payload anomalo).
+  if (incomingBytes > MAX_BYTES) return
   if (!store.has(key)) {
     makeSpace(1, incomingBytes)
   } else {

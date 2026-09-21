@@ -3,6 +3,7 @@ import fsp from "node:fs/promises"
 import path from "node:path"
 import { createLogger } from "@/lib/logger"
 import { userDir } from "@/lib/user-auth"
+import { atomicWriteFile } from "@/lib/atomic-write"
 
 const log = createLogger("user-keys")
 
@@ -293,5 +294,5 @@ export async function setUserKeys(userId: string, input: Partial<Record<UserKeyK
     return
   }
   await fsp.mkdir(userDir(userId), { recursive: true })
-  await fsp.writeFile(keysFile(userId), JSON.stringify(current), { mode: 0o600 })
+  await atomicWriteFile(keysFile(userId), JSON.stringify(current), { mode: 0o600 })
 }

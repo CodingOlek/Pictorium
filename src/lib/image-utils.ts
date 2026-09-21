@@ -40,14 +40,16 @@ export const LANDSCAPE_BACKDROP_SIZE = "w780" as const
  * SSRF di imgSrc (poster-render-helpers): solo path TMDB o host consentito,
  * altrimenti lancia come imgSrc.
  */
+const TMDB_IMG_BASE = process.env.TMDB_IMG_URL || "https://image.tmdb.org/t/p"
+
 export function landscapeBackdropUrl(path: string): string {
   if (path.startsWith("http")) {
-    if (!path.startsWith("https://image.tmdb.org/t/p/")) {
+    if (!path.startsWith(`${TMDB_IMG_BASE}/`)) {
       throw new Error(`Blocked external image URL: ${path.slice(0, 60)}...`)
     }
     return path
   }
-  return `https://image.tmdb.org/t/p/${LANDSCAPE_BACKDROP_SIZE}${path}`
+  return `${TMDB_IMG_BASE}/${LANDSCAPE_BACKDROP_SIZE}${path}`
 }
 
 /**
