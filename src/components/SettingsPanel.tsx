@@ -11,7 +11,7 @@ import { SliderRow } from "@/components/SliderRow"
 import { Toggle } from "@/components/Toggle"
 import { BadgeStyleSelector, MenuItem } from "@/components/ui"
 import { UI_RATING_SOURCES } from "@/lib/ratings"
-import { SASH_BUCKETS, DEFAULT_SASH_ORDER, type SashBucket } from "@/lib/badge-priority"
+import { SASH_BUCKETS, DEFAULT_SASH_ORDER, parseSashOrder, type SashBucket } from "@/lib/badge-priority"
 import { formatRating } from "@/lib/custom-rating/formatter"
 import { REGIONS } from "@/lib/regions"
 import { UI_LANGUAGES } from "@/lib/utils"
@@ -19,7 +19,8 @@ import { RatingSourceIcon } from "@/components/RatingSourceIcon"
 import { UserKeysSection } from "@/components/UserKeysSection"
 import { UserSpaceSection } from "@/components/UserSpaceSection"
 import { isMultiUserServer } from "@/lib/guest-guard"
-import { adminAuthHeaders, clearAdminToken, hasAdminToken, setAdminToken } from "@/lib/admin-token"
+import { adminAuthHeaders } from "@/lib/admin-token"
+import { AdminUnlockCard } from "@/components/AdminUnlockCard"
 import { currentPathUuid } from "@/lib/user-token"
 import { consumeSettingsTab, type SettingsTabId } from "@/lib/settings-tab"
 import {
@@ -62,6 +63,32 @@ interface Props {
   mobile?: boolean
 }
 
+// Master Trend: OFF spegne tutte le categorie sash (kill-switch globale, vale
+// anche per i titoli già salvati dato che la sash non è congelata per-titolo).
+// La selezione precedente viene stashata in sessione così il ri-ON la ripristina
+// invece di forzare l'ordine completo (mai perdere la personalizzazione).
+const TREND_SASH_STASH_KEY = "pictorium_trend_sash_stash"
+
+function stashSashOrder(order: readonly SashBucket[] | null | undefined): void {
+  try {
+    if (order && order.length > 0) localStorage.setItem(TREND_SASH_STASH_KEY, JSON.stringify(order))
+  } catch {}
+}
+
+function popStashedSashOrder(): SashBucket[] | null {
+  try {
+    const raw = localStorage.getItem(TREND_SASH_STASH_KEY)
+    if (!raw) return null
+    localStorage.removeItem(TREND_SASH_STASH_KEY)
+    const arr: unknown = JSON.parse(raw)
+    if (!Array.isArray(arr)) return null
+    const parsed = parseSashOrder(arr.join(","))
+    return parsed && parsed.length > 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile }: Props) {
   const accentColor = usePSelector((v) => v.accentColor)
   const lang = usePSelector((v) => v.lang)
@@ -98,7 +125,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
   }, [])
 
   useEffect(() => {
-    fetch("/api/cache/status")
+    fetch("/api/cache/status", { headers: adminAuthHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data && typeof data.totalEntries === "number") setCacheCount(data.totalEntries)
@@ -157,47 +184,11 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
     }
   }
 
-  // Token admin di sessione (istanza privata con PICTORIUM_ADMIN_TOKEN):
-  // senza sblocco, warmup/clear/save rispondono 401 (fail-closed) — vedi
-  // admin-token.ts. Solo sessione: muore col tab, mai su disco.
   // Presenza di ADMIN_TOKEN sul server (da GET /api/auth/pin): la card Token
-  // admin si mostra solo quando serve davvero. null = ancora ignoto: si mostra
-  // come oggi (fail-open display, mai togliere UI su rete lenta).
+  // admin (AdminUnlockCard condivisa con /status) si mostra solo quando serve
+  // davvero. null = ancora ignoto: si mostra come oggi (fail-open display,
+  // mai togliere UI su rete lenta).
   const [adminTokenConfigured, setAdminTokenConfigured] = useState<boolean | null>(null)
-  const [adminInput, setAdminInput] = useState("")
-  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(() => hasAdminToken())
-  const [adminBusy, setAdminBusy] = useState(false)
-
-  const unlockAdmin = async () => {
-    const v = adminInput.trim()
-    if (!v || adminBusy) return
-    setAdminBusy(true)
-    try {
-      setAdminToken(v)
-      const res = await fetch("/api/cache/status", { headers: adminAuthHeaders() })
-      if (res.ok) {
-        setAdminInput("")
-        setAdminUnlocked(true)
-        toast.success(t("ui.adminTokenUnlocked"))
-      } else {
-        clearAdminToken()
-        setAdminUnlocked(false)
-        toast.error(res.status === 401 ? t("ui.adminTokenInvalid") : t("ui.pinConnError"))
-      }
-    } catch {
-      clearAdminToken()
-      setAdminUnlocked(false)
-      toast.error(t("ui.pinConnError"))
-    } finally {
-      setAdminBusy(false)
-    }
-  }
-
-  const lockAdmin = () => {
-    clearAdminToken()
-    setAdminInput("")
-    setAdminUnlocked(false)
-  }
 
   const refreshPin = () => {
     fetch("/api/auth/pin")
@@ -434,6 +425,12 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
                   label={t("ui.badgeRating")}
                 />
               </div>
+              {ed.defaultBadgeRating && (
+                <div className="flex items-center justify-between" title={t("ui.separateRatingsHint")}>
+                  <span className="text-muted">{t("ui.separateRatings")}</span>
+                  <Toggle value={ed.defaultSeparateRatings} onChange={(v) => ed.setDefaultSeparateRatings(v)} label={t("ui.separateRatings")} />
+                </div>
+              )}
 
               {/* Accordion Provider del voto */}
               {ed.defaultBadgeRating && (
@@ -462,10 +459,6 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
 
                   {sourcesOpen && (
                     <div className="space-y-2 pt-0.5 animate-fade-in">
-                      <div className="flex items-center justify-between px-0.5 pt-1" title={t("ui.separateRatingsHint")}>
-                        <span className="text-[11px] text-zinc-300 font-medium">{t("ui.separateRatings")}</span>
-                        <Toggle value={ed.defaultSeparateRatings} onChange={(v) => ed.setDefaultSeparateRatings(v)} label={t("ui.separateRatings")} />
-                      </div>
                       <div className="flex items-center justify-between px-0.5">
                         <span className="text-[10px] text-muted leading-tight">
                           {t("ui.ratingSourcesHint")}
@@ -490,7 +483,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
                             }}
                             className="text-muted hover:text-zinc-200 transition-colors cursor-pointer"
                           >
-                            {t("ui.disableAll")}
+                            {t("ui.sourcesImdbOnly")}
                           </button>
                         </div>
                       </div>
@@ -544,18 +537,31 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
 
         {/* Trend & Network logo & Ribbon side */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-300 font-medium flex items-center gap-1.5">
-              <Trophy className="w-3.5 h-3.5 text-amber-500" />
-              {t("ui.trendBadge")}
-            </span>
-            <Toggle
-              value={ed.defaultRankingBadges}
-              onChange={(v) => {
-                ed.setDefaultRankingBadges(v)
-              }}
-              label={t("ui.trendBadge")}
-            />
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-300 font-medium flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                {t("ui.trendBadge")}
+              </span>
+              <Toggle
+                value={ed.defaultRankingBadges}
+                onChange={(v) => {
+                  ed.setDefaultRankingBadges(v)
+                  if (v) {
+                    // Master ON: ripristina le categorie precedenti (o tutte).
+                    ed.setDefaultSashOrder(popStashedSashOrder() ?? [...DEFAULT_SASH_ORDER])
+                  } else {
+                    // Master OFF: spegne In uscita/Classifiche/Novità/Premi/Extra
+                    // ovunque (la sash è globale, non congelata per-titolo). Le
+                    // singole categorie restano riaccendibili a mano qui sotto.
+                    stashSashOrder(ed.defaultSashOrder)
+                    ed.setDefaultSashOrder([])
+                  }
+                }}
+                label={t("ui.trendBadge")}
+              />
+            </div>
+            <p className="text-[10px] text-zinc-500 italic mt-1">{t("ui.trendDefaultHint")}</p>
           </div>
 
           <div className="flex items-center justify-between">
@@ -614,6 +620,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
             />
           </div>
 
+          {ed.defaultCustomRatings && (
           <div className="pl-3 py-1 space-y-2 border-l-2 border-surface2 ml-1 animate-fade-in">
             <div>
               <label className="text-[10px] text-muted block mb-1">{t("ui.customRatingEndpoint")}</label>
@@ -660,6 +667,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
               )}
             </div>
           </div>
+          )}
 
           <div className="flex items-center justify-between">
             <span className="text-zinc-300 font-medium flex items-center gap-1.5">
@@ -689,7 +697,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between" title={t("ui.preReleaseHint")}>
             <span className="text-zinc-300 font-medium flex items-center gap-1.5">
               <Flame className="w-3.5 h-3.5 text-orange-400" />
               {t("ui.preRelease")}
@@ -1558,59 +1566,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
           sblocco, warmup/clear/save rispondono 401. Solo sessione (muore col
           tab, mai su disco). Su istanze pubbliche non serve: la card sparisce. */}
       {adminTokenConfigured !== false && (
-      <div className="bg-surface/50 border border-surface2/60 rounded-xl p-3.5 space-y-2.5 shadow-sm">
-        <div className="flex items-center justify-between text-[11px] font-medium text-muted px-0.5">
-          <span className="flex items-center gap-1.5 text-zinc-200 font-semibold">
-            <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-            <span>{t("ui.adminTokenTitle")}</span>
-          </span>
-          <span
-            className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
-              adminUnlocked
-                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                : "bg-white/5 text-zinc-400 border-white/5"
-            }`}
-          >
-            {adminUnlocked ? t("ui.adminTokenActive") : t("ui.adminTokenNotSet")}
-          </span>
-        </div>
-        <p className="text-[10px] text-muted leading-tight">
-          {t("ui.adminTokenDesc")}
-        </p>
-        {adminUnlocked ? (
-          <button
-            type="button"
-            onClick={lockAdmin}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 active:scale-[0.98] transition-all border border-rose-500/20 cursor-pointer"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            {t("ui.adminTokenLock")}
-          </button>
-        ) : (
-          <div className="flex gap-2 pt-1">
-            <input
-              type="password"
-              autoComplete="off"
-              value={adminInput}
-              onChange={(e) => setAdminInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void unlockAdmin()
-              }}
-              placeholder={t("ui.adminTokenPlaceholder")}
-              aria-label={t("ui.adminTokenTitle")}
-              className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-amber-500/50"
-            />
-            <button
-              type="button"
-              onClick={() => void unlockAdmin()}
-              disabled={!adminInput.trim() || adminBusy}
-              className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 text-black text-xs font-semibold hover:bg-amber-400 active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-            >
-              {t("ui.adminTokenUnlock")}
-            </button>
-          </div>
-        )}
-      </div>
+        <AdminUnlockCard t={t} />
       )}
 
       {/* Sicurezza & Accesso PIN — nascosta con multi-user ON (lì il cancello

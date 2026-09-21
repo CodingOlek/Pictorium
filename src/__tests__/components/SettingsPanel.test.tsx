@@ -36,10 +36,77 @@ describe("SettingsPanel", () => {
       />
     )
     expect(screen.getByText("ui.trendBadge")).toBeInTheDocument()
+    // Hint: il default non muove i salvati, il kill-switch globale è la sash Classifiche.
+    expect(screen.getByText("ui.trendDefaultHint")).toBeInTheDocument()
   })
 
-  it("renders clear cache button", () => {
+  it("trend master toggle turns all sash categories off and restores them on", () => {
     renderWithCtx(
+      <SettingsPanel
+        setSettingsOpen={() => {}}
+        exportData={() => {}}
+        importData={() => {}}
+      />
+    )
+    const trend = screen.getByRole("switch", { name: "ui.trendBadge" })
+    const sashNames = ["ui.sash_upcoming", "ui.sash_rank", "ui.sash_new", "ui.sash_award", "ui.sash_extra"]
+    const sashSwitches = () => sashNames.map((n) => screen.getByRole("switch", { name: n }))
+    // Precondizione: master ON e categorie tutte ON (default).
+    if (trend.getAttribute("aria-checked") !== "true") fireEvent.click(trend)
+    sashSwitches().forEach((s) => expect(s.getAttribute("aria-checked")).toBe("true"))
+    // Master OFF → tutte le categorie spente.
+    fireEvent.click(trend)
+    expect(trend.getAttribute("aria-checked")).toBe("false")
+    sashSwitches().forEach((s) => expect(s.getAttribute("aria-checked")).toBe("false"))
+    // Master ON → categorie ripristinate.
+    fireEvent.click(trend)
+    expect(trend.getAttribute("aria-checked")).toBe("true")
+    sashSwitches().forEach((s) => expect(s.getAttribute("aria-checked")).toBe("true"))
+  })
+
+  it("renders separate ratings toggle at top level without opening the accordion", () => {
+    renderWithCtx(
+      <SettingsPanel
+        setSettingsOpen={() => {}}
+        exportData={() => {}}
+        importData={() => {}}
+      />
+    )
+    // Accordion chiuso di default: il toggle ora vive al livello di Voto.
+    expect(screen.getByText("ui.separateRatings")).toBeInTheDocument()
+    expect(screen.getByRole("switch", { name: "ui.separateRatings" })).toBeInTheDocument()
+  })
+
+  it("hides custom rating endpoint block when its master toggle is off", () => {
+    renderWithCtx(
+      <SettingsPanel
+        setSettingsOpen={() => {}}
+        exportData={() => {}}
+        importData={() => {}}
+      />
+    )
+    // Default ON: blocco visibile.
+    expect(screen.getByText("ui.customRatingEndpoint")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("switch", { name: "ui.customRatings" }))
+    expect(screen.queryByText("ui.customRatingEndpoint")).not.toBeInTheDocument()
+  })
+
+  it("shows preRelease hint and honest sources button label", async () => {
+    renderWithCtx(
+      <SettingsPanel
+        setSettingsOpen={() => {}}
+        exportData={() => {}}
+        importData={() => {}}
+      />
+    )
+    expect(screen.getByTitle("ui.preReleaseHint")).toBeInTheDocument()
+    // Accordion provider: il bottone dice il vero (reset a solo IMDb).
+    fireEvent.click(screen.getByRole("button", { name: /ui\.ratingSources/ }))
+    expect(await screen.findByText("ui.sourcesImdbOnly")).toBeInTheDocument()
+    expect(screen.queryByText("ui.disableAll")).not.toBeInTheDocument()
+  })
+
+  it("renders clear cache button", () => {    renderWithCtx(
       <SettingsPanel
         setSettingsOpen={() => {}}
         exportData={() => {}}

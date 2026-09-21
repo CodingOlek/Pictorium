@@ -6,6 +6,8 @@ import { RefreshCw } from "lucide-react"
 import { t, getLang, setLang } from "@/lib/i18n"
 import { APP_COMMIT, APP_VERSION } from "@/generated/app-version"
 import { currentPathUuid, userAuthHeaders } from "@/lib/user-token"
+import { adminAuthHeaders } from "@/lib/admin-token"
+import { AdminUnlockCard } from "@/components/AdminUnlockCard"
 
 interface CheckResult {
   ok: boolean
@@ -116,6 +118,10 @@ function StatusRow({ label, ok, extra }: { label: string; ok: boolean | null; ex
 export default function StatusPage() {
   const [data, setData] = useState<HealthData | null>(null)
   const [cacheStatus, setCacheStatus] = useState<CacheStatusData | null>(null)
+  // 401/403 su /api/cache/status (istanza privata senza sblocco): le metriche
+  // sono protette, non assenti — si mostra la card di sblocco invece del
+  // generico "non disponibile" (errori di rete/500 restano non disponibile).
+  const [cacheLocked, setCacheLocked] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
   // Fuori dal provider di traduzione: sincronizza la lingua salvata al mount
@@ -133,7 +139,11 @@ export default function StatusPage() {
 
   async function loadCacheStatus() {
     try {
-      const res = await fetch("/api/cache/status")
+      // Il token admin di sessione (sbloccato in Impostazioni o qui) viaggia
+      // con la richiesta: senza, su istanza privata arriva 401 (fail-closed).
+      const res = await fetch("/api/cache/status", { headers: adminAuthHeaders() })
+      if (res.status === 401 || res.status === 403) { setCacheLocked(true); setCacheStatus(null); return }
+      setCacheLocked(false)
       if (!res.ok) { setCacheStatus(null); return }
       const body = await res.json()
       setCacheStatus(body)
@@ -440,7 +450,15 @@ export default function StatusPage() {
 
             <div className="surface-card border-white/10 rounded-2xl p-5 shadow-xl">
               <h2 className="text-base font-semibold mb-3">{t("ui.statusCache")}</h2>
-              {cacheStatus ? (
+              {cacheLocked && !cacheStatus ? (
+                <AdminUnlockCard
+                  t={t}
+                  className="space-y-2.5"
+                  description={t("ui.statusTelemetryLocked")}
+                  onUnlocked={() => void loadCacheStatus()}
+                  onLock={() => { setCacheLocked(true); setCacheStatus(null) }}
+                />
+              ) : cacheStatus ? (
                 <div className="space-y-1">
                   <StatusRow label={t("ui.statusCacheTotal")} ok extra={cacheStatus.totalEntries} />
                   <StatusRow label={t("ui.statusCacheUntagged")} ok extra={cacheStatus.untaggedEntries} />
