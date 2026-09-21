@@ -196,8 +196,11 @@ Opt-in portrait-only (`sep=1`, default OFF): sostituisce la media ★ nel badge 
 | Parametro | Client | Server |
 |---|---|---|
 | Dimensione logo | `computeLogoOffsetBounds()` usa `computeLogoBox()` | `computeLogoLayout()` usa `computeLogoBox()` |
-| Scala | `logoScale` come percentuale della larghezza poster, max larghezza poster | Stessa logica, senza cap artificiale al 25% altezza |
+| Scala | `logoScale` come percentuale della larghezza poster, max larghezza poster | Stessa logica |
+| Scala auto | `logoDefaultScale` (logo-selection.ts) | `defScale` in poster-service.ts + `defaultLogoScale` in poster-auto-fit.ts (stessa formula, Golden Rule) — curva `round(37.5 × aspect^(2/3))` cap 75 (2:1 → 60, 2.5:1 → 69, 3:1+ al cap; quadrati invariati a 38) |
 | Cap altezza | Solo canvas poster (`posterH`) | Solo canvas poster (`STD_H`) |
+| Cap portrait | `maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT (25)` — solo altezza, larghezza libera | Stesso cap (via `computeLogoLayout` in portrait; `poster-fit-score` usa gli stessi override) |
+| Sorgente logo | — | `imgSrc(path, "original")` (nitidezza, niente upsampling); poster/backdrop restano `w500` |
 | Margine inferiore | `bottomMarginPct: 12` con badge genere, `10` storico senza (mirror in `context.tsx` per i bound slider) | `bottomMarginPct: hasGenreBadge ? 12 : undefined` (default 10) — solleva il logo sopra il badge basso |
 
 ## Files coinvolti

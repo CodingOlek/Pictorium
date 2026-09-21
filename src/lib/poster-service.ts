@@ -21,7 +21,7 @@ import { LAND_W, LAND_H } from "./image-utils"
 import { renderGenreBadge, renderRankingBadge, renderExtraBadge, renderQualityBadge, renderComingSoonRibbon, comingSoonRibbonLayout, renderSVG } from "./svg-badge"
 import { buildLogoScrim, logoContrast, logoInkLuminance, logoScrimStrength, posterLogoZoneLuminance } from "./logo-contrast"
 import { renderFirstMatchingNetworkLogoBadge, renderFirstMatchingNetworkRawBadge, renderFirstMatchingNetworkLogoBadgeHybrid, renderFirstMatchingNetworkRawBadgeHybrid, type NetworkCandidate } from "./network-svgs"
-import { computeLogoLayout, logoAlignPadX } from "./logo-layout"
+import { computeLogoLayout, logoAlignPadX, PORTRAIT_LOGO_MAX_HEIGHT_PCT } from "./logo-layout"
 import fs from "fs"
 import path from "path"
 import { estimateTextWidth, fontFamilyFor, escSvg, TOP_SHADOW_PAD } from "./badge-svg-shared"
@@ -512,9 +512,8 @@ export async function resizeLogoCached(
   const key = logoSrc ? `logo-resize:${logoSrc}:${width}:${height}` : null
   const cached = key ? cacheGet<ResizedImage>(key) : null
   if (cached) return cached
-  const resized = await sharp(logoFetch).resize(width, height, { fit: "inside" }).png({ compressionLevel: 1 }).toBuffer()
-  const rMeta = await sharp(resized).metadata()
-  const result: ResizedImage = { input: resized, w: rMeta.width || width, h: rMeta.height || height }
+  const { data: input, info } = await sharp(logoFetch).resize(width, height, { fit: "inside" }).png({ compressionLevel: 1 }).toBuffer({ resolveWithObject: true })
+  const result: ResizedImage = { input, w: info.width || width, h: info.height || height }
   if (key) cacheSet(key, result, [IMAGE_CACHE_TAG], IMAGE_CACHE_TTL)
   return result
 }
@@ -676,7 +675,10 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
           const lMeta = await sharp(logoFetch).metadata()
           const lw = lMeta.width || 200
           const lh = lMeta.height || 100
-          const defScale = Math.min(Math.round(37.5 * lw / lh), 75)
+          // Curva default sincronizzata con logoDefaultScale (logo-selection.ts):
+          // sublineare in aspect^(2/3) così i wordmark panoramici non saturano
+          // tutti a 75 (lw/lh hanno sempre fallback > 0, niente guardia null).
+          const defScale = Math.min(Math.round(37.5 * Math.pow(lw / lh, 2 / 3)), 75)
           const uScale = logoScale ?? defScale
           const uOx = logoOffsetX ?? 0
           const uOy = logoOffsetY ?? 0
@@ -687,6 +689,9 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
             // Margine maggiorato solo col badge genere (12% vs 10% storico):
             // solleva il logo sopra il badge basso senza spostare i poster clean.
             bottomMarginPct: hasGenreBadge ? 12 : undefined,
+            // Cap altezza portrait: i loghi quadrati/verticali non superano
+            // il 25% dell'altezza poster (solo altezza, larghezza libera).
+            maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT,
             align,
           })
           const resized = await resizeLogoCached(logoFetch, layout.width, layout.height, logoSrc)

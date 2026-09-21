@@ -24,7 +24,7 @@ import { useMappingsStore } from "./useMappingsStore"
 import { usePosterEditor, PosterEditorProvider } from "./contexts/PosterEditorContext"
 import { usePosterSave } from "./usePosterSave"
 import { defaultGradientHeightForPoster, defaultBlurFadeForPoster } from "./gradient-defaults"
-import { computeLogoOffsetBounds } from "./logo-layout"
+import { computeLogoOffsetBounds, PORTRAIT_LOGO_MAX_HEIGHT_PCT } from "./logo-layout"
 import { LAND_W, LAND_H } from "./constants"
 import { useOutsideDismiss } from "./useOutsideDismiss"
 import { type AggregatedRatings } from "./ratings"
@@ -613,7 +613,9 @@ export function usePictorium(): PictoriumCtx {
       // Stessi vincoli del server: margine 12% col badge genere (0.10 storico
       // senza), altrimenti i bound degli slider mentono sul render finale.
       ...(hasBadges ? { bottomMarginPct: 12 } : {}),
-      ...(isLandscapeShape ? { maxWidthPct: 40, maxHeightPct: 24, bottomMarginPct: 25, topOffset: 55 } : {}),
+      ...(isLandscapeShape
+        ? { maxWidthPct: 40, maxHeightPct: 24, bottomMarginPct: 25, topOffset: 55 }
+        : { maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT }),
     })
   }, [navigation.previewPoster, navigation.selectedLogo, logoScale, hasBadges, posterShape, logoAlign])
 

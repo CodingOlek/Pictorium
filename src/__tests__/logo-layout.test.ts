@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest"
-import { computeLogoBox, computeLogoLayout, computeLogoOffsetBounds } from "@/lib/logo-layout"
+import { computeLogoBox, computeLogoLayout, computeLogoOffsetBounds, PORTRAIT_LOGO_MAX_HEIGHT_PCT } from "@/lib/logo-layout"
 
 describe("logo layout", () => {
-  it("keeps growing wide logos past the old 25 percent height cap", () => {
+  it("caps wide logos by height with the portrait 25 percent cap", () => {
     const box = computeLogoBox({
       posterW: 1000,
       posterH: 1500,
       logoW: 1000,
       logoH: 500,
       logoScale: 100,
+      maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT,
     })
 
-    expect(box).toEqual({ width: 1000, height: 500 })
+    // 1000x500 a scala 100 = 500px h > 375px cap → 750x375.
+    expect(box).toEqual({ width: 750, height: 375 })
   })
 
   it("uses the same uncapped logo size for movement bounds", () => {
@@ -57,6 +59,20 @@ describe("logo layout", () => {
     })
 
     expect(box).toEqual({ width: 500, height: 500 })
+  })
+
+  it("caps square portrait logos at 25 percent height", () => {
+    const box = computeLogoBox({
+      posterW: 1000,
+      posterH: 1500,
+      logoW: 800,
+      logoH: 800,
+      logoScale: 100,
+      maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT,
+    })
+
+    expect(box.height).toBeLessThanOrEqual(Math.round(1500 * 0.25))
+    expect(box.width).toBe(box.height)
   })
 
   it("anchors left with padX when align is left (Cinematic)", () => {

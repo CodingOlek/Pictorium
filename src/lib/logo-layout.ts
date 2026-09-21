@@ -39,6 +39,12 @@ type LogoOffsetBounds = {
   readonly maxY: number
 }
 
+/** Cap altezza logo sui canvas portrait: i loghi quadrati/verticali non
+ *  superano il 25% dell'altezza poster (375px su 1500px), in linea con
+ *  `logoDefaultScale` in logo-selection.ts. Solo altezza: la larghezza resta
+ *  libera (uncapped) così i wordmark panoramici possono respirare. */
+export const PORTRAIT_LOGO_MAX_HEIGHT_PCT = 25
+
 function sanePositive(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback
 }

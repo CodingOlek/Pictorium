@@ -119,7 +119,8 @@ function defaultLogoScale(logoBuffer: Buffer): Promise<number> {
   return sharp(logoBuffer).metadata().then((meta) => {
     const logoW = meta.width || 200
     const logoH = meta.height || 100
-    return Math.min(Math.round(37.5 * logoW / logoH), 75)
+    // Curva default sincronizzata con logoDefaultScale (logo-selection.ts).
+    return Math.min(Math.round(37.5 * Math.pow(logoW / logoH, 2 / 3)), 75)
   })
 }
 

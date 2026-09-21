@@ -63,7 +63,7 @@ export function isValidHex(color: string): boolean {
   return /^#([0-9A-Fa-f]{3}){1,2}$/.test(color)
 }
 
-export function imgSrc(path: string): string {
+export function imgSrc(path: string, size = "w500"): string {
   if (path.startsWith("http")) {
     // SSRF protection: only allow the TMDB image CDN and the TVDB artworks
     // CDN (fixed hosts — B1 rescue posters; same review bar as TMDB).
@@ -72,7 +72,9 @@ export function imgSrc(path: string): string {
     }
     return path
   }
-  return `${IMG_BASE}/w500${path}`
+  // I loghi usano "original" (nitidezza, PNG piccoli); poster/backdrop restano
+  // "w500" per non appesantire memoria e tempi di risposta.
+  return `${IMG_BASE}/${size}${path}`
 }
 
 export async function fitBadgeToCanvas<T extends BadgeRender>(badge: T, maxW: number, maxH: number): Promise<T> {

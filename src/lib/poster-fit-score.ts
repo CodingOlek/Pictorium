@@ -1,5 +1,5 @@
 import sharp from "sharp"
-import { computeLogoLayout } from "@/lib/logo-layout"
+import { computeLogoLayout, PORTRAIT_LOGO_MAX_HEIGHT_PCT } from "@/lib/logo-layout"
 import { createLogger } from "@/lib/logger"
 // Batch B: import shared utilities from image-utils.ts (single source of truth)
 import { STD_W, STD_H, LAND_W, LAND_H, clamp, luma, type RgbData, decodePosterRaw, sliceRgb } from "@/lib/image-utils"
@@ -106,7 +106,7 @@ export function fitCanvasSize(shape?: PosterShape): { width: number; height: num
 function logoLayoutOverrides(shape?: PosterShape): { align: "left" | "center"; maxWidthPct?: number; maxHeightPct?: number; bottomMarginPct?: number; topOffset?: number } {
   return shape === "landscape"
     ? { align: "left", maxWidthPct: 40, maxHeightPct: 24, bottomMarginPct: 25, topOffset: 55 }
-    : { align: "center" }
+    : { align: "center", maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT }
 }
 
 function analyzeLuma(rgb: RgbData): { mean: number; stdDev: number; edgeAvg: number; meanR: number; meanG: number; meanB: number } {
