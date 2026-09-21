@@ -1102,12 +1102,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
                     || getTMDBSessionCache(mediaType, tmdbId)?.details?.name
                     || null
                   const fallbackTitle = mapping?.title || req.nextUrl.searchParams.get("title") || sessionTitle || genreName || null
+                  const effSeasonCount = seasonCount ?? getTMDBSessionCache(mediaType, tmdbId)?.details?.number_of_seasons ?? null
                   return resolveStreamQuality(
                     mediaType === "movie" ? "movie" : "series",
                     imdbId,
                     tmdbId,
                     fallbackTitle,
                     renderAbort.signal,
+                    effSeasonCount,
                   ).catch(() => null)
                 })())
           : Promise.resolve(null),

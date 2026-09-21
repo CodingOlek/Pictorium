@@ -1,6 +1,8 @@
 import { describe, expect, it, beforeEach, vi, afterEach } from "vitest"
 import {
+  parseSingleStreamQuality,
   parseStreamQualityFromStreams,
+  extractRawQualityTokens,
   resolveStreamQuality,
   __resetStreamQualityCache,
 } from "@/lib/stream-quality"
@@ -154,5 +156,150 @@ describe("resolveStreamQuality", () => {
     expect(result.quality).toBeNull()
     expect(result.status).toBe("resolved")
     expect(result.source).toBe("torrentio")
+  })
+
+  it("degrades TTL on Torrentio timeout + JustWatch FHD (keeps failure status)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const u = String(url)
+      if (u.includes("/stream/")) {
+        throw new DOMException("The operation was aborted", "AbortError")
+      }
+      if (u.includes("justwatch.com")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              popularTitles: {
+                edges: [
+                  {
+                    node: {
+                      content: { externalIds: { tmdbId: 552 } },
+                      offers: [{ presentationType: "HD" }],
+                    },
+                  },
+                ],
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }
+      throw new Error(`unexpected fetch ${u}`)
+    })
+    const result = await resolveStreamQuality("movie", "tt0133093", 552)
+    expect(result.quality).toBe("FHD")
+    expect(result.source).toBe("justwatch")
+    // Status non-resolved → cache a 2min, non 30min: seconda chiamata riusa la cache.
+    expect(result.status).not.toBe("resolved")
+    const cached = await resolveStreamQuality("movie", "tt0133093", 552)
+    expect(cached.quality).toBe("FHD")
+    expect(fetchSpy).toHaveBeenCalledTimes(2) // 1 torrentio + 1 justwatch, poi cache
+  })
+
+  it("series: S01 FHD + ultima stagione 4K → 4K con un solo fetch extra", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const u = decodeURIComponent(String(url))
+      if (u.includes("/stream/series/")) {
+        if (u.includes(":3:1")) {
+          return new Response(
+            JSON.stringify({ streams: [{ name: "Torrentio\n4k", title: "Show.S03E01.2160p.WEB-DL" }] }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          )
+        }
+        return new Response(
+          JSON.stringify({ streams: [{ name: "Torrentio\n1080p", title: "Show.S01E01.1080p.WEB-DL" }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }
+      throw new Error(`unexpected fetch ${u}`)
+    })
+    const result = await resolveStreamQuality("series", "tt0903747", 1396, null, undefined, 3)
+    expect(result.quality).toBe("4K")
+    expect(result.status).toBe("resolved")
+    expect(result.source).toBe("torrentio")
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it("series: S01 già 4K → nessun fetch extra", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const u = decodeURIComponent(String(url))
+      if (u.includes("/stream/series/")) {
+        return new Response(
+          JSON.stringify({ streams: [{ name: "Torrentio\n4k", title: "Show.S01E01.2160p.WEB-DL" }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }
+      throw new Error(`unexpected fetch ${u}`)
+    })
+    const result = await resolveStreamQuality("series", "tt0903747", 1396, null, undefined, 3)
+    expect(result.quality).toBe("4K")
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("series: S01 timeout → nessun fetch extra (niente raddoppio latenza)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const u = String(url)
+      if (u.includes("/stream/")) {
+        throw new DOMException("The operation was aborted", "AbortError")
+      }
+      if (u.includes("justwatch.com")) {
+        return new Response(JSON.stringify({ data: { popularTitles: { edges: [] } } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+      throw new Error(`unexpected fetch ${u}`)
+    })
+    const result = await resolveStreamQuality("series", "tt0903747", 1396, null, undefined, 3)
+    expect(result.quality).toBeNull()
+    expect(result.status).not.toBe("resolved")
+    // 1 torrentio (S01, timeout) + 1 justwatch, zero fetch sull'ultima stagione.
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("parseSingleStreamQuality — falsi 4K e token attaccati", () => {
+  it("1080p da sorgente UHD/4K Remaster → FHD, mai 4K", () => {
+    expect(
+      parseSingleStreamQuality({ name: "Torrentio\n1080p", title: "The.Godfather.1972.UHD.BluRay.1080p.REMUX" }),
+    ).toBe("FHD")
+    expect(
+      parseSingleStreamQuality({ title: "Raiders.of.the.Lost.Ark.1080p.UHD.Bluray.x264" }),
+    ).toBe("FHD")
+    expect(parseSingleStreamQuality({ title: "Movie.2020.1080p.4K.Remaster.BluRay" })).toBe("FHD")
+    expect(parseSingleStreamQuality({ title: "Movie.2020.1080p.Mastered.in.4K.BluRay" })).toBe("FHD")
+    expect(
+      parseSingleStreamQuality({
+        name: "Torrentio\n1080p",
+        title: "Movie.4K.Remaster",
+        behaviorHints: { bingeGroup: "torrentio|1080p|..." },
+      }),
+    ).toBe("FHD")
+  })
+
+  it("token 4K attaccati → 4K", () => {
+    expect(parseSingleStreamQuality({ title: "Movie.2024.4KHDR.x264" })).toBe("4K")
+    expect(parseSingleStreamQuality({ title: "Movie.2024.4kDV.WEB-DL" })).toBe("4K")
+    expect(parseSingleStreamQuality({ title: "Movie.2024.2160pHDR.WEB-DL" })).toBe("4K")
+    expect(parseSingleStreamQuality({ title: "Movie.2024.4kHEVC.BluRay" })).toBe("4K")
+    expect(parseSingleStreamQuality({ title: "Movie.2024.UHDRemux.2160p" })).toBe("4K")
+    expect(parseSingleStreamQuality({ title: "Movie.2024.UHD4K.BluRay.2160p" })).toBe("4K")
+  })
+
+  it("genuino 4K restoration con 2160p resta 4K", () => {
+    expect(parseSingleStreamQuality({ title: "Movie.1979.2160p.4K.Restoration.REMUX" })).toBe("4K")
+  })
+
+  it("max su multi-stream: un solo 4K basta", () => {
+    expect(
+      parseStreamQualityFromStreams([
+        { name: "Torrentio\n1080p", title: "Movie.1080p.BluRay" },
+        { title: "Movie.2024.4KHDR.x264" },
+      ]),
+    ).toBe("4K")
+  })
+
+  it("extractRawQualityTokens cattura i token attaccati", () => {
+    const tokens = extractRawQualityTokens([{ title: "Movie.2024.4KHDR.x264" }])
+    expect(tokens).toContain("4k")
   })
 })

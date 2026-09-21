@@ -55,11 +55,41 @@ export function extractRawQualityTokens(
   if (!Array.isArray(streams)) return []
   for (const s of streams) {
     const text = `${s.name || ""} ${s.title || ""} ${s.behaviorHints?.filename || ""} ${s.behaviorHints?.bingeGroup || ""}`
-    for (const m of text.matchAll(/\b(4k|2160p?|uhd|1080p?|fhd|720p?|hd|480p?|576p?|sd|dvdrip|cam|ts)\b/gi)) {
+    for (const m of text.matchAll(/\b(2160[pi]?|1080[pi]?|fhd|fullhd|720[pi]?|hdtv|hd|480[pi]?|576[pi]?|sd|dvdrip|cam|ts)\b/gi)) {
       found.add(m[1].toLowerCase())
     }
+    // Token 4K attaccati (4KHDR, 4kDV, 2160pHDR, UHD4K…): il \b fallisce tra
+    // due word-char, quindi substring sul testo normalizzato.
+    const low = text.toLowerCase().replace(/[._\-+]+/g, " ")
+    if (low.includes("2160")) found.add("2160p")
+    if (low.includes("4k")) found.add("4k")
+    if (low.includes("uhd")) found.add("uhd")
   }
   return [...found]
+}
+
+const STREAM_TIER_RANK: Record<StreamQuality, number> = { SD: 0, HD: 1, FHD: 2, "4K": 3 }
+
+/**
+ * Qualità di un singolo stream. Regola unica: la risoluzione numerica
+ * esplicita vince sulla parola di sorgente — un `UHD BluRay 1080p` o un
+ * `4K Remaster 1080p` è un file 1080p (FHD), non un 4K. I token 4K attaccati
+ * (4KHDR, 2160pHDR…) sono rilevati via substring perché `\b` fallisce tra
+ * word-char. I campi strutturati di Torrentio (name `Torrentio\n1080p`,
+ * bingeGroup `torrentio|1080p|…`) partecipano già concatenati: nessuna
+ * priorità speciale da mantenere, la regola numerica copre i conflitti.
+ */
+export function parseSingleStreamQuality(
+  s: { name?: string; title?: string; behaviorHints?: { filename?: string; bingeGroup?: string } }
+): StreamQuality | null {
+  const raw = `${s?.name || ""} ${s?.title || ""} ${s?.behaviorHints?.filename || ""} ${s?.behaviorHints?.bingeGroup || ""}`
+  const text = raw.toLowerCase().replace(/[._\-+]+/g, " ")
+  if (text.includes("2160")) return "4K"
+  if (/\b(1080[pi]?|fhd|fullhd)\b/.test(text)) return "FHD"
+  if (/\b(720[pi]?|hd|hdtv)\b/.test(text)) return "HD"
+  if (/\b(480[pi]?|576[pi]?|sd|dvdrip|cam|ts)\b/.test(text)) return "SD"
+  if (text.includes("4k") || text.includes("uhd")) return "4K"
+  return null
 }
 
 export function parseStreamQualityFromStreams(
@@ -67,36 +97,25 @@ export function parseStreamQualityFromStreams(
 ): StreamQuality | null {
   if (!Array.isArray(streams) || streams.length === 0) return null
 
-  let has1080p = false
-  let has720p = false
-  let hasSD = false
-
+  let best: StreamQuality | null = null
   for (const s of streams) {
-    const text = `${s.name || ""} ${s.title || ""} ${s.behaviorHints?.filename || ""} ${s.behaviorHints?.bingeGroup || ""}`
-    if (/\b(4k|2160[pi]?|uhd)\b/i.test(text)) {
-      return "4K"
-    }
-    if (/\b(1080[pi]?|fhd)\b/i.test(text)) {
-      has1080p = true
-    } else if (/\b(720[pi]?|hd)\b/i.test(text)) {
-      has720p = true
-    } else if (/\b(480[pi]?|576[pi]?|sd|dvdrip|cam|ts)\b/i.test(text)) {
-      hasSD = true
+    const q = parseSingleStreamQuality(s)
+    if (q && (best === null || STREAM_TIER_RANK[q] > STREAM_TIER_RANK[best])) {
+      if (q === "4K") return "4K"
+      best = q
     }
   }
-
-  if (has1080p) return "FHD"
-  if (has720p) return "HD"
-  if (hasSD) return "SD"
-  return null
+  return best
 }
 
 export async function fetchTorrentioQuality(
   type: "movie" | "series",
   imdbId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  season?: number | null,
+  episode?: number | null
 ): Promise<StreamQualityResult> {
-  const streamId = type === "movie" ? imdbId : `${imdbId}:1:1`
+  const streamId = type === "movie" ? imdbId : `${imdbId}:${season ?? 1}:${episode ?? 1}`
   const url = `${TORRENTIO_BASE_URL}/stream/${type}/${encodeURIComponent(streamId)}.json`
   try {
     const timeoutSignal = AbortSignal.timeout(6000)
@@ -140,9 +159,12 @@ export async function resolveStreamQuality(
   imdbId?: string | null,
   tmdbId?: number | null,
   searchTitle?: string | null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  seasonCount?: number | null
 ): Promise<StreamQualityResult> {
-  const cacheKey = `${type}:${imdbId || tmdbId || searchTitle}`
+  const lastSeason = seasonCount != null ? Math.trunc(seasonCount) : NaN
+  const seasonSuffix = type === "series" && Number.isFinite(lastSeason) && lastSeason > 0 ? `:s${lastSeason}` : ""
+  const cacheKey = `${type}:${imdbId || tmdbId || searchTitle}${seasonSuffix}`
   const cached = qualityCache.get(cacheKey)
   if (cached) {
     // TTL differenziato per esito: resolved (anche null) 30min, timeout/error
@@ -170,10 +192,34 @@ export async function resolveStreamQuality(
   let torrentioFailure: StreamQualityResult | null = null
   if (targetImdbId && targetImdbId.startsWith("tt")) {
     const t = await fetchTorrentioQuality(type, targetImdbId, signal)
-    if (t.quality) return store(t)
-    // 200 con streams vuoti = resolved-null (esito negativo accertato): il
-    // fallback JW può ancora arricchire, ma se non trova nulla resta resolved.
-    if (t.status !== "resolved") torrentioFailure = t
+    if (t.status === "resolved") {
+      let best = t.quality
+      let tokens = t.rawTokens ?? []
+      // Serie multi-stagione: S01E01 in FHD non esclude 4K dopo — un solo
+      // fetch extra sull'ultima stagione (solo Torrentio, mai JW: il badge
+      // promette ciò che è riproducibile su Stremio). Solo se S01 è resolved
+      // (su timeout/error il secondo fetch fallirebbe uguale: niente raddoppio
+      // della latenza) e non è già 4K.
+      if (type === "series" && Number.isFinite(lastSeason) && lastSeason > 1 && t.quality !== "4K") {
+        const last = await fetchTorrentioQuality(type, targetImdbId, signal, lastSeason, 1).catch(() => null)
+        if (last && last.status === "resolved" && last.quality) {
+          const merged = [...new Set([...tokens, ...(last.rawTokens ?? [])])]
+          if (last.quality === "4K") {
+            return store({ quality: "4K", status: "resolved", source: "torrentio", rawTokens: merged })
+          }
+          if (best === null || STREAM_TIER_RANK[last.quality] > STREAM_TIER_RANK[best]) {
+            best = last.quality
+            tokens = merged
+          }
+        }
+        // Extra fetch fallito/timeout → ignorato: resta l'esito di S01.
+      }
+      if (best) return store({ quality: best, status: "resolved", source: "torrentio", rawTokens: tokens })
+      // 200 con streams vuoti = resolved-null (esito negativo accertato): il
+      // fallback JW può ancora arricchire, ma se non trova nulla resta resolved.
+    } else {
+      torrentioFailure = t
+    }
   }
 
   // 2. Fallback to JustWatch GraphQL if Torrentio returned nothing and tmdbId is present
@@ -186,7 +232,15 @@ export async function resolveStreamQuality(
         "IT",
         signal
       )
-      if (jw.quality) return store({ quality: jw.quality, status: "resolved", source: "justwatch" })
+      if (jw.quality) {
+        // Degradato: Torrentio down + JW ≤ FHD → si riusa lo status del
+        // failure così la cache usa il TTL effimero da 2min già esistente
+        // (zero costanti nuove) e il poster ritenta presto.
+        if (torrentioFailure && jw.quality !== "4K") {
+          return store({ quality: jw.quality, status: torrentioFailure.status, source: "justwatch" })
+        }
+        return store({ quality: jw.quality, status: "resolved", source: "justwatch" })
+      }
       // ok=false (breaker aperto o trasporto fallito) = incertezza, NON miss:
       // resta l'eventuale failure di Torrentio, altrimenti error effimero.
       // Solo ok=true con quality null è esito negativo accertato.
