@@ -45,9 +45,14 @@ interface SelectBestLogoFitPosterInput {
   readonly shape?: PosterShape
 }
 
-// Più candidati del passato (8): col decode-once dello scoring il budget di
-// tempo basta per 16 poster — più candidati = miglior best-of.
-const TMDB_CANDIDATE_COUNT = 16
+// Candidati clean valutati dal best-fit (default 16, prima 8): col decode-once
+// dello scoring il budget di tempo basta per 16 poster — più candidati =
+// miglior best-of. Env per sperimentare (es. 8 su VPS): 1–32, default 16.
+const TMDB_CANDIDATE_COUNT = (() => {
+  const raw = envWithFallback("AUTO_FIT_CANDIDATE_COUNT")
+  const n = raw ? parseInt(raw, 10) : 16
+  return Number.isFinite(n) ? Math.min(Math.max(n, 1), 32) : 16
+})()
 // Tetto dello SCORING (CPU-bound): lo scoring è una metrica, non il prodotto —
 // oltre questo tempo si usa il fallback (primo clean). Ridotto a 1200ms per
 // stringere il caso peggiore del render non-mappato; sovrascrivibile via env.

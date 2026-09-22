@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest"
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest"
 import sharp from "sharp"
 import { selectAutoFitCandidates, selectBestLogoFitPosterPath, clearAutoFitCache } from "@/lib/poster-auto-fit"
 
@@ -653,5 +653,52 @@ describe("selectAutoFitCandidates shape", () => {
       shape: "landscape",
     })
     expect(selected?.posterPath).toBe("/dark.jpg")
+  })
+})
+
+describe("TMDB_CANDIDATE_COUNT env (PICTORIUM_AUTO_FIT_CANDIDATE_COUNT)", () => {
+  // Lettura a module level: re-import con env impostata (stesso pattern di
+  // best-fit-config.test.ts). Ripristino dopo ogni caso per non toccare gli altri test.
+  async function candidatesWithEnv(value: string | undefined, total: number): Promise<number> {
+    if (value === undefined) {
+      delete process.env.PICTORIUM_AUTO_FIT_CANDIDATE_COUNT
+      delete process.env.POSTERIUM_AUTO_FIT_CANDIDATE_COUNT
+    } else {
+      process.env.PICTORIUM_AUTO_FIT_CANDIDATE_COUNT = value
+    }
+    vi.resetModules()
+    const mod = await import("@/lib/poster-auto-fit")
+    const posters = Array.from({ length: total }, (_, i) => ({
+      file_path: `/p${i}.jpg`,
+      iso_639_1: null as string | null,
+      width: 500,
+      height: 750,
+    }))
+    return mod.selectAutoFitCandidates(posters).length
+  }
+
+  afterEach(() => {
+    delete process.env.PICTORIUM_AUTO_FIT_CANDIDATE_COUNT
+    delete process.env.POSTERIUM_AUTO_FIT_CANDIDATE_COUNT
+    vi.resetModules()
+  })
+
+  it("default 16 senza env", async () => {
+    expect(await candidatesWithEnv(undefined, 30)).toBe(16)
+  })
+
+  it("rispetta la env (8)", async () => {
+    expect(await candidatesWithEnv("8", 30)).toBe(8)
+  })
+
+  it("clamp 1–32 e fallback su invalidi", async () => {
+    expect(await candidatesWithEnv("0", 30)).toBe(1)
+    expect(await candidatesWithEnv("-3", 30)).toBe(1)
+    expect(await candidatesWithEnv("100", 40)).toBe(32)
+    expect(await candidatesWithEnv("abc", 30)).toBe(16)
+  })
+
+  it("sotto il count non taglia", async () => {
+    expect(await candidatesWithEnv("8", 5)).toBe(5)
   })
 })

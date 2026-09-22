@@ -80,6 +80,8 @@ services:
       # (32MB / 1500ms). Su VPS con RAM alzare IMG a 128.
       - PICTORIUM_IMG_CACHE_MB=${PICTORIUM_IMG_CACHE_MB:-}
       - PICTORIUM_RATING_WAIT_MS=${PICTORIUM_RATING_WAIT_MS:-}
+      # Candidati clean del best-fit: vuoto = 16 (default del codice).
+      - PICTORIUM_AUTO_FIT_CANDIDATE_COUNT=${PICTORIUM_AUTO_FIT_CANDIDATE_COUNT:-}
 
       # ── Opzionali — Render pipeline (tuning performance) ──
       # Default tarati per il limite 512MB sotto. Su istanze con più RAM alza
