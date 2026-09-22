@@ -20,11 +20,30 @@ import { getRegionDef, normalizeRegion, parseRegion, type RegionDef } from "@/li
 import { getCatalogEpoch } from "@/lib/catalog-epoch"
 import { createLogger } from "@/lib/logger"
 import { concurrentMap } from "@/lib/episode-ordering"
+import { envWithFallback } from "@/lib/env-compat"
 import { isPersonQuery, pickTopPerson } from "@/lib/person-search"
 import { normalizeCatalogId, normalizeCatalogIdKeys, normalizeCatalogIdList } from "@/lib/catalog-definitions"
 import { isPosterShape, type PosterShape } from "@/lib/types"
 
 const log = createLogger("catalog")
+
+// Tetto per-titolo TMDB nei cataloghi Stremio (fail-open): oltre il tetto il
+// titolo esce con i dati della classifica (nome/anno) invece di appendere
+// l'intera risposta oltre la deadline client (~10s). I dettagli poster usano
+// 8s (POSTER_TMDB_TIMEOUT_MS): qui meno, perché 10-20 titoli viaggiano in
+// parallelo e uno straggler non deve mai costare la risposta.
+const CATALOG_TMDB_TIMEOUT_MS = (() => {
+  const raw = envWithFallback("CATALOG_TMDB_TIMEOUT_MS")
+  const n = raw ? parseInt(raw, 10) : 2500
+  return Number.isFinite(n) && n >= 500 && n <= 15000 ? n : 2500
+})()
+
+/** Signal per-titolo nei cataloghi (stesso pattern del tetto loghi a riga ~350). */
+function catalogTimeoutSignal(): AbortSignal | undefined {
+  return typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+    ? AbortSignal.timeout(CATALOG_TMDB_TIMEOUT_MS)
+    : undefined
+}
 
 // Contatori key-missing per /api/status (solo memoria, mai segreti): quante
 // risposte catalogo JW sono uscite vuote per mancanza chiave vs totale JW.
@@ -731,35 +750,38 @@ export async function pictoriumCatalog(
       const results = await concurrentMap(uniqueRows, async (row) => {
         try {
           // D4: external_ids in append — niente secondo fetch per-titolo.
-          const d = await getDetailsWithExternalIds(stType === "movie" ? "movie" : "tv", row.tmdbId, tmdbLang, apiKey)
-          if (!d?.id) return null
-          return { d, tmdbId: row.tmdbId, imdbId: row.imdbId }
+          // Tetto fail-open: uno straggler non appende tutto il catalogo.
+          const d = await getDetailsWithExternalIds(stType === "movie" ? "movie" : "tv", row.tmdbId, tmdbLang, apiKey, catalogTimeoutSignal(), CATALOG_TMDB_TIMEOUT_MS)
+          if (!d?.id) return { d: null, tmdbId: row.tmdbId, imdbId: row.imdbId, title: row.title }
+          return { d, tmdbId: row.tmdbId, imdbId: row.imdbId, title: row.title }
         } catch {
-          return null
+          // Fail-open come il ramo piattaforme: il titolo JustWatch resta
+          // anche senza dettagli (prima la riga veniva scartata del tutto).
+          return { d: null, tmdbId: row.tmdbId, imdbId: row.imdbId, title: row.title }
         }
       }, 5)
-      const validResults = results.filter((r): r is { d: TMDBDetails; tmdbId: number; imdbId: string | null } => r !== null)
+      const validResults = results.filter((r): r is { d: TMDBDetails | null; tmdbId: number; imdbId: string | null; title: string | null | undefined } => r !== null && (!!r.d || !!(r.title && r.title.length > 0)))
       metas = await concurrentMap(validResults, async (r) => {
         const [imdbId, posterAndShape, logo] = await Promise.all([
-          r.imdbId || r.d.external_ids?.imdb_id || null,
+          r.imdbId || r.d?.external_ids?.imdb_id || null,
           pictoriumPosterAndShape(req, stType, r.tmdbId, configParam, userParam, undefined, posterLang, region.code),
           apiKey ? catalogLogo(stType === "movie" ? "movie" : "tv", r.tmdbId, apiKey, tmdbLang) : Promise.resolve(undefined),
         ])
         const { poster, banner, posterShape } = posterAndShape
-        const background = catalogBackground(r.d.backdrop_path)
+        const background = catalogBackground(r.d?.backdrop_path ?? null)
         return {
           id: catalogMetaId(imdbId, r.tmdbId),
           type: stType,
-          name: r.d.title || r.d.name || "",
+          name: r.d?.title || r.d?.name || r.title || "",
           poster,
           posterShape,
           background,
           banner,
           logo,
-          releaseInfo: (r.d.release_date || r.d.first_air_date || "").slice(0, 4) || undefined,
-          imdbRating: r.d.vote_average ? r.d.vote_average.toFixed(1) : undefined,
-          genres: (r.d.genres || []).map((g) => g.name).filter(Boolean),
-          description: r.d.overview ?? undefined,
+          releaseInfo: (r.d?.release_date || r.d?.first_air_date || "").slice(0, 4) || undefined,
+          imdbRating: r.d?.vote_average ? r.d.vote_average.toFixed(1) : undefined,
+          genres: (r.d?.genres || []).map((g) => g.name).filter(Boolean),
+          description: r.d?.overview ?? undefined,
         }
       }, 5)
     } else if (catalogId.startsWith("pictorium-anime")) {
@@ -772,7 +794,7 @@ export async function pictoriumCatalog(
       const results = await concurrentMap(items, async (item, idx) => {
         let tmdbId = Number(item.tmdb)
         if (!tmdbId && item.imdb && apiKey) {
-          tmdbId = await tmdbFindByImdb(item.imdb, mediaType, apiKey) || 0
+          tmdbId = await tmdbFindByImdb(item.imdb, mediaType, apiKey, catalogTimeoutSignal()).catch(() => 0) || 0
         }
         if (!tmdbId || seenTmdb.has(tmdbId)) return null
         seenTmdb.add(tmdbId)
@@ -780,7 +802,8 @@ export async function pictoriumCatalog(
         let d: TMDBDetails | null = null
         if (apiKey) {
           try {
-            d = await getDetails(mediaType, tmdbId, tmdbLang, apiKey)
+            // Tetto fail-open: il nome dalla lista MDBList resta comunque.
+            d = await getDetails(mediaType, tmdbId, tmdbLang, apiKey, catalogTimeoutSignal(), CATALOG_TMDB_TIMEOUT_MS)
           } catch {
             d = null
           }
@@ -802,7 +825,7 @@ export async function pictoriumCatalog(
       const validResults = results.filter((r): r is NonNullable<typeof r> => r !== null).slice(0, 20)
       metas = await concurrentMap(validResults, async (r) => {
         const [imdbId, posterAndShape, logo] = await Promise.all([
-          r.imdb ? Promise.resolve(r.imdb) : resolveImdbId(mediaType, r.tmdbId, apiKey),
+          r.imdb ? Promise.resolve(r.imdb) : resolveImdbId(mediaType, r.tmdbId, apiKey, CATALOG_TMDB_TIMEOUT_MS),
           pictoriumPosterAndShape(req, stType, r.tmdbId, configParam, userParam, r.rank, posterLang, region.code),
           apiKey ? catalogLogo(mediaType, r.tmdbId, apiKey, tmdbLang) : Promise.resolve(undefined),
         ])
@@ -875,7 +898,8 @@ export async function pictoriumCatalog(
             if (apiKey) {
               try {
                 // D4: external_ids in append — niente secondo fetch per-titolo.
-                details = await getDetailsWithExternalIds(stType === "movie" ? "movie" : "tv", row.tmdbId, tmdbLang, apiKey)
+                // Tetto fail-open: il titolo JustWatch resta anche senza dettagli.
+                details = await getDetailsWithExternalIds(stType === "movie" ? "movie" : "tv", row.tmdbId, tmdbLang, apiKey, catalogTimeoutSignal(), CATALOG_TMDB_TIMEOUT_MS)
               } catch {
                 details = null
               }
@@ -934,8 +958,8 @@ export async function pictoriumCatalog(
 
             metas = await concurrentMap(itemsWithTmdb, async (item) => {
               const [imdbId, details, posterAndShape, logo] = await Promise.all([
-                resolveImdbId(stType === "movie" ? "movie" : "tv", item.tmdbId, apiKey),
-                getDetails(stType === "movie" ? "movie" : "tv", item.tmdbId, tmdbLang, apiKey).catch(() => null),
+                resolveImdbId(stType === "movie" ? "movie" : "tv", item.tmdbId, apiKey, CATALOG_TMDB_TIMEOUT_MS),
+                getDetails(stType === "movie" ? "movie" : "tv", item.tmdbId, tmdbLang, apiKey, catalogTimeoutSignal(), CATALOG_TMDB_TIMEOUT_MS).catch(() => null),
                 pictoriumPosterAndShape(req, stType, item.tmdbId, configParam, userParam, undefined, posterLang, region.code),
                 catalogLogo(stType === "movie" ? "movie" : "tv", item.tmdbId, apiKey, tmdbLang),
               ])

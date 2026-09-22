@@ -49,6 +49,10 @@ export function usePosterPreview() {
     xhrRef.current = xhr
     xhr.open("GET", url, true)
     xhr.responseType = "blob"
+    // Senza timeout la barra percentuale resta ferma per sempre su render
+    // appeso (Bugonia): peggio dei casi server = slot-wait 15s + watchdog 30s,
+    // quindi 45s lascia arrivare il 503 del server prima di dichiarare errore.
+    xhr.timeout = 45000
     
     xhr.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -87,6 +91,16 @@ export function usePosterPreview() {
       setImageError(true)
       setPreviewLoading(false)
       toastRef.current.error("Failed to load poster preview")
+    }
+
+    xhr.ontimeout = () => {
+      if (loadDelayRef.current) {
+        clearTimeout(loadDelayRef.current)
+        loadDelayRef.current = null
+      }
+      setImageError(true)
+      setPreviewLoading(false)
+      toastRef.current.error("Poster preview timed out — retry")
     }
     
     xhr.send()

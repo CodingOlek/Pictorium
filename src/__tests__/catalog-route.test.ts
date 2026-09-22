@@ -542,4 +542,52 @@ describe("GET /catalog/[type]/[id]", () => {
     expect(res.status).toBe(200)
     expect(body.metas).toHaveLength(1)
   })
+
+  it("fail-open: un titolo TMDB appeso non appende il catalogo oltre il cap", async () => {
+    // Il details di TMDB resta appeso fino all'abort (upstream stalled):
+    // il cap per-titolo (CATALOG_TMDB_TIMEOUT_MS) deve abortirlo e il titolo
+    // esce comunque col nome JustWatch, entro la deadline client.
+    // Reset cache JW: la key è per paese/lingua, non per contenuto — senza,
+    // si riuserebbero le righe (senza titolo) dei test precedenti.
+    __resetJWRankingsCache()
+    cacheClear()
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.includes("justwatch")) {
+        return Promise.resolve(Response.json({
+          data: {
+            streamingCharts: {
+              edges: [
+                {
+                  streamingChartInfo: { rank: 1 },
+                  node: { content: { title: "Slow Title", externalIds: { tmdbId: 424242, imdbId: "tt4242420" } } },
+                },
+              ],
+            },
+          },
+        }))
+      }
+      if (url.includes("/images")) {
+        return Promise.resolve(Response.json({ id: 424242, posters: [], logos: [], backdrops: [] }))
+      }
+      // TMDB details: pende finché il signal non abortisce (come un upstream lento).
+      return new Promise((_, reject) => {
+        const signal = (init as RequestInit | undefined)?.signal
+        if (signal?.aborted) return reject(new DOMException("aborted", "AbortError"))
+        signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true })
+      })
+    })
+
+    const start = Date.now()
+    const req = new NextRequest("http://localhost:3000/catalog/series/pictorium-jw-series.json?api_key=settings-key")
+    const res = await GET(req, { params: Promise.resolve({ type: "series", id: "pictorium-jw-series.json" }) })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.metas).toHaveLength(1)
+    expect(body.metas[0].name).toBe("Slow Title")
+    // Senza cap, il details appeso avrebbe tenuto la risposta per sempre;
+    // col cap 2.5s (+ overhead) deve chiudere ben prima della deadline Stremio.
+    expect(Date.now() - start).toBeLessThan(9000)
+  }, 15000)
 })

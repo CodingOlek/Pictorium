@@ -26,6 +26,14 @@ export interface WikidataResult {
   nominations: string[]
   studios: string[]
   director: string | null
+  /**
+   * True quando il risultato è un fallback da fallimento upstream (negative
+   * cache, breaker aperto, timeout, 5xx) invece di un esito accertato.
+   * Assente nei mock storici dei test → trattato come false dal chiamante.
+   * Serve a non congelare in cache 24h un poster senza premi per un miss
+   * transitorio (stesso pattern di qualityEphemeral nella route poster).
+   */
+  degraded?: boolean
 }
 
 // ---- Circuit breaker (Wikidata SPARQL) ----
@@ -447,7 +455,7 @@ export async function fetchAllWikidata(
   const cached = await cacheGetShared<WikidataResult>(cacheKey, ["wikidata"])
   if (cached) return cached
   if (wikidataNegativeHit(cacheKey)) {
-    return { awards: [], nominations: [], studios: [], director: null }
+    return { awards: [], nominations: [], studios: [], director: null, degraded: true }
   }
 
   // Fast-path REST a costo zero RTT TMDB (QID già in mano dalla route via
@@ -460,8 +468,9 @@ export async function fetchAllWikidata(
       // Osservabilità path (Dexter): con PICTORIUM_LOG_LEVEL=debug si vede se
       // il badge è arrivato via REST veloce o via lotteria SPARQL.
       log.debug("Wikidata fast-path REST hit", { mediaType, tmdbId, awards: rest.awards.length })
-      cacheSet(cacheKey, rest, ["wikidata"], WIKIDATA_CACHE_TTL)
-      return rest
+      const hit: WikidataResult = { ...rest, degraded: false }
+      cacheSet(cacheKey, hit, ["wikidata"], WIKIDATA_CACHE_TTL)
+      return hit
     }
   }
   log.debug("Wikidata SPARQL fallback", { mediaType, tmdbId, hadQid: isValidWikidataQid(opts?.wikidataId) })
@@ -485,7 +494,7 @@ export async function fetchAllWikidata(
       // Mai a breaker già aperto: lì sopprime già lui (stesso TTL), e la
       // negativa non deve nascondere i fallimenti che il breaker deve contare.
       if (!isBreakerOpen()) wikidataNegativeSet(cacheKey)
-      return { awards: [], nominations: [], studios: [], director: null }
+      return { awards: [], nominations: [], studios: [], director: null, degraded: true }
     }
 
     const awardLabels = new Set<string>()
@@ -524,13 +533,14 @@ export async function fetchAllWikidata(
       nominations: matchRules([...nominationLabels]),
       studios: matchStudios([...networkLabels]),
       director: directorName,
+      degraded: false,
     }
 
     // Store in shared cache with tags for targeted invalidation
     cacheSet(cacheKey, result, ["wikidata"], WIKIDATA_CACHE_TTL)
     return result
   } catch {
-    return { awards: [], nominations: [], studios: [], director: null }
+    return { awards: [], nominations: [], studios: [], director: null, degraded: true }
   }
 }
 

@@ -74,11 +74,14 @@ export function scopedApiInit(
 /**
  * Fetch namespaced (multi-user): come fetch ma con `?u=` + `x-user-token`
  * automatici sui path utente. Per le chiamate con retry/timeout usare http().
+ * Timeout di default 15s (stesso di http): senza, un upstream appeso lascia
+ * `loading` per sempre (es. /api/poster-fit su render incastrato).
  */
-export async function userFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const scoped = scopedApiInit(input, init)
-  const scopedInit = { ...init, headers: applyAdminAuthHeaders(scoped.path, scoped.headers) }
-  const res = await fetch(scoped.path, scopedInit)
+export async function userFetch(input: string, init: RequestInit & { timeout?: number } = {}): Promise<Response> {
+  const { timeout = 15000, ...fetchInit } = init
+  const scoped = scopedApiInit(input, fetchInit)
+  const scopedInit = { ...fetchInit, headers: applyAdminAuthHeaders(scoped.path, scoped.headers) }
+  const res = await fetch(scoped.path, { ...scopedInit, signal: scopedInit.signal ?? AbortSignal.timeout(timeout) })
   // Secret stantio + password fresca: un solo retry con password (butta il
   // secret se il retry passa). Senza entrambe le credenziali è passthrough.
   return (await retryWithPasswordAuth(scoped.path, scopedInit, res)) ?? res

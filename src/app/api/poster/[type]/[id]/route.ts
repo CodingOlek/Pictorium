@@ -13,7 +13,7 @@ import { getServerDefaults, getServerDefaultsForUser } from "@/lib/server-defaul
 import { getRegionDef, normalizeRegion, parseRegion, defaultRegionForLang } from "@/lib/regions"
 import { BEST_FIT_GLOBAL, resolveLogoFitEnabled } from "@/lib/best-fit-config"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
-import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel, isValidWikidataQid } from "@/lib/awards"
+import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel, isValidWikidataQid, type WikidataResult } from "@/lib/awards"
 import { createT } from "@/lib/i18n"
 import type { EnrichedAnimeItem } from "@/lib/validation"
 import { fetchMDBList, type MDBListEntry } from "@/lib/mdblist"
@@ -496,13 +496,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   }
   const renderDeadline = setTimeout(() => {
     deadlineFired = true
+    // Osservabilità hang (Bugonia): prima lo scatto era silenzioso e l'unica
+    // traccia era lo zombie-warn 10s dopo senza tmdbId — diagnosi cieca.
+    log.warn("Poster render deadline exceeded — waiter abandoned, zombie continues", { mediaType, tmdbId, ms: Date.now() - startTime })
     renderAbort.abort()
     // R4: risolve i waiter con null ma TIENE l'entry inflight prenotata allo
     // zombie (keepEntry) — i nuovi arrivati fanno 503 immediato invece di
     // duplicare il render. L'entry si libera alla fine dello zombie o al
     // timeout 60s di beginPosterRender.
     completePosterRender(null, true)
-    endZombieRender = recordZombieRenderStart()
+    endZombieRender = recordZombieRenderStart(`${mediaType}:${tmdbId}`)
     releaseSlotOnce()
   }, RENDER_TIMEOUT_MS)
   if (typeof renderDeadline.unref === "function") renderDeadline.unref()
@@ -1041,6 +1044,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     //    All dependencies are available before this point — no Block B depends on Block A
     const emptyWikidata = { awards: [], nominations: [], studios: [], director: null }
     const WIKIDATA_TIMEOUT = Number(process.env.WIKIDATA_TIMEOUT) || 2500
+    // Esito temporale della race Wikidata, per debug=1 e TTL effimero: la
+    // degraded del risultato copre i fallimenti strutturali, questa il timeout.
+    let wikidataRaceTimedOut = false
     const [
       [originalBuf, logoFetch, backdropFetch, rankingResult, animeRankResult, rawLiveQuality, preReleaseDetected],
       [wikidataResult, tmdbKeywords, imdbTop250],
@@ -1174,17 +1180,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           // pattern di ratingAbort): senza, campava fino ai suoi 5s interni
           // occupando uno slot del limiter awards (max 2).
           const wdAbort = new AbortController()
-          const wikidataTimeout = new Promise<typeof emptyWikidata>((r) => {
-            wikidataTimer = setTimeout(() => { wikidataTimedOut = true; r(emptyWikidata) }, WIKIDATA_TIMEOUT)
+          const wikidataTimeout = new Promise<WikidataResult>((r) => {
+            wikidataTimer = setTimeout(() => { wikidataTimedOut = true; r({ ...emptyWikidata, degraded: true }) }, WIKIDATA_TIMEOUT)
           })
-          const result = await Promise.race([
+          const result: WikidataResult = await Promise.race([
             rankingEnabledEarly
-              ? fetchAllWikidata(tmdbId, mediaType, combineAbortSignals(renderAbort.signal, wdAbort.signal), { wikidataId }).catch(() => emptyWikidata)
-              : Promise.resolve(emptyWikidata),
+              ? fetchAllWikidata(tmdbId, mediaType, combineAbortSignals(renderAbort.signal, wdAbort.signal), { wikidataId }).catch((): WikidataResult => ({ ...emptyWikidata, degraded: true }))
+              : Promise.resolve({ ...emptyWikidata }),
             wikidataTimeout,
           ])
           if (wikidataTimer) clearTimeout(wikidataTimer)
           wdAbort.abort()
+          wikidataRaceTimedOut = wikidataTimedOut
           // a. Osservabilità lotteria badge: esito + tempo + contenuto. Un
           // timeout qui = poster senza premi (per le serie, senza rete: nessun
           // badge) congelato in cache per ore — dal log si distingue subito un
@@ -1410,8 +1417,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     // invece di 6h/24h + niente header immutable, così Stremio riprova poco
     // dopo. Early resta solo per il gating del fetch (Block A).
     const qualityEphemeral = badgeQuality && !qQualityParam && liveQualityResult.status !== "resolved"
-    const effectiveTtlSec = qualityEphemeral ? QUALITY_EPHEMERAL_TTL_SEC : dynamicTtlSec
-    const effectiveImmutable = immutablePoster && !qualityEphemeral
+    // Stesso trattamento per Wikidata degradato (race persa, breaker, outage):
+    // il poster senza premi resta in cache 2 minuti invece di 6h/24h, così un
+    // miss transitorio (es. Emmy intermittente) guarisce al ricaricamento
+    // senza togli/metti manuale del mapping. `degraded` assente (mock storici,
+    // ramo ranking OFF deterministico) = non effimero.
+    const wikidataEphemeral = wikidataResult.degraded === true || wikidataRaceTimedOut
+    const ephemeralTtl = qualityEphemeral || wikidataEphemeral
+    const effectiveTtlSec = ephemeralTtl ? QUALITY_EPHEMERAL_TTL_SEC : dynamicTtlSec
+    const effectiveImmutable = immutablePoster && !ephemeralTtl
 
     // Polarità del badge genere in basso: speculare a topLight, ma corretta per
     // la banda blur (che scurisce il fondo) — vedi computeBottomLight. `bl`
@@ -1515,6 +1529,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           studios: wikidataResult.studios,
           director: wikidataResult.director,
           directorLabel: directorBadgeLabel(wikidataResult.director, t),
+          degraded: wikidataResult.degraded ?? false,
+          timedOut: wikidataRaceTimedOut,
         },
         keywords: [...tmdbKeywords],
         badge: {
@@ -1636,10 +1652,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
 
     // 11. Cache + response
     const payload = { buffer: composited, etag }
-    // Qualità effimera (timeout/errore upstream): storage 120s + niente
-    // immutable, così il degradato non avvelena CDN per 6h/24h. Resolved
-    // (anche null) → TTL pieno invariato.
-    writeCachedPoster(cacheKey, payload, mappingTag, qualityEphemeral
+    // Qualità effimera (timeout/errore upstream) o Wikidata degradato: storage
+    // 120s + niente immutable, così il degradato non avvelena CDN per 6h/24h.
+    // Resolved (anche null) → TTL pieno invariato.
+    writeCachedPoster(cacheKey, payload, mappingTag, ephemeralTtl
       ? { ttlMs: QUALITY_EPHEMERAL_TTL_SEC * 1000, immutable: false }
       : { immutable: immutablePoster })
     completePosterRender(payload)
@@ -1651,7 +1667,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     }
     log.info("Poster rendered", { mediaType, tmdbId, ms: Date.now() - startTime, bytes: composited.byteLength, cached: !!mappingTag, format: outputFormat, fetchMs: tFetchMs, prepMs: tCompositeStart - startTime - tFetchMs, compositeMs: Date.now() - tCompositeStart })
     // C3: il webp è variante di risposta (convertita + cachata), non un render.
-    if (outputFormat === "webp") return serveWebpVariant(payload, qualityEphemeral ? { ttlMs: QUALITY_EPHEMERAL_TTL_SEC * 1000, immutable: false } : { immutable: immutablePoster })
+    if (outputFormat === "webp") return serveWebpVariant(payload, ephemeralTtl ? { ttlMs: QUALITY_EPHEMERAL_TTL_SEC * 1000, immutable: false } : { immutable: immutablePoster })
     const renderHeaders = {
       ...posterHeaders(etag, effectiveImmutable, isPreview, dynamicPoster, outputFormat, effectiveTtlSec),
       "Server-Timing": serverTimingValue([

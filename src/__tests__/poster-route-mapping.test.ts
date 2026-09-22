@@ -1496,6 +1496,62 @@ describe("GET /api/poster/[type]/[id] error and edge cases", () => {
     expect(cc).not.toContain("max-age=31536000")
   })
 
+  it("serves ephemeral Cache-Control (120s, no immutable) when wikidata is degraded", async () => {
+    const posterBuf = await imageBuffer("#101010", 500, 750)
+    cacheClear()
+    __resetTMDBSessionCache()
+    mockedGetById.mockResolvedValue(null)
+    mockedGetDetails.mockResolvedValue({
+      id: 42,
+      title: "Test Movie",
+      genres: [{ id: 18, name: "Drama" }],
+      vote_average: 7.5,
+      vote_count: 100,
+      original_language: "en",
+      release_date: "2024-01-15",
+      production_companies: [],
+    })
+    mockedGetImages.mockResolvedValue({
+      id: 42,
+      posters: [
+        { file_path: "/clean.jpg", iso_639_1: null, vote_average: 8.0, vote_count: 100, width: 500, height: 750, aspect_ratio: 0.667 },
+      ],
+      logos: [],
+      backdrops: [],
+    })
+    mockedGetExternalIds.mockResolvedValue({ imdb_id: "tt1234567" })
+    // Qualità resolved: isola l'effimero al solo Wikidata degradato.
+    vi.mocked(resolveStreamQuality).mockResolvedValue({ quality: "HD", status: "resolved", source: "torrentio", rawTokens: [] })
+    vi.mocked(fetchAllWikidata).mockResolvedValue({ awards: [], nominations: [], studios: [], director: null, degraded: true })
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(new Uint8Array(posterBuf), {
+        status: 200,
+        headers: { "content-type": "image/png", "content-length": String(posterBuf.length) },
+      }),
+    )
+
+    const req = new NextRequest("http://localhost:3000/api/poster/movie/42")
+    const res = await GET(req, { params: Promise.resolve({ type: "movie", id: "42" }) })
+
+    expect(res.status).toBe(200)
+    const cc = res.headers.get("Cache-Control") ?? ""
+    expect(cc).toContain("max-age=120")
+    expect(cc).not.toContain("immutable")
+    expect(cc).not.toContain("max-age=31536000")
+
+    // debug=1 espone lo stato Wikidata (degraded/timedOut).
+    cacheClear()
+    __resetTMDBSessionCache()
+    const reqDbg = new NextRequest("http://localhost:3000/api/poster/movie/42?debug=1")
+    const resDbg = await GET(reqDbg, { params: Promise.resolve({ type: "movie", id: "42" }) })
+    expect(resDbg.status).toBe(200)
+    const body = await resDbg.json()
+    expect(body.wikidata.degraded).toBe(true)
+    expect(body.wikidata.timedOut).toBe(false)
+
+    vi.mocked(fetchAllWikidata).mockResolvedValue({ awards: [], nominations: [], studios: [], director: null })
+  })
+
   it("exposes quality status/source, logo selection and cache state in debug=1", async () => {
     const posterBuf = await imageBuffer("#101010", 500, 750)
     mockedGetById.mockResolvedValue(null)

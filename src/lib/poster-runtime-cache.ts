@@ -504,7 +504,7 @@ function releaseRenderSlot(): void {
 }
 
 /** Notifica al limiter che un render è stato abbandonato dalla deadline ma continua in background */
-export function recordZombieRenderStart(): () => void {
+export function recordZombieRenderStart(label?: string): () => void {
   zombieRenders++
   let settled = false
   const settle = (): void => {
@@ -519,7 +519,7 @@ export function recordZombieRenderStart(): () => void {
     settled = true
     zombieRenders = Math.max(0, zombieRenders - 1)
     zombieGraceExpired++
-    log.warn("Zombie render grace expired — slot force-released", { zombies: zombieRenders })
+    log.warn("Zombie render grace expired — slot force-released", label ? { zombies: zombieRenders, render: label } : { zombies: zombieRenders })
     pumpWaiters()
   }, ZOMBIE_GRACE_MS)
   if (typeof grace.unref === "function") grace.unref()
