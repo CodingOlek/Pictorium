@@ -24,6 +24,11 @@ export interface PosterFitSelection {
   /** Logo già scaricato durante il best-fit: la route lo riusa nel render
    *  invece di rifare il fetch. Assente su cache hit o timeout del logo. */
   readonly logoBuffer?: Buffer
+  /** Osservabilità (decisione count 16 vs 8): presenti solo quando il ranking
+   *  è stato davvero eseguito. winnerIndex = indice del vincitore nei
+   *  candidati (0-based), candidateCount = candidati valutati. */
+  readonly winnerIndex?: number
+  readonly candidateCount?: number
 }
 
 interface SelectBestLogoFitPosterInput {
@@ -236,6 +241,8 @@ export async function selectBestLogoFitPosterPath(input: SelectBestLogoFitPoster
     posterPath: selectedPosterPath,
     posterBuffer: selectedPoster?.posterBuffer,
     logoBuffer,
+    winnerIndex: selectedPosterPath ? candidates.findIndex((p) => p.file_path === selectedPosterPath) : -1,
+    candidateCount: candidates.length,
   }
   if (selectedPosterPath) cacheSet(key, selectedPosterPath)
   return result

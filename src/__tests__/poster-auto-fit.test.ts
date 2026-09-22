@@ -62,6 +62,34 @@ describe("selectBestLogoFitPosterPath", () => {
     expect(selected?.posterPath).toBe("/dark.jpg")
   })
 
+  it("reports winnerIndex/candidateCount when ranking runs", async () => {
+    const darkPoster = await solidPoster("#050505")
+    const lightPoster = await solidPoster("#f8f8f8")
+    const logo = await solidLogo("#ffffff")
+    const images = new Map([
+      ["/dark.jpg", darkPoster],
+      ["/light.jpg", lightPoster],
+      ["/logo.png", logo],
+    ])
+
+    const selected = await selectBestLogoFitPosterPath({
+      posters: [
+        { file_path: "/light.jpg", iso_639_1: null },
+        { file_path: "/dark.jpg", iso_639_1: null },
+      ],
+      logoPath: "/logo.png",
+      fetchImage: makeImages(images),
+      logoScale: 50,
+      logoOffsetX: 0,
+      logoOffsetY: 0,
+      hasBadges: true,
+    })
+
+    expect(selected?.posterPath).toBe("/dark.jpg")
+    expect(selected?.candidateCount).toBe(2)
+    expect(selected?.winnerIndex).toBe(1)
+  })
+
   it("returns the only clean poster without scoring", async () => {
     let fetchCount = 0
 

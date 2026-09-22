@@ -841,9 +841,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
             })
             const fitMs = Date.now() - fitStart
             if (bestFit && bestFit.posterPath && bestFit.posterPath !== clean.file_path) {
-              log.info("Best-fit: improved poster selected", { mediaType, tmdbId, bestFit: bestFit.posterPath, original: clean.file_path, ms: fitMs })
+              log.info("Best-fit: improved poster selected", { mediaType, tmdbId, bestFit: bestFit.posterPath, original: clean.file_path, ms: fitMs, winnerIndex: bestFit.winnerIndex ?? null, candidateCount: bestFit.candidateCount ?? null })
             } else {
-              log.info("Best-fit: first clean already optimal", { mediaType, tmdbId, ms: fitMs })
+              log.info("Best-fit: first clean already optimal", { mediaType, tmdbId, ms: fitMs, winnerIndex: bestFit?.winnerIndex ?? null, candidateCount: bestFit?.candidateCount ?? null })
             }
             posterPath = bestFit?.posterPath ?? clean.file_path
             if (bestFit?.posterBuffer) posterPathBuffer = bestFit.posterBuffer

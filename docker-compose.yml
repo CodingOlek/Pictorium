@@ -125,6 +125,13 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+    # Rotation dei log json-file: senza limiti crescono senza bound su
+    # istanze long-running (livello info logga ogni render best-fit).
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     deploy:
       resources:
         limits:
