@@ -76,6 +76,10 @@ services:
       - POSTERIUM_CACHE_MAX_MB=${POSTERIUM_CACHE_MAX_MB:-150}
       - PICTORIUM_CACHE_REFRESH_HOUR=${PICTORIUM_CACHE_REFRESH_HOUR:-${POSTERIUM_CACHE_REFRESH_HOUR:-3}}
       - POSTERIUM_CACHE_REFRESH_HOUR=${POSTERIUM_CACHE_REFRESH_HOUR:-3}
+      # Byte-cache immagini TMDB e attesa rating: vuoti = default del codice
+      # (32MB / 1500ms). Su VPS con RAM alzare IMG a 128.
+      - PICTORIUM_IMG_CACHE_MB=${PICTORIUM_IMG_CACHE_MB:-}
+      - PICTORIUM_RATING_WAIT_MS=${PICTORIUM_RATING_WAIT_MS:-}
 
       # ── Opzionali — Render pipeline (tuning performance) ──
       # Default tarati per il limite 512MB sotto. Su istanze con più RAM alza
@@ -104,6 +108,9 @@ services:
 
       # ── Runtime ──
       - NODE_ENV=production
+      # Heap JS: default 384 (tarato per il limite 512MB sotto). Su VPS con
+      # più RAM alzarlo via PICTORIUM_NODE_OLD_SPACE (es. 2048 con limite 3g).
+      - NODE_OPTIONS=--max-old-space-size=${PICTORIUM_NODE_OLD_SPACE:-384}
       - PORT=8080
       - HOSTNAME=0.0.0.0
       # Self-warmup post-boot (default 1): 0 per saltarlo.
@@ -135,9 +142,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: ${PICTORIUM_MEM_LIMIT:-512M}
         reservations:
-          memory: 256M
+          memory: ${PICTORIUM_MEM_RESERVATION:-256M}
 
 volumes:
   posterium-data:
