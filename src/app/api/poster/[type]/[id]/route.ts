@@ -11,7 +11,7 @@ import { touchUserActivity } from "@/lib/user-activity"
 import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
 import { getServerDefaults, getServerDefaultsForUser } from "@/lib/server-defaults"
 import { getRegionDef, normalizeRegion, parseRegion, defaultRegionForLang } from "@/lib/regions"
-import { BEST_FIT_GLOBAL } from "@/lib/best-fit-config"
+import { BEST_FIT_GLOBAL, resolveLogoFitEnabled } from "@/lib/best-fit-config"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
 import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel, isValidWikidataQid } from "@/lib/awards"
 import { createT } from "@/lib/i18n"
@@ -804,12 +804,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       const clean = images.posters.find((p: TMDBImage) => p.iso_639_1 === null)
       if (clean) {
         const qLogoFit = req.nextUrl.searchParams.get("logoFit")
-        // Override globale dell'istanza (PICTORIUM_BEST_FIT_ENABLED): vince su
-        // query, config token e server defaults. Utile su Vercel/HF dove il
-        // toggle client o i defaults salvati non sempre arrivano al server.
-        const logoFitEnabled = BEST_FIT_GLOBAL === "off" ? false
-          : BEST_FIT_GLOBAL === "on" ? true
-          : qLogoFit !== null ? qLogoFit !== "0" : (configOverride !== null ? (configOverride.logoFitEnabled ?? sd.defaultLogoFitEnabled === true) : sd.defaultLogoFitEnabled === true)
+        // Catena in best-fit-config.ts: globale > query > config token >
+        // per-shape del namespace > legacy. Default spento.
+        const logoFitEnabled = resolveLogoFitEnabled({
+          global: BEST_FIT_GLOBAL,
+          queryLogoFit: qLogoFit,
+          configLogoFit: configOverride?.logoFitEnabled,
+          sdFit: sd,
+          isLandscape,
+        })
         if (logoPath && logoFitEnabled) {
           try {
             const fitStart = Date.now()

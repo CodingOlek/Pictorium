@@ -44,6 +44,10 @@ export interface ServerDefaults {
   sashOrder?: SashBucket[]
   autoRotateClean?: boolean
   defaultLogoFitEnabled?: boolean
+  /** Fit logo per-shape (toggle UI Impostazioni): vince sul legacy qui sopra.
+   *  Già accettati dallo schema PUT e persistiti — mancava solo il tipo. */
+  defaultPortraitFitEnabled?: boolean
+  defaultLandscapeFitEnabled?: boolean
   networkLogo?: boolean
   /** Scala % del badge superiore (rank/extra). Default 100. */
   topBadgeScale?: number
