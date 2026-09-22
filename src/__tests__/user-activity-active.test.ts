@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { countActiveUsers, USER_ACTIVE_WINDOW_MS, type UserInfo } from "@/lib/user-activity"
 
 describe("countActiveUsers", () => {
@@ -16,11 +16,19 @@ describe("countActiveUsers", () => {
   })
 
   it("bordo inclusivo: include utente esattamente a cutoff (now - 7gg)", () => {
-    const now = Date.now()
-    const users: UserInfo[] = [
-      { uuid: "u1", lastAccess: new Date(now - USER_ACTIVE_WINDOW_MS).toISOString(), bytes: 100 },
-    ]
-    expect(countActiveUsers(users)).toBe(1)
+    // Clock congelato: il confronto esatto al millisecondo è flaky con
+    // Date.now() reale (bastano 1-2ms tra fixture e cutoff sotto carico).
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"))
+      const now = Date.now()
+      const users: UserInfo[] = [
+        { uuid: "u1", lastAccess: new Date(now - USER_ACTIVE_WINDOW_MS).toISOString(), bytes: 100 },
+      ]
+      expect(countActiveUsers(users)).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("esclude utenti con attività oltre 7 giorni", () => {

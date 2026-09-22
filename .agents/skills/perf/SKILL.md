@@ -29,7 +29,7 @@ or auditing it for speed, preserve them. They were established in the
 |---|---|---|---|
 | Auto-fit **scoring** (CPU) | 1200 ms | `PICTORIUM_AUTO_FIT_TIMEOUT_MS` | 300–10000 |
 | Auto-fit **fetch** (logo + candidates, I/O) | 5000 ms | `PICTORIUM_AUTO_FIT_FETCH_TIMEOUT_MS` | 1000–15000 |
-| Auto-fit **candidate count** (clean posters ranked) | 16 | `PICTORIUM_AUTO_FIT_CANDIDATE_COUNT` | 1–32 |
+| Auto-fit **candidate count** (clean posters ranked) | 8 | `PICTORIUM_AUTO_FIT_CANDIDATE_COUNT` | 1–32 |
 | Wikidata awards | 2500 ms | `WIKIDATA_TIMEOUT` | – |
 | Rating wait (TMDB+IMDb upgrade) | 1500 ms | `PICTORIUM_RATING_WAIT_MS` | 300–10000 |
 | MDBList aggregated rating (internal fetch) | 1500 ms | `PICTORIUM_MDBLIST_TIMEOUT_MS` | 300–10000 |

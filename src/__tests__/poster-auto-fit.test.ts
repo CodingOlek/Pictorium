@@ -416,7 +416,7 @@ describe("selectBestLogoFitPosterPath", () => {
     expect(selected?.posterPath).toBe("/p7.jpg")
   })
 
-  it("only analyzes the first 16 valid TMDB clean posters", async () => {
+  it("only analyzes the first 8 valid TMDB clean posters", async () => {
     const poster = await solidPoster("#050505")
     const logo = await solidLogo("#ffffff")
     const images = new Map([
@@ -447,7 +447,7 @@ describe("selectBestLogoFitPosterPath", () => {
     })
 
     expect(selected?.posterPath).toBeDefined()
-    expect(fetchCount).toBeLessThanOrEqual(17)
+    expect(fetchCount).toBeLessThanOrEqual(9)
   })
 
   it("avoids duplicates in candidate pool", async () => {
@@ -683,8 +683,8 @@ describe("TMDB_CANDIDATE_COUNT env (PICTORIUM_AUTO_FIT_CANDIDATE_COUNT)", () => 
     vi.resetModules()
   })
 
-  it("default 16 senza env", async () => {
-    expect(await candidatesWithEnv(undefined, 30)).toBe(16)
+  it("default 8 senza env", async () => {
+    expect(await candidatesWithEnv(undefined, 30)).toBe(8)
   })
 
   it("rispetta la env (8)", async () => {
@@ -695,7 +695,8 @@ describe("TMDB_CANDIDATE_COUNT env (PICTORIUM_AUTO_FIT_CANDIDATE_COUNT)", () => 
     expect(await candidatesWithEnv("0", 30)).toBe(1)
     expect(await candidatesWithEnv("-3", 30)).toBe(1)
     expect(await candidatesWithEnv("100", 40)).toBe(32)
-    expect(await candidatesWithEnv("abc", 30)).toBe(16)
+    expect(await candidatesWithEnv("abc", 30)).toBe(8)
+    expect(await candidatesWithEnv("16", 30)).toBe(16)
   })
 
   it("sotto il count non taglia", async () => {
