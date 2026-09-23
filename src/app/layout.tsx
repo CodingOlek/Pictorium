@@ -19,8 +19,14 @@ export const metadata: Metadata = {
   description: "Generatore dinamico di poster cinematografici per Stremio: locandine pulite, loghi vettoriali, rating e badge trend composti in tempo reale.",
   manifest: "/site.webmanifest",
   icons: {
-    icon: "/App.png",
-    apple: "/App.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/App.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/App.png", sizes: "512x512", type: "image/png" },
+    ],
   },
   openGraph: {
     title: "Pictorium",
