@@ -118,10 +118,15 @@ function StatusRow({ label, ok, extra }: { label: string; ok: boolean | null; ex
 export default function StatusPage() {
   const [data, setData] = useState<HealthData | null>(null)
   const [cacheStatus, setCacheStatus] = useState<CacheStatusData | null>(null)
-  // 401/403 su /api/cache/status (istanza privata senza sblocco): le metriche
-  // sono protette, non assenti — si mostra la card di sblocco invece del
+  // 401/403 su /api/cache/status (senza token admin o sessione PIN valida:
+  // l'endpoint è fail-closed anche su istanze pubbliche): le metriche sono
+  // protette, non assenti — si mostra la card di sblocco invece del
   // generico "non disponibile" (errori di rete/500 restano non disponibile).
   const [cacheLocked, setCacheLocked] = useState(false)
+  // Presenza di ADMIN_TOKEN sul server: la card di sblocco ha senso solo se
+  // esiste un token da sbloccare. null = ancora ignoto: si mostra come oggi
+  // (fail-open display, mai togliere UI su rete lenta).
+  const [adminTokenConfigured, setAdminTokenConfigured] = useState<boolean | null>(null)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
   // Fuori dal provider di traduzione: sincronizza la lingua salvata al mount
@@ -201,6 +206,12 @@ export default function StatusPage() {
   useEffect(() => {
     void loadHealth()
     void loadCacheStatus()
+    fetch("/api/auth/pin")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.hasAdminToken === "boolean") setAdminTokenConfigured(data.hasAdminToken)
+      })
+      .catch(() => null)
   }, [loadHealth])
 
   // Auto-refresh SOLO metriche locali (/api/cache/status, zero upstream):
@@ -451,13 +462,17 @@ export default function StatusPage() {
             <div className="surface-card border-white/10 rounded-2xl p-5 shadow-xl">
               <h2 className="text-base font-semibold mb-3">{t("ui.statusCache")}</h2>
               {cacheLocked && !cacheStatus ? (
-                <AdminUnlockCard
-                  t={t}
-                  className="space-y-2.5"
-                  description={t("ui.statusTelemetryLocked")}
-                  onUnlocked={() => void loadCacheStatus()}
-                  onLock={() => { setCacheLocked(true); setCacheStatus(null) }}
-                />
+                adminTokenConfigured !== false ? (
+                  <AdminUnlockCard
+                    t={t}
+                    className="space-y-2.5"
+                    description={t("ui.statusTelemetryLocked")}
+                    onUnlocked={() => void loadCacheStatus()}
+                    onLock={() => { setCacheLocked(true); setCacheStatus(null) }}
+                  />
+                ) : (
+                  <p className="text-xs text-zinc-500">{t("ui.statusCacheUnavailable")}</p>
+                )
               ) : cacheStatus ? (
                 <div className="space-y-1">
                   <StatusRow label={t("ui.statusCacheTotal")} ok extra={cacheStatus.totalEntries} />

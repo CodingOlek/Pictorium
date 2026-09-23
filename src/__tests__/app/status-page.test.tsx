@@ -106,4 +106,23 @@ describe("StatusPage cache auth", () => {
     expect(cacheCall).toBeTruthy()
     expect((cacheCall!.init?.headers as Record<string, string>)["x-admin-token"]).toBe("s3cr3t")
   })
+
+  it("shows muted unavailable (no dead-end unlock card) on 401 without server token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) => {
+        if (String(url).includes("/api/cache/status")) {
+          return { ok: false, status: 401, json: async () => ({}) }
+        }
+        if (String(url).includes("/api/auth/pin")) {
+          return { ok: true, status: 200, json: async () => ({ hasPin: false, hasAdminToken: false }) }
+        }
+        return { ok: true, status: 200, json: async () => healthPayload }
+      }),
+    )
+    render(<StatusPage />)
+
+    expect(await screen.findByText("ui.statusCacheUnavailable")).toBeInTheDocument()
+    expect(screen.queryByText("ui.adminTokenTitle")).not.toBeInTheDocument()
+  })
 })

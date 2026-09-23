@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import sharp from "sharp"
-import { adminAuthResponse, checkAdminToken } from "@/lib/auth"
+import { adminAuthResponse, requireAdminToken } from "@/lib/auth"
 import { cacheStatus } from "@/lib/cache"
 import { getPosterStats, posterErrorStats } from "@/lib/poster-runtime-cache"
 import { getTMDBStats } from "@/lib/tmdb"
@@ -15,7 +15,10 @@ import { imageBytesStats } from "@/lib/image-bytes-cache"
 export async function GET(req: NextRequest) {
   const rl = await rateLimit(rateLimitKey(req), "default")
   if (!rl.ok) return rateLimitResponse(rl.retAfter)
-  if (!checkAdminToken(req)) return adminAuthResponse()
+  // Telemetria sensibile (conteggi globali, memoria, pipeline): fail-closed
+  // stretto — solo ADMIN_TOKEN o sessione PIN valida, anche su istanze
+  // pubbliche (dove checkAdminToken resterebbe aperto a chiunque).
+  if (!requireAdminToken(req)) return adminAuthResponse()
 
   const sharpCache = sharp.cache()
   const sharpCounters = sharp.counters()

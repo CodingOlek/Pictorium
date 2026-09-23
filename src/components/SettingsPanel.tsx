@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { toast } from "sonner"
 import { usePSelector } from "@/lib/context"
 import { useT } from "@/lib/contexts/TranslationContext"
@@ -19,7 +19,7 @@ import { RatingSourceIcon } from "@/components/RatingSourceIcon"
 import { UserKeysSection } from "@/components/UserKeysSection"
 import { UserSpaceSection } from "@/components/UserSpaceSection"
 import { isMultiUserServer } from "@/lib/guest-guard"
-import { adminAuthHeaders } from "@/lib/admin-token"
+import { adminAuthHeaders, hasAdminToken } from "@/lib/admin-token"
 import { AdminUnlockCard } from "@/components/AdminUnlockCard"
 import { currentPathUuid } from "@/lib/user-token"
 import { consumeSettingsTab, type SettingsTabId } from "@/lib/settings-tab"
@@ -54,6 +54,8 @@ import {
   ArrowUpDown,
   RectangleVertical,
   RectangleHorizontal,
+  Activity,
+  ExternalLink,
 } from "lucide-react"
 
 interface Props {
@@ -116,6 +118,37 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [cacheCount, setCacheCount] = useState<number | null>(null)
+  // Snapshot compatto delle risorse server: visibile SOLO con admin token in
+  // sessione. Doppio fail-closed: niente token → niente fetch e niente render;
+  // con token ma 401/errore (l'endpoint richiede requireAdminToken anche su
+  // istanze pubbliche) → sysStats resta null e la riga non si mostra.
+  const [sysStats, setSysStats] = useState<{
+    rssMb: number
+    heapUsedMb: number
+    heapTotalMb: number
+    uptimeSeconds: number
+  } | null>(null)
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(() => hasAdminToken())
+
+  const loadSysStats = useCallback(() => {
+    if (!hasAdminToken()) return
+    fetch("/api/cache/status", { headers: adminAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.totalEntries === "number") setCacheCount(data.totalEntries)
+        const mem = data?.system?.memory
+        const uptime = data?.system?.uptimeSeconds
+        if (mem && typeof mem.rssMb === "number" && typeof uptime === "number") {
+          setSysStats({
+            rssMb: mem.rssMb,
+            heapUsedMb: mem.heapUsedMb ?? 0,
+            heapTotalMb: mem.heapTotalMb ?? 0,
+            uptimeSeconds: uptime,
+          })
+        }
+      })
+      .catch(() => null)
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -125,13 +158,8 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
   }, [])
 
   useEffect(() => {
-    fetch("/api/cache/status", { headers: adminAuthHeaders() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && typeof data.totalEntries === "number") setCacheCount(data.totalEntries)
-      })
-      .catch(() => null)
-  }, [])
+    loadSysStats()
+  }, [loadSysStats])
 
   const [pinConfig, setPinConfig] = useState<{ hasPin: boolean } | null>(null)
   const [pinModalMode, setPinModalMode] = useState<"set" | "remove" | null>(null)
@@ -1532,6 +1560,28 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
               : "1-Click"}
           </span>
         </div>
+        {adminUnlocked && sysStats && (
+          <p className="text-[10px] text-zinc-400 font-mono tabular-nums px-0.5">
+            {t("ui.statusMemoryRss")}: {sysStats.rssMb} MB · {t("ui.statusMemoryHeap")}:{" "}
+            {sysStats.heapUsedMb}/{sysStats.heapTotalMb} MB · {t("ui.statusMemoryUptime")}:{" "}
+            {t("ui.statusUptimeValue", {
+              min: Math.floor(sysStats.uptimeSeconds / 60),
+              sec: sysStats.uptimeSeconds,
+            })}
+          </p>
+        )}
+        {adminUnlocked && (
+          <a
+            href="/status"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-white/[0.04] text-zinc-300 hover:text-white hover:bg-white/[0.08] active:scale-[0.98] transition-all border border-white/[0.06]"
+          >
+            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            {t("ui.statusTitle")}
+            <ExternalLink className="w-3 h-3 text-zinc-500" />
+          </a>
+        )}
         <div className="grid grid-cols-2 gap-2 pt-1">
           <button
             type="button"
@@ -1566,7 +1616,17 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
           sblocco, warmup/clear/save rispondono 401. Solo sessione (muore col
           tab, mai su disco). Su istanze pubbliche non serve: la card sparisce. */}
       {adminTokenConfigured !== false && (
-        <AdminUnlockCard t={t} />
+        <AdminUnlockCard
+          t={t}
+          onUnlocked={() => {
+            setAdminUnlocked(true)
+            loadSysStats()
+          }}
+          onLock={() => {
+            setAdminUnlocked(false)
+            setSysStats(null)
+          }}
+        />
       )}
 
       {/* Sicurezza & Accesso PIN — nascosta con multi-user ON (lì il cancello

@@ -3,6 +3,11 @@ import { fireEvent, screen } from "@testing-library/react"
 import { SettingsPanel } from "@/components/SettingsPanel"
 import { renderWithCtx } from "@/__tests__/test-utils"
 import { resetGuestGuardForTests } from "@/lib/guest-guard"
+import {
+  __resetAdminTokenForTests,
+  clearAdminToken,
+  setAdminToken,
+} from "@/lib/admin-token"
 
 // UserSpaceSection (renderizzato dal pannello) richiede l'app router di Next:
 // in jsdom non è montato (stesso mock usato in EditViewGate.test.tsx).
@@ -11,6 +16,7 @@ vi.mock("next/navigation", () => ({
 }))
 
 beforeEach(() => {
+  __resetAdminTokenForTests()
   vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, json: async () => ({}) })))
 })
 
@@ -360,5 +366,92 @@ describe("SettingsPanel", () => {
     expect(await screen.findAllByText("ui.genreRatingBadge")).not.toHaveLength(0)
     expect(screen.queryByText("ui.adminTokenTitle")).not.toBeInTheDocument()
     resetGuestGuardForTests()
+  })
+
+  it("mostra la riga risorse server solo con admin token quando /api/cache/status risponde", async () => {
+    setAdminToken("test-token")
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: unknown) =>
+          String(url).includes("/api/cache/status")
+            ? {
+                ok: true,
+                json: async () => ({
+                  totalEntries: 7,
+                  system: {
+                    memory: { rssMb: 110, heapUsedMb: 54, heapTotalMb: 78 },
+                    uptimeSeconds: 195,
+                  },
+                }),
+              }
+            : { ok: false, json: async () => ({}) },
+        ),
+      )
+      renderWithCtx(
+        <SettingsPanel
+          setSettingsOpen={() => {}}
+          exportData={() => {}}
+          importData={() => {}}
+        />
+      )
+      expect(await screen.findByText(/ui\.statusMemoryRss/)).toBeInTheDocument()
+      const link = screen.getByRole("link", { name: /ui\.statusTitle/ })
+      expect(link).toHaveAttribute("href", "/status")
+      expect(link).toHaveAttribute("target", "_blank")
+    } finally {
+      clearAdminToken()
+    }
+  })
+
+  it("nasconde riga e link senza admin token anche se l'endpoint è aperto (istanza pubblica)", async () => {
+    // Niente setAdminToken: simula un visitatore qualunque su istanza pubblica.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) =>
+        String(url).includes("/api/cache/status")
+          ? {
+              ok: true,
+              json: async () => ({
+                totalEntries: 7,
+                system: {
+                  memory: { rssMb: 110, heapUsedMb: 54, heapTotalMb: 78 },
+                  uptimeSeconds: 195,
+                },
+              }),
+            }
+          : { ok: false, json: async () => ({}) },
+      ),
+    )
+    renderWithCtx(
+      <SettingsPanel
+        setSettingsOpen={() => {}}
+        exportData={() => {}}
+        importData={() => {}}
+      />
+    )
+    // Flush del fetch async, poi riga e link devono mancare.
+    expect(await screen.findAllByText("ui.genreRatingBadge")).not.toHaveLength(0)
+    expect(screen.queryByText(/ui\.statusMemoryRss/)).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /ui\.statusTitle/ })).not.toBeInTheDocument()
+  })
+
+  it("nasconde la riga risorse server su 401 anche con token (fail-closed)", async () => {
+    setAdminToken("test-token")
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, json: async () => ({}) })))
+      renderWithCtx(
+        <SettingsPanel
+          setSettingsOpen={() => {}}
+          exportData={() => {}}
+          importData={() => {}}
+        />
+      )
+      // Flush del fetch async, poi la riga deve mancare.
+      expect(await screen.findAllByText("ui.genreRatingBadge")).not.toHaveLength(0)
+      expect(screen.queryByText(/ui\.statusMemoryRss/)).not.toBeInTheDocument()
+    } finally {
+      clearAdminToken()
+    }
   })
 })
