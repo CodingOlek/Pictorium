@@ -1,0 +1,86 @@
+"use client"
+
+import { Sparkles, X } from "lucide-react"
+import { useT } from "@/lib/contexts/TranslationContext"
+import { Modal } from "@/components/ui/Modal"
+import { CHANGELOG, type ChangelogItemType } from "@/data/changelog"
+
+const TYPE_STYLE: Record<ChangelogItemType, string> = {
+  feature: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  perf: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  fix: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+}
+
+const TYPE_LABEL_KEY: Record<ChangelogItemType, string> = {
+  feature: "ui.changelogFeature",
+  perf: "ui.changelogPerf",
+  fix: "ui.changelogFix",
+}
+
+interface Props {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export function ChangelogModal({ isOpen, onClose }: Props) {
+  const { t } = useT()
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} labelledBy="changelog-title">
+      <div className="flex items-center justify-between">
+        <h2 id="changelog-title" className="flex items-center gap-2 text-base font-bold text-white">
+          <Sparkles className="w-4 h-4 text-accent-orange" aria-hidden="true" />
+          {t("ui.changelogTitle")}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("ui.close")}
+          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <X className="w-4 h-4" aria-hidden="true" />
+        </button>
+      </div>
+
+      <div
+        data-testid="changelog-list"
+        className="max-h-[60vh] overflow-y-auto space-y-5 pr-1 -mr-1"
+      >
+        {CHANGELOG.map((release) => (
+          <section key={release.version} aria-label={`v${release.version}`}>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-accent-orange/15 text-accent-orange border border-accent-orange/30">
+                v{release.version}
+              </span>
+              <span className="text-[11px] text-zinc-500">{release.date}</span>
+            </div>
+            <p className="mt-1 text-[13px] font-semibold text-zinc-100">{release.title}</p>
+            <ul className="mt-1.5 space-y-1.5">
+              {release.items.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-zinc-300 leading-relaxed">
+                  <span
+                    className={`shrink-0 mt-px text-[10px] font-semibold px-1.5 py-px rounded border ${TYPE_STYLE[item.type]}`}
+                  >
+                    {t(TYPE_LABEL_KEY[item.type])}
+                  </span>
+                  <span>{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+
+      <div className="flex justify-end pt-1">
+        <button
+          type="button"
+          onClick={onClose}
+          data-testid="changelog-close"
+          className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
+        >
+          {t("ui.close")}
+        </button>
+      </div>
+    </Modal>
+  )
+}

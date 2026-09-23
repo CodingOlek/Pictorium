@@ -711,5 +711,9 @@
 "ui.userSpaceOpen": "Apri il mio spazio",
   "ui.profileGateKicker": "Spazio personale",
   "ui.profileGateTitle": "Il tuo spazio personale",
-  "ui.profileGateDesc": "Ogni profilo ha poster, chiavi e impostazioni isolati. Crea o apri il tuo spazio per sbloccare ricerca ed editor."
+  "ui.profileGateDesc": "Ogni profilo ha poster, chiavi e impostazioni isolati. Crea o apri il tuo spazio per sbloccare ricerca ed editor.",
+  "ui.changelogTitle": "Cosa c'è di nuovo",
+  "ui.changelogFeature": "Novità",
+  "ui.changelogPerf": "Performance",
+  "ui.changelogFix": "Fix"
 }

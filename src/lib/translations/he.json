@@ -711,5 +711,9 @@
   "ui.userSpaceOpen": "Open my space",
   "ui.profileGateKicker": "Personal space",
   "ui.profileGateTitle": "Your personal space",
-  "ui.profileGateDesc": "Each profile keeps posters, keys and settings isolated. Create or open your space to unlock search and editor."
+  "ui.profileGateDesc": "Each profile keeps posters, keys and settings isolated. Create or open your space to unlock search and editor.",
+  "ui.changelogTitle": "מה חדש",
+  "ui.changelogFeature": "חדש",
+  "ui.changelogPerf": "ביצועים",
+  "ui.changelogFix": "תיקונים"
 }

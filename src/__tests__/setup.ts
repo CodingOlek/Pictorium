@@ -123,6 +123,10 @@ const itDict: Record<string, string> = {
   "ui.setupPinStremioNotice": "Manifest e poster Stremio restano aperti",
   "ui.spacesUsedOf": "{used}/{max} spazi ({active} attivi)",
   "ui.spacesUsed": "{used} spazi ({active} attivi)",
+  "ui.changelogTitle": "Cosa c'è di nuovo",
+  "ui.changelogFeature": "Novità",
+  "ui.changelogPerf": "Performance",
+  "ui.changelogFix": "Fix",
 }
 
 function mockT(key: string, params?: Record<string, string | number>): string {

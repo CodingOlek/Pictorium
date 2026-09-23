@@ -1705,6 +1705,7 @@ select:focus-visible {
 .status-version {
   display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.025);
@@ -1714,10 +1715,25 @@ select:focus-visible {
   letter-spacing: 0.02em;
 }
 
-@media (max-width: 639px) {
-  .status-version {
-    display: none;
-  }
+/* Version badge doubles as changelog button (same footer, mobile included). */
+button.status-version {
+  font: inherit;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+button.status-version:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.changelog-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f97316;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.7);
 }
 
 @keyframes pulse {

@@ -6,6 +6,12 @@ import { Activity, Users } from "lucide-react"
 import { useT } from "@/lib/contexts/TranslationContext"
 import { APP_VERSION } from "@/generated/app-version"
 import { currentPathUuid } from "@/lib/user-token"
+import {
+  CHANGELOG_SEEN_KEY,
+  LATEST_CHANGELOG_VERSION,
+  hasUnseenChangelog,
+} from "@/data/changelog"
+import { ChangelogModal } from "@/components/ChangelogModal"
 
 export function HomeStatusStrip() {
   const { t } = useT()
@@ -14,6 +20,27 @@ export function HomeStatusStrip() {
   // arriva, se l'endpoint fallisce o se manca il conteggio attivi (skew di
   // versione) — nessun layout shift, nessun errore, mai un "0 attivi" bugiardo.
   const [spaces, setSpaces] = useState<{ users: number; maxUsers: number; activeUsers: number } | null>(null)
+  // Changelog unread dot: localStorage read strictly in useEffect (initial
+  // false) to avoid SSR hydration mismatch. Compared against
+  // LATEST_CHANGELOG_VERSION, never APP_VERSION (commit counter).
+  const [changelogOpen, setChangelogOpen] = useState(false)
+  const [hasUnseen, setHasUnseen] = useState(false)
+
+  const closeChangelog = () => {
+    setChangelogOpen(false)
+    setHasUnseen(false)
+    try {
+      localStorage.setItem(CHANGELOG_SEEN_KEY, LATEST_CHANGELOG_VERSION)
+    } catch {}
+  }
+
+  useEffect(() => {
+    try {
+      setHasUnseen(hasUnseenChangelog(localStorage.getItem(CHANGELOG_SEEN_KEY)))
+    } catch {
+      setHasUnseen(false)
+    }
+  }, [])
 
   useEffect(() => {
     const uuid = currentPathUuid()
@@ -64,8 +91,21 @@ export function HomeStatusStrip() {
             </span>
           </div>
         )}
-        <span className="status-version hidden sm:inline-flex" aria-hidden="true">v{APP_VERSION}</span>
+        <button
+          type="button"
+          onClick={() => setChangelogOpen(true)}
+          data-testid="changelog-open"
+          aria-label={t("ui.changelogTitle")}
+          title={t("ui.changelogTitle")}
+          className="status-version"
+        >
+          <span>v{APP_VERSION}</span>
+          {hasUnseen && (
+            <span data-testid="changelog-dot" className="changelog-dot" aria-hidden="true" />
+          )}
+        </button>
       </div>
+      <ChangelogModal isOpen={changelogOpen} onClose={closeChangelog} />
     </footer>
   )
 }
