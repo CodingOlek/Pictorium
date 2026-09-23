@@ -17,6 +17,10 @@ describe("HeaderCommunityLinks", () => {
     expect(ghLink).toHaveAttribute("href", "https://github.com/Eful97/Pictorium")
     expect(ghLink).toHaveAttribute("target", "_blank")
 
+    const discordLink = screen.getByLabelText("Discord Community")
+    expect(discordLink).toHaveAttribute("href", "https://discord.gg/sYfWyXYVUp")
+    expect(discordLink).toHaveAttribute("target", "_blank")
+
     await waitFor(() => {
       expect(screen.getByText("3/6€")).toBeInTheDocument()
     })
@@ -30,6 +34,7 @@ describe("HeaderCommunityLinks", () => {
     render(<MobileCommunityLinks />)
 
     expect(screen.getByText("GitHub")).toBeInTheDocument()
+    expect(screen.getByText("Discord")).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByText("VPS: 3/6€")).toBeInTheDocument()
     })

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { GithubIcon, KofiIcon } from "@/components/icons/BrandIcons"
+import { DiscordIcon, GithubIcon, KofiIcon } from "@/components/icons/BrandIcons"
 
 interface GoalState {
   current: number
@@ -64,6 +64,18 @@ export function DesktopCommunityLinks() {
           <GithubIcon className="w-4 h-4" />
         </a>
 
+        {/* Discord Button */}
+        <a
+          href="https://discord.gg/sYfWyXYVUp"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Discord Community"
+          title="Discord Community"
+          className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all duration-150 flex items-center justify-center cursor-pointer"
+        >
+          <DiscordIcon className="w-4 h-4" />
+        </a>
+
         <div className="h-4 w-px bg-white/10 mx-0.5" />
 
         {/* Ko-fi Goal Button */}
@@ -112,6 +124,18 @@ export function MobileCommunityLinks() {
       >
         <GithubIcon className="w-3.5 h-3.5" />
         <span className="text-[11px] font-medium">GitHub</span>
+      </a>
+
+      {/* Discord Button */}
+      <a
+        href="https://discord.gg/sYfWyXYVUp"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Discord Community"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.05] border border-white/10 text-xs text-zinc-300 active:scale-95 transition-all duration-150"
+      >
+        <DiscordIcon className="w-3.5 h-3.5" />
+        <span className="text-[11px] font-medium">Discord</span>
       </a>
 
       {/* Ko-fi Goal Button */}

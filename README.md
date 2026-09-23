@@ -23,6 +23,7 @@ pinned: false
 </p>
 
 <p align="center">
+  <a href="https://discord.gg/sYfWyXYVUp"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord Community" /></a>
   <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FEful97%2FPictorium"><img src="https://vercel.com/button" alt="Deploy with Vercel" /></a>
   <a href="#-docker--compose"><img src="https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" /></a>
   <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js&logoColor=white" alt="Next.js 16" />
@@ -33,6 +34,7 @@ pinned: false
 
 > [!TIP]
 > 🚀 **Prova l'[istanza pubblica](https://pictorium.duckdns.org)**: crea il tuo spazio personale con la tua chiave TMDB gratuita.  
+> 💬 Entra nella community su [Discord](https://discord.gg/sYfWyXYVUp) per supporto, novità e segnalazioni.  
 > ☕ Supporta il progetto su [Ko-fi](https://ko-fi.com/eful97) per mantenere attiva la VPS comunitaria.
 
 ---
