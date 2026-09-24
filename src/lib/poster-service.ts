@@ -22,6 +22,7 @@ import { renderGenreBadge, renderRankingBadge, renderExtraBadge, renderQualityBa
 import { buildLogoScrim, logoContrast, logoInkLuminance, logoScrimStrength, posterLogoZoneLuminance } from "./logo-contrast"
 import { renderFirstMatchingNetworkLogoBadge, renderFirstMatchingNetworkRawBadge, renderFirstMatchingNetworkLogoBadgeHybrid, renderFirstMatchingNetworkRawBadgeHybrid, type NetworkCandidate } from "./network-svgs"
 import { computeLogoLayout, logoAlignPadX, PORTRAIT_LOGO_MAX_HEIGHT_PCT } from "./logo-layout"
+import { logoDefaultScaleFromAspect } from "./logo-selection"
 import fs from "fs"
 import path from "path"
 import { estimateTextWidth, fontFamilyFor, escSvg, TOP_SHADOW_PAD } from "./badge-svg-shared"
@@ -676,10 +677,9 @@ export async function generatePosterBuffer(input: GenerationInput): Promise<Buff
           const lMeta = await sharp(logoFetch).metadata()
           const lw = lMeta.width || 200
           const lh = lMeta.height || 100
-          // Curva default sincronizzata con logoDefaultScale (logo-selection.ts):
-          // sublineare in aspect^(2/3) così i wordmark panoramici non saturano
-          // tutti a 75 (lw/lh hanno sempre fallback > 0, niente guardia null).
-          const defScale = Math.min(Math.round(37.5 * Math.pow(lw / lh, 2 / 3)), 75)
+          // Single source: logoDefaultScaleFromAspect (logo-selection.ts).
+          // (lw/lh hanno sempre fallback > 0, niente guardia null.)
+          const defScale = logoDefaultScaleFromAspect(lw, lh) ?? 75
           const uScale = logoScale ?? defScale
           const uOx = logoOffsetX ?? 0
           const uOy = logoOffsetY ?? 0

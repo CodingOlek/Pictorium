@@ -98,11 +98,16 @@ export function autoLogoSelection(
  * Ritorna null quando il logo non ha dimensioni (nessuna scala calcolabile);
  * i call site usano `?? 75` come default. Deduplica la formula che ricorreva
  * in context.tsx (2×), TransformControls e usePosterSave.
- * DEVE restare sincronizzata con `defScale` in poster-service.ts,
- * `defaultLogoScale` in poster-auto-fit.ts e `curveScale` in
- * scripts/backfill-wide-logo-scale.mjs (Golden Rule).
+ * SINGLE SOURCE OF TRUTH (Golden Rule): poster-service.ts, poster-auto-fit.ts
+ * e scripts/backfill-wide-logo-scale.mjs DEVONO usare
+ * `logoDefaultScaleFromAspect`, mai ricopiare la formula.
  */
+export function logoDefaultScaleFromAspect(width: number, height: number): number | null {
+  if (!width || !height || width <= 0 || height <= 0) return null
+  return Math.min(Math.round(37.5 * Math.pow(width / height, 2 / 3)), 75)
+}
+
 export function logoDefaultScale(logo: TMDBImage): number | null {
-  if (!logo.width || !logo.height || logo.width <= 0 || logo.height <= 0) return null
-  return Math.min(Math.round(37.5 * Math.pow(logo.width / logo.height, 2 / 3)), 75)
+  if (!logo.width || !logo.height) return null
+  return logoDefaultScaleFromAspect(logo.width, logo.height)
 }

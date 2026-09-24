@@ -3,6 +3,7 @@ import { rankPostersByFit } from "@/lib/poster-fit-score"
 import { concurrentMap } from "@/lib/episode-ordering"
 import { envWithFallback } from "@/lib/env-compat"
 import type { PosterShape } from "@/lib/types"
+import { logoDefaultScaleFromAspect } from "@/lib/logo-selection"
 import {
   adjustFitResults,
   selectAcceptedPosterPath,
@@ -129,8 +130,8 @@ function defaultLogoScale(logoBuffer: Buffer): Promise<number> {
   return sharp(logoBuffer).metadata().then((meta) => {
     const logoW = meta.width || 200
     const logoH = meta.height || 100
-    // Curva default sincronizzata con logoDefaultScale (logo-selection.ts).
-    return Math.min(Math.round(37.5 * Math.pow(logoW / logoH, 2 / 3)), 75)
+    // Single source: logoDefaultScaleFromAspect (logo-selection.ts).
+    return logoDefaultScaleFromAspect(logoW, logoH) ?? 75
   })
 }
 

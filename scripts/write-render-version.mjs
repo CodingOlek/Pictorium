@@ -42,6 +42,7 @@ const RENDER_FILES = [
   "src/lib/poster-url.ts",
   "src/lib/pre-release.ts",
   "src/lib/release-badge.ts",
+  "src/lib/separate-rating-renderer.ts",
   "src/lib/stremio-poster-params.ts",
   "src/lib/stremio-poster-url.ts",
   "src/lib/subgenres.ts",
