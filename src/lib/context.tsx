@@ -111,6 +111,8 @@ export interface PictoriumCtx {
   posterActivePath: string | null
   previewUrl: string
   urlPattern: string
+  /** Template secondario con `{imdb_id}` (fallback universale). */
+  urlPatternImdb: string
   lang: string
   openSections: Record<string, boolean>
   toggleSection: (k: string) => void
@@ -522,6 +524,7 @@ export function usePictorium(): PictoriumCtx {
   } = editorCtx
 
   const [urlPattern, setUrlPattern] = useState("")
+  const [urlPatternImdb, setUrlPatternImdb] = useState("")
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
@@ -749,9 +752,9 @@ export function usePictorium(): PictoriumCtx {
     onDismiss: dismissLang,
   })
 
-  // --- URL Pattern ---
+  // --- URL Pattern (TMDB primario + IMDb fallback, stessi parametri) ---
   useEffect(() => {
-    setUrlPattern(buildUrlPattern({
+    const base = {
       globalBadges, rankingBadges, badgeStyle, rankingBadgeStyle,
       badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources, separateRatings,
       customBadge, gradientHeight, blurIntensity, blurFade, blurDarkness, blurEnabled, tintStrength, networkLogo, preRelease, ribbonSide, posterShape, logoAlign,
@@ -764,7 +767,9 @@ export function usePictorium(): PictoriumCtx {
       userId: currentUserId,
       omitApiKey: serverKeyStatus?.tmdb === true,
       omitMdblistKey: serverKeyStatus?.mdblist === true,
-    }))
+    }
+    setUrlPattern(buildUrlPattern({ ...base, idPlaceholder: "{tmdb_id}" }))
+    setUrlPatternImdb(buildUrlPattern({ ...base, idPlaceholder: "{imdb_id}" }))
     }, [globalBadges, rankingBadges, badgeGenre, badgeYear, badgeRating, badgeQuality, customRatings, ratingSources, separateRatings, networkLogo, preRelease, ribbonSide, posterShape, logoAlign, gradientHeight, blurIntensity, blurFade, blurDarkness, blurEnabled, tintStrength, badgeStyle, rankingBadgeStyle, topBadgeScale, topBadgeOffsetX, topBadgeOffsetY, genreBadgeScale, qualityBadgeScale, networkLogoScale, genreBadgeOffsetX, genreBadgeOffsetY, qualityBadgeOffsetX, qualityBadgeOffsetY, networkLogoOffsetX, networkLogoOffsetY, tmdbKey, lang, mdblistApiKey, currentUserId, serverKeyStatus]) // eslint-disable-line react-hooks/exhaustive-deps -- customBadge intentionally excluded to avoid loop
 
   // --- Default live sul titolo corrente ---
@@ -1308,7 +1313,7 @@ export function usePictorium(): PictoriumCtx {
     selectedLogo: navigation.selectedLogo, setSelectedLogo: navigation.setSelectedLogo,
     logos: navigation.logos,
     posterActivePath: posterActivePath ?? null,
-    previewUrl, urlPattern, lang,
+    previewUrl, urlPattern, urlPatternImdb, lang,
     openSections, toggleSection: (key: string) => setOpenSections((prev) => ({ ...prev, [key]: !(prev[key] ?? true) })),
     posterScrollRef, posterScrollInfo, setPosterScrollInfo,
     selectPoster, selectLogo, removeLogo,

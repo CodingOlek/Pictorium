@@ -2,7 +2,7 @@ import sharp from "sharp"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { GET } from "@/app/api/poster/[type]/[id]/route"
-import { getById, getImdbAlias } from "@/lib/store"
+import { getAll, getById, getImdbAlias } from "@/lib/store"
 import { resolveImdbToTmdb } from "@/lib/imdb-resolver"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
 import { getDetails, getDetailsWithExternalIds, getImages, getExternalIds } from "@/lib/tmdb"
@@ -32,6 +32,7 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 
 vi.mock("@/lib/store", () => ({
+  getAll: vi.fn(async () => []),
   getById: vi.fn(),
   upsert: vi.fn(),
   getImdbAlias: vi.fn(async () => null),
@@ -1605,11 +1606,13 @@ describe("GET /api/poster/[type]/[id] error and edge cases", () => {
 
 describe("GET /api/poster/[type]/[id] con alias IMDb manuale", () => {
   const mockedGetImdbAlias = vi.mocked(getImdbAlias)
+  const mockedGetAll = vi.mocked(getAll)
   const mockedResolveImdbToTmdb = vi.mocked(resolveImdbToTmdb)
 
   beforeEach(() => {
     vi.restoreAllMocks()
     mockedGetImdbAlias.mockReset().mockResolvedValue(null)
+    mockedGetAll.mockReset().mockResolvedValue([])
     mockedGetById.mockReset().mockResolvedValue(null)
     mockedResolveImdbToTmdb.mockReset().mockResolvedValue(null)
     vi.mocked(fetchCustomRatings).mockReset().mockResolvedValue([])
@@ -1656,6 +1659,7 @@ describe("GET /api/poster/[type]/[id] con alias IMDb manuale", () => {
 
   it("senza alias, fallback al /find invariato (tt ignoto → 400)", async () => {
     mockedGetImdbAlias.mockResolvedValue(null)
+    mockedGetAll.mockResolvedValue([])
     mockedResolveImdbToTmdb.mockResolvedValue(null)
     const res = await GET(
       new NextRequest("http://localhost:3000/api/poster/series/tt0000000"),
@@ -1663,6 +1667,76 @@ describe("GET /api/poster/[type]/[id] con alias IMDb manuale", () => {
     )
     expect(res.status).toBe(400)
     expect(mockedResolveImdbToTmdb).toHaveBeenCalled()
+  })
+
+  it("reverse lookup: imdbId del mapping salvato vince sul /find", async () => {
+    mockedGetImdbAlias.mockResolvedValue(null)
+    mockedGetAll.mockResolvedValue([
+      {
+        tmdbId: 299939, mediaType: "tv", title: "Monster: Lizzie Borden",
+        posterPath: "/lizzie.jpg", logoPath: null, originalPosterPath: null,
+        language: "it", showBadges: false, rankingBadges: false,
+        imdbId: "tt13207736", updatedAt: "2026-09-20T00:00:00.000Z",
+      },
+    ])
+    // Il /find punterebbe allo stub franchise: non deve essere consultato.
+    mockedResolveImdbToTmdb.mockResolvedValue(111111)
+    mockedGetById.mockImplementation(async (type, id) =>
+      type === "tv" && id === 299939
+        ? {
+            tmdbId: 299939, mediaType: "tv", title: "Monster: Lizzie Borden",
+            posterPath: "/lizzie.jpg", logoPath: null, originalPosterPath: null,
+            language: "it", showBadges: false, rankingBadges: false,
+            imdbId: "tt13207736", updatedAt: "2026-09-20T00:00:00.000Z",
+          }
+        : null,
+    )
+    const poster = await imageBuffer("#101010", 500, 750)
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      expect(String(input)).toContain("/lizzie.jpg")
+      return new Response(new Uint8Array(poster), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      })
+    })
+    const res = await GET(
+      new NextRequest("http://localhost:3000/api/poster/series/tt13207736"),
+      { params: Promise.resolve({ type: "series", id: "tt13207736" }) },
+    )
+    expect(res.status).toBe(200)
+    expect(mockedResolveImdbToTmdb).not.toHaveBeenCalled()
+    expect(mockedGetById).toHaveBeenCalledWith("tv", 299939, null)
+  })
+
+  it("precedenza completa: alias > mapping.imdbId > /find", async () => {
+    mockedGetImdbAlias.mockResolvedValue({ imdbId: "tt13207736", mediaType: "tv", tmdbId: 100 })
+    mockedGetAll.mockResolvedValue([
+      {
+        tmdbId: 299939, mediaType: "tv", title: "Monster: Lizzie Borden",
+        posterPath: "/lizzie.jpg", logoPath: null, originalPosterPath: null,
+        language: "it", showBadges: false, rankingBadges: false,
+        imdbId: "tt13207736", updatedAt: "2026-09-20T00:00:00.000Z",
+      },
+    ])
+    mockedResolveImdbToTmdb.mockResolvedValue(111111)
+    mockedGetById.mockImplementation(async (type, id) => ({
+      tmdbId: id, mediaType: type, title: `T${id}`, posterPath: "/x.jpg",
+      logoPath: null, originalPosterPath: null, language: "it",
+      showBadges: false, rankingBadges: false,
+      updatedAt: "2026-09-20T00:00:00.000Z",
+    }))
+    const poster = await imageBuffer("#101010", 500, 750)
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(new Uint8Array(poster), {
+      status: 200,
+      headers: { "content-type": "image/png" },
+    }))
+    const res = await GET(
+      new NextRequest("http://localhost:3000/api/poster/series/tt13207736"),
+      { params: Promise.resolve({ type: "series", id: "tt13207736" }) },
+    )
+    expect(res.status).toBe(200)
+    expect(mockedGetById).toHaveBeenCalledWith("tv", 100, null)
+    expect(mockedResolveImdbToTmdb).not.toHaveBeenCalled()
   })
 })
 

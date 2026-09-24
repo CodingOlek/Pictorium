@@ -4,7 +4,7 @@ import { initSharp } from "@/lib/sharp-config"
 import { getImages, getDetails, getDetailsWithExternalIds, getExternalIds, getKeywords, getReleaseDates, resolveUserApiKeys, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
 import { getJWRankings, hasJWOffers } from "@/lib/justwatch"
 import { extractDigitalReleaseDate, isDigitalPreRelease } from "@/lib/pre-release"
-import { getById, getImdbAlias } from "@/lib/store"
+import { getAll, getById, getImdbAlias } from "@/lib/store"
 import { getScopedUserId } from "@/lib/user-auth"
 import { userRateLimitKey } from "@/lib/user-auth"
 import { touchUserActivity } from "@/lib/user-activity"
@@ -147,6 +147,16 @@ function normalizeQualityResult(raw: StreamQualityResult | StreamQuality | strin
 
 type RouteParams = { type: string; id: string }
 
+/**
+ * Reverse lookup: mapping salvato con questo imdbId (scritto a mano quando
+ * TMDB non lo fornisce). Ritorna il mapping (il chiamante usa tmdbId +
+ * mediaType dichiarati). Mai throw: il chiamante ha già il .catch.
+ */
+async function findMappingByImdb(imdbId: string, userId?: string | null) {
+  const all = await getAll(userId)
+  return all.find((m) => m.imdbId?.trim() === imdbId) ?? null
+}
+
 function corsHeaders(): Record<string, string> {
   return { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" }
 }
@@ -209,14 +219,32 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       // entry di stagione splittata, es. Monster tt13207736 → tv:299939).
       // Controllato PRIMA di resolveImdbToTmdb così bypassa anche la sua
       // cache 7gg. Fail-open: errore store → fallback al /find invariato.
-      const alias = pathImdbId ? await getImdbAlias(pathImdbId, scopedUser).catch(() => null) : null
+      // Il globale fa da default operatore (una cura per tutti gli spazi).
+      const ownAlias = pathImdbId ? await getImdbAlias(pathImdbId, scopedUser).catch(() => null) : null
+      const alias = ownAlias
+        ?? (pathImdbId && scopedUser ? await getImdbAlias(pathImdbId).catch(() => null) : null)
       if (alias) {
         tmdbId = alias.tmdbId
         mediaType = alias.mediaType
         log.info("IMDb alias hit", { imdb: pathImdbId, mediaType, tmdbId })
       } else {
-        const resolved = await resolveImdbToTmdb(id, mediaType, effTmdbKey)
-        if (resolved) tmdbId = resolved
+        // Reverse lookup sull'imdbId salvato nei mapping (scritto a mano
+        // quando TMDB non lo fornisce): proprio, poi globale. La risoluzione
+        // è conoscenza globale, il rendering resta per-namespace (il mapping
+        // letto dopo è sempre quello dello spazio richiedente).
+        const ownHit = pathImdbId && scopedUser
+          ? await findMappingByImdb(pathImdbId, scopedUser).catch(() => null)
+          : null
+        const anyHit = ownHit
+          ?? (pathImdbId ? await findMappingByImdb(pathImdbId).catch(() => null) : null)
+        if (anyHit) {
+          tmdbId = anyHit.tmdbId
+          mediaType = anyHit.mediaType
+          log.info("IMDb mapping hit", { imdb: pathImdbId, mediaType, tmdbId })
+        } else {
+          const resolved = await resolveImdbToTmdb(id, mediaType, effTmdbKey)
+          if (resolved) tmdbId = resolved
+        }
       }
     }
   }

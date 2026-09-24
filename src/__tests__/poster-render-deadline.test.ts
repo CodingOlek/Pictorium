@@ -18,6 +18,7 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 
 vi.mock("@/lib/store", () => ({
+  getAll: vi.fn(async () => []),
   getById: vi.fn(),
   upsert: vi.fn(),
   getImdbAlias: vi.fn(async () => null),

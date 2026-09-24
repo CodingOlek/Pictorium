@@ -116,8 +116,11 @@ export function buildUrlPattern(bp: BadgeParams & {
    *  server le risolve da namespace via `u=`) invece di incollarle in chiaro. */
   omitApiKey?: boolean
   omitMdblistKey?: boolean
+  /** Placeholder id nel path: `{tmdb_id}` (primario, esatto: niente /find)
+   *  o `{imdb_id}` (fallback universale). Default `{imdb_id}` (invariato). */
+  idPlaceholder?: "{imdb_id}" | "{tmdb_id}"
 }): string {
-  let url = `${getPosterPublicBaseUrl()}/api/poster/{type}/{imdb_id}`
+  let url = `${getPosterPublicBaseUrl()}/api/poster/{type}/${bp.idPlaceholder ?? "{imdb_id}"}`
   const params = buildStremioPosterSearchParams({
     lang: bp.lang,
     user: bp.userId ?? undefined,

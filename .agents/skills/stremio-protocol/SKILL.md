@@ -72,11 +72,12 @@ profile) and `config=` (config token) — both enter cache keys and poster URLs.
 `/api/poster/{type}/{id}` — the SAME endpoint serves the client preview and the
 Stremio poster. Query params: `rv` (render version), `mv` (saved mapping), `u=`
 (user profile), plus all render params (see `.agents/render-params.md`).
-A `tt...` id resolves via the per-namespace manual IMDb alias first
-(`tt` of a franchise on a split season entry, e.g. Monster `tt13207736` →
-`tv:299939`), then TMDB `/find`. Manage aliases at
-`/api/mappings/aliases` (same auth/scope as mappings); deleting a mapping
-removes its aliases.
+The copy-paste AIO template comes in two variants with identical params:
+`{tmdb_id}` first (exact, no TMDB `/find` involved) and `{imdb_id}` as the
+universal fallback (every item has one, but franchise-shared `tt` ids on
+split season entries need a manual alias or mapping `imdbId` — resolution
+order: user alias > global alias > own mapping `imdbId` > global mapping
+`imdbId` > `/find`).
 
 ## Catalog list (`PICTORIUM_CATALOGS` in `catalog-definitions.ts`)
 
