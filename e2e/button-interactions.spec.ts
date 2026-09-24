@@ -107,7 +107,7 @@ test.describe("Button interactions and immediate updates", () => {
     await expect(page.getByText(/Stile badge predefinito/i).first()).toBeVisible()
 
     // Test Badge Style selector buttons within the 6-col grid
-    const styleGrid = page.locator(".grid.grid-cols-3.sm\\:grid-cols-6").first()
+    const styleGrid = page.locator(".grid.grid-cols-3.sm\\:grid-cols-5").first()
     const pillBtn = styleGrid.getByRole("button", { name: "Pill" })
     const bordoBtn = styleGrid.getByRole("button", { name: "Bordo" })
 
@@ -138,10 +138,11 @@ test.describe("Button interactions and immediate updates", () => {
     await enableAllBtn.click()
     await expect(page.getByText(/16\/16/).first()).toBeVisible()
 
-    // Click "Disabilita tutti" (resets to default 2)
-    const disableAllBtn = page.getByRole("button", { name: "Disabilita tutti", exact: true })
-    await disableAllBtn.click()
-    await expect(page.getByText(/2\/16/).first()).toBeVisible()
+    // Click "Solo IMDb" (reset a 1 provider: il vecchio "Disabilita tutti"
+    // non esiste più — rimozione intenzionale, vedi SettingsPanel.test.tsx)
+    const imdbOnlyBtn = page.getByRole("button", { name: "Solo IMDb", exact: true })
+    await imdbOnlyBtn.click()
+    await expect(page.getByText(/1\/16/).first()).toBeVisible()
 
     // Test Ribbon side buttons
     const stremioRibbon = page.getByRole("button", { name: "Stremio" }).first()
@@ -165,11 +166,12 @@ test.describe("Button interactions and immediate updates", () => {
     await expect(tmdbBtn).toHaveClass(/bg-white\/20/)
     await expect(tvdbBtn).not.toHaveClass(/bg-white\/20/)
 
-    // Switch back to Style tab
-    await page.getByRole("tab", { name: /Stile|Style/i }).click()
+    // Switch back to Badge tab (il tab "Stile" non esiste più: rinominato Badge)
+    await page.getByRole("tab", { name: /Badge/i }).click()
 
-    // Test Blur toggle switch
-    const blurToggle = page.getByRole("switch", { name: "Sfocatura predefinita" })
+    // Test Blur toggle switch ("Sfocatura": lo switch; "Sfocatura predefinita"
+    // è solo l'intestazione della sezione slider nel tab Trasforma)
+    const blurToggle = page.getByRole("switch", { name: "Sfocatura", exact: true })
     const initialBlurChecked = await blurToggle.getAttribute("aria-checked")
     await blurToggle.click()
     const afterBlurChecked = await blurToggle.getAttribute("aria-checked")
@@ -213,7 +215,7 @@ test.describe("Button interactions and immediate updates", () => {
     await expect(page.getByText(/Stile badge/i).first()).toBeVisible()
 
     // Inside Badge tab: test style selector
-    const styleGrid = page.locator(".grid.grid-cols-3.sm\\:grid-cols-6").first()
+    const styleGrid = page.locator(".grid.grid-cols-3.sm\\:grid-cols-5").first()
     const pillBadge = styleGrid.getByRole("button", { name: "Pill" })
     const bordoBadge = styleGrid.getByRole("button", { name: "Bordo" })
 

@@ -85,6 +85,8 @@ export default function EditView() {
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Fix L30: timer del "copied" ripulito su unmount (setState post-unmount).
   const urlCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [saveFlash, setSaveFlash] = useState(false)
   const [mobileSection, setMobileSection] = useState<"poster" | "preview" | "customize">("preview")
   const [activeRightTab, setActiveRightTab] = useState<"logo" | "badge" | "transform" | "stagioni">("logo")
   // Gate profili stile AIO: con multi-user attivo e senza UUID nel path, la
@@ -130,6 +132,11 @@ export default function EditView() {
 
   const handleSave = useCallback(async () => {
     await saveConfig()
+    // Feedback tangibile sull'artefatto (non solo toast): anello smeraldo +
+    // sweep per 600ms sullo stage della preview.
+    setSaveFlash(true)
+    if (saveFlashTimerRef.current) clearTimeout(saveFlashTimerRef.current)
+    saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 600)
   }, [saveConfig])
 
   // Mobile: dopo il tap su un poster salta ad "Anteprima" (nella tab Poster
@@ -261,6 +268,7 @@ export default function EditView() {
     return () => {
       if (blurTimerRef.current) clearTimeout(blurTimerRef.current)
       if (urlCopiedTimerRef.current) clearTimeout(urlCopiedTimerRef.current)
+      if (saveFlashTimerRef.current) clearTimeout(saveFlashTimerRef.current)
     }
   }, [])
 
@@ -578,7 +586,7 @@ export default function EditView() {
               <div className="flex flex-col items-center h-full min-h-0">
                 <div className="flex-1 min-h-0 w-full flex items-center justify-center">
                   <div className={`editor-preview-fit relative ${isLandscape ? "editor-preview-fit-landscape" : ""}`}>
-                    <div className={`editor-stage editor-stage-fill isolate ${previewPoster?.file_path ? "editor-stage-glow" : ""}`}>
+                    <div className={`editor-stage editor-stage-fill isolate ${previewPoster?.file_path ? "editor-stage-glow" : ""} ${saveFlash ? "editor-stage-save-flash" : ""}`}>
                       {/* NuvioDesktop-style depth edge */}
                       <PosterDepthEdge edgeStrength={40} edgeCoverage={10} />
                       {/* Accent Glow (firma Pictorium: si ritinta col colore dominante) */}
@@ -606,7 +614,7 @@ export default function EditView() {
                   </div>
                 </div>
 
-                <p className="text-[11px] text-zinc-500 text-center mt-3 shrink-0">{selectedLogo ? t("ui.logoSelected") : previewPoster?.iso_639_1 === null ? `${t("ui.clean")} ${t("ui.selected").toLowerCase()}` : previewPoster ? t("ui.logoHint") : t("ui.noPosterSelected")}</p>
+                <p className="text-[11px] text-zinc-400 text-center mt-3 shrink-0">{selectedLogo ? t("ui.logoSelected") : previewPoster?.iso_639_1 === null ? `${t("ui.clean")} ${t("ui.selected").toLowerCase()}` : previewPoster ? t("ui.logoHint") : t("ui.noPosterSelected")}</p>
               </div>
             </EditorPanel>
             </div>
@@ -618,7 +626,7 @@ export default function EditView() {
                   <div className="mb-3 pb-3 border-b border-white/[0.08]">
                     <h3 className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5">{t("ui.details")}</h3>
                     <p className="text-sm font-bold tracking-tight text-zinc-50 truncate">{titleOf(selected)}</p>
-                    <p className="text-[11px] font-mono text-zinc-500 mt-1">{yearOf(selected)} · {selected.media_type === "movie" ? t("ui.movie") : t("ui.tvSeries")} · TMDB <a href={`https://www.themoviedb.org/${selected.media_type}/${selected.id}`} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-white underline underline-offset-2">{selected.id}</a>{selected.imdb_id ? <> · IMDB <a href={`https://www.imdb.com/title/${selected.imdb_id}`} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-white underline underline-offset-2">{selected.imdb_id}</a></> : ""}{tvdbId ? <> · TVDB <a href={`https://thetvdb.com/?tab=series&id=${tvdbId}`} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-white underline underline-offset-2">{tvdbId}</a></> : ""}</p>
+                    <p className="text-[11px] font-mono text-zinc-400 mt-1">{yearOf(selected)} · {selected.media_type === "movie" ? t("ui.movie") : t("ui.tvSeries")} · TMDB <a href={`https://www.themoviedb.org/${selected.media_type}/${selected.id}`} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-white underline underline-offset-2">{selected.id}</a>{selected.imdb_id ? <> · IMDB <a href={`https://www.imdb.com/title/${selected.imdb_id}`} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-white underline underline-offset-2">{selected.imdb_id}</a></> : ""}{tvdbId ? <> · TVDB <a href={`https://thetvdb.com/?tab=series&id=${tvdbId}`} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-white underline underline-offset-2">{tvdbId}</a></> : ""}</p>
 
                     <div className="flex items-center gap-2 flex-wrap mt-2">
                       {cleanPoster && (
@@ -641,7 +649,7 @@ export default function EditView() {
                 <div className="animate-tab-fade-in space-y-3">
                 {activeRightTab === "logo" && <>
                   <LogoOptions logos={logos} selectedLogo={selectedLogo} lang={lang} selectLogo={selectLogo} removeLogo={removeLogo} disabled={!cleanPoster} />
-                  {!cleanPoster && <p className="text-xs text-zinc-500 text-center mt-2 px-1">{t("ui.logoHint")}</p>}
+                  {!cleanPoster && <p className="text-xs text-zinc-400 text-center mt-2 px-1">{t("ui.logoHint")}</p>}
                 </>}
                 {activeRightTab === "badge" && <BadgeControls />}
                 {activeRightTab === "transform" && <TransformControls />}
@@ -664,7 +672,7 @@ export default function EditView() {
           <UserSpacesList />
         </div>
       )}
-      {!selected && !profileGate && (
+      {!selected && !profileGate && !hasTmdbKey && (
         <div>
           {searchBar}
         </div>
@@ -719,7 +727,7 @@ export default function EditView() {
       )}
       {!selected && !profileGate && hasTmdbKey && (
         <>
-          <HomeHero />
+          <HomeHero search={searchBar} />
           <ScrollReveal animation="fade-up" threshold={0.05}>
             <PosterCarousel />
           </ScrollReveal>

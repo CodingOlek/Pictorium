@@ -870,7 +870,7 @@ input[type="range"]::-moz-range-thumb:active {
 .reveal-slide-in-left-subtle.visible { opacity: 1; transform: translateX(0); }
 
 .preview-meta-info {
-  opacity: 0.4;
+  opacity: 0.65;
   transition: opacity 0.2s ease;
 }
 
@@ -1382,6 +1382,27 @@ select:focus-visible {
   color: var(--color-muted);
 }
 
+/* Ricerca cardine della hero: singola istanza SearchBar (stesso nodo di
+   EditView, niente duplicati/focus divergenti). L'override neutralizza il
+   wrapper home (max-w-lg mx-auto mb-8) dentro la colonna copy. */
+.home-hero-search {
+  margin-top: 1.1rem;
+  width: 100%;
+  max-width: 28rem;
+  /* La tendina "ricerche recenti" (absolute dentro) deve coprire pill e CTA
+     sottostanti: il wrapper ha animate-fade-up con fill both, quindi resta uno
+     stacking context permanente a z auto — senza z-index esplicito i fratelli
+     successivi (stesso stacking context, in ordine DOM) lo dipingono sopra. */
+  position: relative;
+  z-index: 30;
+}
+.home-hero-search > div {
+  margin-bottom: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  max-width: none !important;
+}
+
 /* Punto luminoso nel kicker */
 .hero-kicker .dot {
   width: 5px;
@@ -1755,6 +1776,11 @@ button.status-version:hover {
     margin-right: auto;
   }
 
+  .home-hero-search {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .stat-pills,
   .home-hero-cta-row {
     justify-content: center;
@@ -1848,6 +1874,34 @@ button.status-version:hover {
     0 0 0 1px color-mix(in srgb, var(--color-accent, var(--color-accent-orange)) 22%, transparent),
     0 24px 60px rgba(0,0,0,0.45),
     inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* Feedback salvataggio: anello smeraldo + sweep luminoso per 600ms (classe
+   transiente da EditView; nessun test fa screenshot durante il flash). */
+.editor-stage-save-flash {
+  border-color: rgb(16 185 129 / 0.55);
+  box-shadow:
+    0 0 0 1px rgb(16 185 129 / 0.35),
+    0 0 32px rgb(16 185 129 / 0.25),
+    0 24px 60px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.editor-stage-save-flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
+  transform: translateX(-100%);
+  animation: save-flash-sheen 0.6s ease-out;
+}
+@keyframes save-flash-sheen {
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .editor-stage-save-flash::after { animation: none; display: none; }
 }
 
 /* Poster anteprima: si adatta all'altezza disponibile del pannello (niente
