@@ -333,7 +333,7 @@ export async function pictoriumMeta(
       if (isTvdbSentinel) {
         const seasonType = sentinel === "tvdb" ? "default" : (sentinel!.slice(5) || "default")
         try {
-          const tvdbVideos = await buildVideosFromTvdb(imdbId, tmdbId, primaryId, tvdbApiKey || "", seasonType)
+          const tvdbVideos = await buildVideosFromTvdb(imdbId, tmdbId, primaryId, tvdbApiKey || "", seasonType, apiKey)
           if (tvdbVideos.length > 0) videos.push(...(tvdbVideos as StremioVideo[]))
         } catch (e) {
           log.warn("TVDB ordering failed, fallback to standard", { error: e instanceof Error ? e.message : String(e) })
@@ -435,7 +435,7 @@ export async function pictoriumMeta(
       // Parti assegnerebbe nome/cover/trama dell'episodio sbagliato.
       const isTvdbOrdering = (mapping?.episodeGroupId === "tvdb" || (mapping?.episodeGroupId?.startsWith("tvdb:") ?? false))
       if (videos.length > 0 && episodeMetadataSource === "tvdb" && tvdbApiKey && !isTvdbOrdering && !videosFromGroup) {
-        await enrichVideosWithTvdb(videos, imdbId, tmdbId, tvdbApiKey, "ita")
+        await enrichVideosWithTvdb(videos, imdbId, tmdbId, tvdbApiKey, "ita", apiKey)
       }
     }
 

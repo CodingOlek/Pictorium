@@ -597,6 +597,12 @@ export function formatTvdbImageUrl(imagePath?: string | null): string | undefine
 
 /**
  * Arricchisce i video di Stremio con copertine (screencap) e trame provenienti da TheTVDB.
+ *
+ * Solo link confermati: IMDb id oppure tvdb_id esplicito dagli external_ids
+ * TMDB (serve `tmdbApiKey`). NIENTE fallback fuzzy su `remoteid/<tmdbId>`:
+ * quel lookup può agganciare un'altra serie (es. il franchise al posto di
+ * uno split di stagione) e sovrascrivere nomi/trame corretti con quelli
+ * sbagliati. Senza link certo: no-op, restano i dati TMDB.
  */
 export async function enrichVideosWithTvdb(
   videos: Array<{
@@ -612,28 +618,28 @@ export async function enrichVideosWithTvdb(
   imdbId: string | null | undefined,
   tmdbId: number | null | undefined,
   apiKey: string,
-  language = "ita"
+  language = "ita",
+  tmdbApiKey?: string,
 ): Promise<void> {
   if (!videos || videos.length === 0 || !apiKey) return
 
-  // Risoluzione ID TheTVDB: prima tenta con IMDb ID, poi fallback con TMDB ID
+  // Risoluzione ID TheTVDB: prima IMDb ID, poi tvdb_id dagli external_ids
+  // TMDB (con chiave: senza, la chiamata lancia e il ramo resterebbe morto
+  // come prima del fix, quando getExternalIds veniva invocato senza chiave).
   let tvdbSeriesId: number | null = null
   if (imdbId) {
     tvdbSeriesId = await getTvdbSeriesId(imdbId, apiKey)
   }
-  if (!tvdbSeriesId && tmdbId) {
+  if (!tvdbSeriesId && tmdbApiKey && tmdbId) {
     try {
       const { getExternalIds } = await import("@/lib/tmdb")
-      const ext = await getExternalIds("tv", tmdbId)
+      const ext = await getExternalIds("tv", tmdbId, tmdbApiKey)
       if (ext?.tvdb_id && ext.tvdb_id > 0) {
         tvdbSeriesId = ext.tvdb_id
       } else if (ext?.imdb_id) {
         tvdbSeriesId = await getTvdbSeriesId(ext.imdb_id, apiKey)
       }
     } catch {}
-    if (!tvdbSeriesId) {
-      tvdbSeriesId = await getTvdbSeriesId(String(tmdbId), apiKey)
-    }
   }
 
   if (!tvdbSeriesId) return

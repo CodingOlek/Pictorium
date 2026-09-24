@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     if (isTvdbPreview) {
       const seasonType = episodeGroupId === "tvdb" ? "default" : (episodeGroupId!.slice(5) || "default")
       try {
-        const tvdbVideos = await buildVideosFromTvdb(imdbId, tmdbId, primaryId, tvdbApiKey || "", seasonType)
+        const tvdbVideos = await buildVideosFromTvdb(imdbId, tmdbId, primaryId, tvdbApiKey || "", seasonType, apiKey)
         if (tvdbVideos.length > 0) videos.push(...(tvdbVideos as unknown as PreviewVideo[]))
       } catch {
         // fallback silenzioso a TMDB standard
@@ -175,7 +175,7 @@ export async function GET(req: NextRequest) {
 
     const isTvdbPreviewForEnrich = episodeGroupId === "tvdb" || (episodeGroupId?.startsWith("tvdb:") ?? false)
     if (videos.length > 0 && episodeMetadataSource === "tvdb" && tvdbApiKey && !isTvdbPreviewForEnrich && !videosFromGroup) {
-      await enrichVideosWithTvdb(videos as unknown as import("@/lib/meta-handler").StremioVideo[], imdbId, tmdbId, tvdbApiKey, "ita")
+      await enrichVideosWithTvdb(videos as unknown as import("@/lib/meta-handler").StremioVideo[], imdbId, tmdbId, tvdbApiKey, "ita", apiKey)
     }
 
     // Raggruppa per stagione per l'anteprima
