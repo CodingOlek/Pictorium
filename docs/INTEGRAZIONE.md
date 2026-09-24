@@ -21,6 +21,25 @@ GET {tuaIstanza}/api/poster/{movie|series}/{id}
   indicano tutti le serie TV.
 - `{id}`: id numerico TMDB (`.../movie/550`) oppure id IMDb (`.../movie/tt0133093`,
   risolto lato server in TMDB).
+- Risoluzione degli id IMDb (ordine): alias manuale dell'operatore →
+  `imdbId` del mapping salvato → `/find` di TMDB. Preferisci sempre l'id
+  numerico TMDB quando lo conosci: i `tt...` condivisi da un franchise
+  (es. serie antologiche splittate in entry separate su TMDB) possono non
+  risolversi (`404`) anche se il titolo esiste.
+
+### Pattern con placeholder (AIO / custom URL)
+
+Se il consumer sostituisce placeholder per-titolo (es. AIOMetadata, che
+supporta `{tmdb_id}` e `{imdb_id}`), usali nel path
+(`/api/poster/{type}/{tmdb_id}`):
+
+- `{tmdb_id}` (consigliato): esatto, nessuna risoluzione — ma solo se il
+  consumer conosce davvero il TMDB id di quell'item.
+- `{imdb_id}` (fallback universale): ogni item ce l'ha, ma paga la
+  risoluzione sopra e fallisce sugli split di franchise.
+
+Se un titolo rende `404` via `tt...` mentre esiste su TMDB, usa l'id
+numerico o chiedi all'operatore dell'istanza di cucire un alias manuale.
 
 **Non** servono `/catalog/*`, `/meta/*`, l'editor web o altre route di
 Pictorium. Non c'è niente da rimuovere dal codice — semplicemente non

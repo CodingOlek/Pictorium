@@ -20,6 +20,24 @@ GET {yourInstanceUrl}/api/poster/{movie|series}/{id}
   mean TV series.
 - `{id}`: a TMDB numeric id (`.../movie/550`) or an IMDb id (`.../movie/tt0133093`,
   resolved server-side to TMDB).
+- IMDb id resolution order: operator manual alias → saved-mapping `imdbId` →
+  TMDB `/find`. Always prefer the numeric TMDB id when you know it:
+  franchise-shared `tt...` ids (e.g. anthology series split into separate
+  TMDB entries) may fail to resolve (`404`) even though the title exists.
+
+### Placeholder patterns (AIO / custom URL)
+
+When the consumer substitutes per-title placeholders (e.g. AIOMetadata,
+which supports `{tmdb_id}` and `{imdb_id}`), use them in the path
+(`/api/poster/{type}/{tmdb_id}`):
+
+- `{tmdb_id}` (recommended): exact, no resolution involved — but only if the
+  consumer genuinely knows that item's TMDB id.
+- `{imdb_id}` (universal fallback): every item has one, but it pays the
+  resolution cost above and fails on franchise splits.
+
+If a title answers `404` via `tt...` while it exists on TMDB, use the
+numeric id or ask the instance operator to stitch a manual alias.
 
 You do **not** need `/catalog/*`, `/meta/*`, the editor UI, or any other
 Pictorium route. There is nothing to strip out of the codebase — simply do
