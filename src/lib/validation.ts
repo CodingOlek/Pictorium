@@ -119,6 +119,18 @@ export const mappingSchema = z.object({
 
 export type MappingInput = z.infer<typeof mappingSchema>
 
+// Alias manuale IMDb → TMDB per-namespace (corpo POST /api/mappings/aliases).
+// Cuce i casi che TMDB /find non può risolvere (franchise-tt su entry di
+// stagione splittata): vince sul /find nella poster route. Stessi bound del
+// mapping (imdbId sopra, tmdbId positivo).
+export const aliasSchema = z.object({
+  imdbId: z.string().regex(/^tt\d{1,20}$/),
+  mediaType: z.enum(["movie", "tv"]),
+  tmdbId: z.number().int().positive(),
+})
+
+export type AliasInput = z.infer<typeof aliasSchema>
+
 // Query string del poster: bound anti-DoS/cache-flood (R1). La cache key
 // contiene i raw params e i testi finiscono negli SVG: una stringa da 10KB
 // in `extra`/`title`/path significherebbe render enormi + entry cache enormi

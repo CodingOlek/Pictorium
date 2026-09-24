@@ -4,7 +4,7 @@ import { initSharp } from "@/lib/sharp-config"
 import { getImages, getDetails, getDetailsWithExternalIds, getExternalIds, getKeywords, getReleaseDates, resolveUserApiKeys, type TMDBImage, type TMDBCompany } from "@/lib/tmdb"
 import { getJWRankings, hasJWOffers } from "@/lib/justwatch"
 import { extractDigitalReleaseDate, isDigitalPreRelease } from "@/lib/pre-release"
-import { getById } from "@/lib/store"
+import { getById, getImdbAlias } from "@/lib/store"
 import { getScopedUserId } from "@/lib/user-auth"
 import { userRateLimitKey } from "@/lib/user-auth"
 import { touchUserActivity } from "@/lib/user-activity"
@@ -172,7 +172,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const startTime = Date.now()
   initSharp()
   const { type, id } = await params
-  const mediaType = (["series", "tv", "show", "tvshow"].includes(type?.toLowerCase() || "")) ? "tv" : "movie"
+  const mediaTypeInit = (["series", "tv", "show", "tvshow"].includes(type?.toLowerCase() || "")) ? "tv" : "movie"
+  // `let`: l'alias IMDb manuale può correggere anche il tipo (AIO che manda
+  // /movie/tt... per una serie) — l'utente dichiara "questo tt È quello show".
+  let mediaType: "movie" | "tv" = mediaTypeInit
 
   // Namespace utente (multi-user): null con flag OFF o senza `?u=` → globale.
   const rawUser = req.nextUrl.searchParams.get("u") ?? req.nextUrl.searchParams.get("user")
@@ -202,8 +205,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   let tmdbId = Number(id)
   if (isNaN(tmdbId) || tmdbId <= 0) {
     if (typeof id === "string" && id.startsWith("tt")) {
-      const resolved = await resolveImdbToTmdb(id, mediaType, effTmdbKey)
-      if (resolved) tmdbId = resolved
+      // Alias manuale per-namespace vince sul /find TMDB (tt di franchise su
+      // entry di stagione splittata, es. Monster tt13207736 → tv:299939).
+      // Controllato PRIMA di resolveImdbToTmdb così bypassa anche la sua
+      // cache 7gg. Fail-open: errore store → fallback al /find invariato.
+      const alias = pathImdbId ? await getImdbAlias(pathImdbId, scopedUser).catch(() => null) : null
+      if (alias) {
+        tmdbId = alias.tmdbId
+        mediaType = alias.mediaType
+        log.info("IMDb alias hit", { imdb: pathImdbId, mediaType, tmdbId })
+      } else {
+        const resolved = await resolveImdbToTmdb(id, mediaType, effTmdbKey)
+        if (resolved) tmdbId = resolved
+      }
     }
   }
 
@@ -378,7 +392,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     }
     const converted = await convertPosterFormat(canonical.buffer)
     const variant: PosterCachePayload = { buffer: converted, etag: variantEtagFor(canonical.etag) }
-    writeCachedPoster(variantKey, variant, mappingTag, opts)
+    // Le preview editor (`preview=1`, ogni tick di slider) non sporcano lo
+    // storage: la chiave le separa già, ma scrivere ogni tick è flood.
+    if (!isPreview) writeCachedPoster(variantKey, variant, mappingTag, opts)
     const freshVariantTtl = opts?.ttlMs !== undefined ? Math.max(1, Math.round(opts.ttlMs / 1000)) : variantTtlSec
     return posterResponse(variant, opts?.immutable ?? immutablePoster, isPreview, dynamicPoster, outputFormat, freshVariantTtl)
   }
@@ -975,34 +991,32 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     }
   }
 
-  if (!posterPath) {
-    clearTimeout(renderDeadline)
-    // C1: il ramo non-mappato può già detenere lo slot (logo-fit) — questo
-    // return è fuori dal try/finally, quindi il rilascio va fatto qui.
-    releaseSlotOnce()
-    // Deadline sforato o fetch upstream fallito: NIENTE 404. Il titolo può
-    // semplicemente essere lento/indisponibile upstream; la negative-cache 503
-    // (TTL breve) evita la tempesta di ri-render senza marchiare il titolo
-    // come inesistente.
-    if (deadlineFired || autoFetchFailed) {
-      writePosterError(cacheKey, 503)
-      completePosterRender(null)
-      return posterErrorResponse(503)
-    }
-    // Nessun poster davvero disponibile per questo titolo: 404 + negative cache.
-    writePosterError(cacheKey, 404)
-    completePosterRender(null)
-    return new Response("Poster not found", { status: 404, headers: corsHeaders() })
-  }
-
-  // Ramo landscape: la base è lo sfondo TMDB (query `backdrop` > mapping >
-  // ramo automatico). Senza sfondo la base diventa pillarbox dal poster
-  // (mai 404: nessun riquadro rotto su Stremio).
-  if (isLandscape) {
-    backdropPath = queryBackdrop || mapping?.backdropPath || autoBackdropPath || backdropPath
-  }
-
   try {
+    if (!posterPath) {
+      // Deadline sforato o fetch upstream fallito: NIENTE 404. Il titolo può
+      // semplicemente essere lento/indisponibile upstream; la negative-cache 503
+      // (TTL breve) evita la tempesta di ri-render senza marchiare il titolo
+      // come inesistente. Dentro il try: il finally unifica il rilascio slot
+      // (releaseSlotOnce è idempotente) — nessun return fuori dal try/finally
+      // può più leakare lo slot acquisito dal logo-fit.
+      if (deadlineFired || autoFetchFailed) {
+        writePosterError(cacheKey, 503)
+        completePosterRender(null)
+        return posterErrorResponse(503)
+      }
+      // Nessun poster davvero disponibile per questo titolo: 404 + negative cache.
+      writePosterError(cacheKey, 404)
+      completePosterRender(null)
+      return new Response("Poster not found", { status: 404, headers: corsHeaders() })
+    }
+
+    // Ramo landscape: la base è lo sfondo TMDB (query `backdrop` > mapping >
+    // ramo automatico). Senza sfondo la base diventa pillarbox dal poster
+    // (mai 404: nessun riquadro rotto su Stremio).
+    if (isLandscape) {
+      backdropPath = queryBackdrop || mapping?.backdropPath || autoBackdropPath || backdropPath
+    }
+
     // Semaforo anti-OOM: limita i render costosi concorrenti (sharp composite,
     // blur, badge SVG→PNG). Se tutti i posti sono occupati per più del timeout,
     // risponde 503 invece di accodarsi e far crescere l'heap senza bound.
@@ -1655,9 +1669,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     // Qualità effimera (timeout/errore upstream) o Wikidata degradato: storage
     // 120s + niente immutable, così il degradato non avvelena CDN per 6h/24h.
     // Resolved (anche null) → TTL pieno invariato.
-    writeCachedPoster(cacheKey, payload, mappingTag, ephemeralTtl
-      ? { ttlMs: QUALITY_EPHEMERAL_TTL_SEC * 1000, immutable: false }
-      : { immutable: immutablePoster })
+    // Le preview editor (`preview=1`) si servono no-store e non vengono
+    // scritte in cache: ogni movimento di slider genererebbe una entry.
+    if (!isPreview) {
+      writeCachedPoster(cacheKey, payload, mappingTag, ephemeralTtl
+        ? { ttlMs: QUALITY_EPHEMERAL_TTL_SEC * 1000, immutable: false }
+        : { immutable: immutablePoster })
+    }
     completePosterRender(payload)
     recordPosterRequest(false, outputFormat)
     // Enabled enrichment must revalidate against the final state, including [].

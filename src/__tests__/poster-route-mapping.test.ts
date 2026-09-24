@@ -2,7 +2,8 @@ import sharp from "sharp"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { GET } from "@/app/api/poster/[type]/[id]/route"
-import { getById } from "@/lib/store"
+import { getById, getImdbAlias } from "@/lib/store"
+import { resolveImdbToTmdb } from "@/lib/imdb-resolver"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
 import { getDetails, getDetailsWithExternalIds, getImages, getExternalIds } from "@/lib/tmdb"
 import { getJWRankings } from "@/lib/justwatch"
@@ -33,6 +34,7 @@ vi.mock("@/lib/rate-limit", () => ({
 vi.mock("@/lib/store", () => ({
   getById: vi.fn(),
   upsert: vi.fn(),
+  getImdbAlias: vi.fn(async () => null),
 }))
 
 vi.mock("@/lib/server-defaults", () => ({
@@ -475,8 +477,12 @@ describe("GET /api/poster/[type]/[id] with saved mappings", () => {
     else expect(imdbCalls).toBe(0)
     const hit = await GET(new NextRequest(url), { params: Promise.resolve({ type: "movie", id: String(id) }) })
     expect(hit.status).toBe(200)
-    expect(fetchAggregatedRating).toHaveBeenCalledTimes(imdbCalls)
-    expect(fetchCustomRatings).toHaveBeenCalledTimes(customCalls)
+    // Le preview (`preview=1`, ramo query) sono no-store: la route non le
+    // scrive in cache, quindi la seconda GET ri-renderizza e rifà i fetch.
+    // Tutti gli altri rami devono servire la seconda GET da cache (zero fetch).
+    const previewRefetch = kind === "query" ? 1 : 0
+    expect(fetchAggregatedRating).toHaveBeenCalledTimes(imdbCalls + (imdbCalls > 0 ? previewRefetch : 0))
+    expect(fetchCustomRatings).toHaveBeenCalledTimes(customCalls + (customCalls > 0 ? previewRefetch : 0))
     const debug = await GET(new NextRequest(`${url}${url.includes("?") ? "&" : "?"}debug=1`), {
       params: Promise.resolve({ type: "movie", id: String(id) }),
     })
@@ -1594,6 +1600,69 @@ describe("GET /api/poster/[type]/[id] error and edge cases", () => {
     expect(body.logoSelection.usedLang).toBe("en")
     expect(body.cache.hit).toBe(false)
     expect(body.meta.mappingId).toBeNull()
+  })
+})
+
+describe("GET /api/poster/[type]/[id] con alias IMDb manuale", () => {
+  const mockedGetImdbAlias = vi.mocked(getImdbAlias)
+  const mockedResolveImdbToTmdb = vi.mocked(resolveImdbToTmdb)
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    mockedGetImdbAlias.mockReset().mockResolvedValue(null)
+    mockedGetById.mockReset().mockResolvedValue(null)
+    mockedResolveImdbToTmdb.mockReset().mockResolvedValue(null)
+    vi.mocked(fetchCustomRatings).mockReset().mockResolvedValue([])
+    vi.mocked(fetchAggregatedRating).mockReset().mockResolvedValue(null)
+    vi.stubEnv("PICTORIUM_CUSTOM_RATING_ENABLED", "false")
+  })
+
+  afterEach(() => {
+    cacheClear()
+    __resetTMDBSessionCache()
+  })
+
+  it("l'alias vince sul /find e aggancia il mapping salvato", async () => {
+    mockedGetImdbAlias.mockResolvedValue({ imdbId: "tt13207736", mediaType: "tv", tmdbId: 299939 })
+    // Il /find direbbe un altro id: non deve essere consultato proprio.
+    mockedResolveImdbToTmdb.mockResolvedValue(111111)
+    mockedGetById.mockImplementation(async (type, id) =>
+      type === "tv" && id === 299939
+        ? {
+            tmdbId: 299939, mediaType: "tv", title: "Monster: Lizzie Borden",
+            posterPath: "/lizzie.jpg", logoPath: null, originalPosterPath: null,
+            language: "it", showBadges: false, rankingBadges: false,
+            updatedAt: "2026-09-20T00:00:00.000Z",
+          }
+        : null,
+    )
+    const poster = await imageBuffer("#101010", 500, 750)
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      expect(String(input)).toContain("/lizzie.jpg")
+      return new Response(new Uint8Array(poster), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      })
+    })
+    const res = await GET(
+      new NextRequest("http://localhost:3000/api/poster/series/tt13207736"),
+      { params: Promise.resolve({ type: "series", id: "tt13207736" }) },
+    )
+    expect(res.status).toBe(200)
+    expect(mockedGetImdbAlias).toHaveBeenCalledWith("tt13207736", null)
+    expect(mockedResolveImdbToTmdb).not.toHaveBeenCalled()
+    expect(mockedGetById).toHaveBeenCalledWith("tv", 299939, null)
+  })
+
+  it("senza alias, fallback al /find invariato (tt ignoto → 400)", async () => {
+    mockedGetImdbAlias.mockResolvedValue(null)
+    mockedResolveImdbToTmdb.mockResolvedValue(null)
+    const res = await GET(
+      new NextRequest("http://localhost:3000/api/poster/series/tt0000000"),
+      { params: Promise.resolve({ type: "series", id: "tt0000000" }) },
+    )
+    expect(res.status).toBe(400)
+    expect(mockedResolveImdbToTmdb).toHaveBeenCalled()
   })
 })
 

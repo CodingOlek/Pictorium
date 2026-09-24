@@ -124,9 +124,61 @@ export default function EditView() {
 
   const { imageError, setImageError, previewLoading, loadProgress, imgSrc, retry } = usePosterPreview()
 
+  // Alias manuale IMDb → titolo corrente (franchise-tt su entry di stagione
+  // splittata, es. Monster tt13207736 → tv:299939). Prefill da reverse lookup
+  // sulla lista alias; fail-open se la GET fallisce (auth/blocco).
+  const [aliasInput, setAliasInput] = useState("")
+  const aliasPrevRef = useRef<string | null>(null)
+  // Collassato di default (caso limite): si apre da solo solo se esiste già
+  // un alias per questo titolo, altrimenti resta un link discreto.
+  const [aliasOpen, setAliasOpen] = useState(false)
+  useEffect(() => {
+    setAliasInput("")
+    aliasPrevRef.current = null
+    setAliasOpen(false)
+    if (!selected) return
+    const mt = selected.media_type
+    const sid = selected.id
+    let live = true
+    userFetch("/api/mappings/aliases")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { aliases?: { imdbId: string; mediaType: string; tmdbId: number }[] } | null) => {
+        if (!live || !d) return
+        const hit = (d.aliases || []).find((a) => a.mediaType === mt && a.tmdbId === sid)
+        if (hit) {
+          setAliasInput(hit.imdbId)
+          aliasPrevRef.current = hit.imdbId
+          setAliasOpen(true)
+        }
+      })
+      .catch(() => {})
+    return () => { live = false }
+  }, [selected?.media_type, selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- granularità intenzionale: `selected` intero rifarebbe la GET alias a ogni tick editor
+
   const handleSave = useCallback(async () => {
     await saveConfig()
-  }, [saveConfig])
+    // Alias IMDb manuale: sincronizzato col save mapping (stessa auth via
+    // userFetch). Fail-open: se fallisce, il mapping resta salvato.
+    if (!selected) return
+    const next = aliasInput.trim()
+    const prev = aliasPrevRef.current
+    if (next === (prev ?? "")) return
+    try {
+      if (/^tt\d{1,20}$/.test(next)) {
+        await userFetch("/api/mappings/aliases", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imdbId: next, mediaType: selected.media_type, tmdbId: selected.id }),
+        })
+        aliasPrevRef.current = next
+      } else if (prev) {
+        await userFetch(`/api/mappings/aliases?imdbId=${encodeURIComponent(prev)}`, { method: "DELETE" })
+        aliasPrevRef.current = null
+      }
+    } catch {
+      // ignora: si riprova al prossimo save
+    }
+  }, [saveConfig, selected, aliasInput])
 
   // Mobile: dopo il tap su un poster salta ad "Anteprima" (nella tab Poster
   // non si vedrebbe alcun feedback). Solo sotto lg, dove lo switcher esiste;
@@ -487,6 +539,36 @@ export default function EditView() {
                 </div>
               } footer={
                 previewPoster && selected ? (
+                  <div className="w-full">
+                    {/* Alias IMDb manuale: link discreto, il campo appare solo su
+                        richiesta (o da solo se un alias esiste già). */}
+                    {aliasOpen ? (
+                    <div className="w-full max-w-md mx-auto mb-2 px-1">
+                      <label className="block text-[10px] font-semibold text-zinc-400 mb-1" htmlFor="imdb-alias-input">
+                        {t("ui.imdbAliasLabel") || "IMDb extra collegato"}
+                      </label>
+                      <input
+                        id="imdb-alias-input"
+                        type="text"
+                        value={aliasInput}
+                        onChange={(e) => setAliasInput(e.target.value)}
+                        placeholder={t("ui.imdbAliasPlaceholder") || "tt1234567 — es. IMDb del franchise"}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-2.5 py-2 text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-white/25"
+                      />
+                    </div>
+                    ) : (
+                    <div className="w-full text-center mb-2">
+                      <button
+                        type="button"
+                        onClick={() => setAliasOpen(true)}
+                        className="text-[10px] text-zinc-600 hover:text-zinc-300 underline-offset-2 hover:underline transition-colors cursor-pointer"
+                      >
+                        {t("ui.imdbAliasToggle") || "+ Collega IMDb extra"}
+                      </button>
+                    </div>
+                    )}
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     {(() => {
                       if (!selected) return null
@@ -570,6 +652,7 @@ export default function EditView() {
                       <Save className="w-4 h-4" />
                       {t("ui.savePoster")}
                     </button>
+                  </div>
                   </div>
               ) : undefined}>
               <div className="flex flex-col items-center h-full min-h-0">

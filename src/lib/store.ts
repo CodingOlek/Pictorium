@@ -599,3 +599,377 @@ export async function importMappings(mappings: Mapping[], userId?: string | null
     await persist(data)
   })
 }
+
+// ---- IMDb aliases (tt... → show Saved, per-namespace) ----
+// Un tt di franchise (es. Monster tt13207736, una sola scheda per 4 stagioni
+// su Cinemeta/AIO) non si risolve via TMDB /find sulla entry di stagione
+// (es. tv:299939, imdb_id vuoto): l'alias manuale cuce il ponte e vince sul
+// /find. Stesso pattern dei mapping (KV + file, globale + per-utente), quota
+// condivisa: un alias pesa come un rigo mapping.
+
+export interface ImdbAlias {
+  imdbId: string
+  mediaType: "movie" | "tv"
+  tmdbId: number
+  updatedAt?: string
+}
+
+const IMDB_ALIAS_RE = /^tt\d{1,20}$/
+
+export function isValidImdbAliasId(value: unknown): value is string {
+  return typeof value === "string" && IMDB_ALIAS_RE.test(value.trim())
+}
+
+function normalizeAliasId(imdbId: string): string {
+  return imdbId.trim()
+}
+
+function assertValidAlias(alias: ImdbAlias): void {
+  if (!isValidImdbAliasId(alias.imdbId)) throw new Error("Invalid imdbId: must match tt<number>")
+  if (alias.mediaType !== "movie" && alias.mediaType !== "tv") throw new Error("Invalid mediaType")
+  if (!Number.isInteger(alias.tmdbId) || alias.tmdbId <= 0) throw new Error("Invalid tmdbId")
+}
+
+function userAliasKvKey(userId: string): string {
+  return `aliases:${userId}`
+}
+
+// ---- KV per-utente + globale (mirror del pattern mapping, cache 500ms) ----
+
+interface KvAliasCache {
+  map: Record<string, ImdbAlias> | null
+  at: number
+  inflight: Promise<Record<string, ImdbAlias>> | null
+}
+
+let kvAliasGlobal: KvAliasCache = { map: null, at: 0, inflight: null }
+const kvAliasUserCaches = new Map<string, KvAliasCache>()
+const KV_ALIAS_USER_CACHE_CAP = 200
+
+function kvAliasUserCacheFor(userId: string): KvAliasCache {
+  let c = kvAliasUserCaches.get(userId)
+  if (c) {
+    kvAliasUserCaches.delete(userId)
+    kvAliasUserCaches.set(userId, c)
+    return c
+  }
+  c = { map: null, at: 0, inflight: null }
+  if (kvAliasUserCaches.size >= KV_ALIAS_USER_CACHE_CAP) {
+    const oldest = kvAliasUserCaches.keys().next().value
+    if (oldest !== undefined) kvAliasUserCaches.delete(oldest)
+  }
+  kvAliasUserCaches.set(userId, c)
+  return c
+}
+
+async function kvAliasRead(entry: KvAliasCache, hash: string): Promise<Record<string, ImdbAlias>> {
+  const now = Date.now()
+  if (entry.map && now - entry.at < KV_READ_TTL_MS) return entry.map
+  if (entry.inflight) return entry.inflight
+  entry.inflight = (async () => {
+    const { kv } = await import("@vercel/kv")
+    const raw = await kv.hgetall<Record<string, ImdbAlias>>(hash)
+    const map = raw ?? {}
+    entry.map = map
+    entry.at = Date.now()
+    return map
+  })().finally(() => { entry.inflight = null })
+  return entry.inflight
+}
+
+// ---- File-based (mirror del pattern mapping) ----
+
+const ALIAS_FILE = path.join(DATA_DIR, "aliases.json")
+let aliasMemCache: Record<string, ImdbAlias> | null = null
+let aliasMemCacheTime = 0
+let aliasLastStatAt = 0
+
+function userAliasFile(userId: string): string {
+  return path.join(DATA_DIR, "users", userId, "aliases.json")
+}
+
+interface UserAliasMirror {
+  data: Record<string, ImdbAlias> | null
+  time: number
+  lastStat: number
+}
+
+const userAliasMirrors = new Map<string, UserAliasMirror>()
+
+function userAliasMirrorFor(userId: string): UserAliasMirror {
+  let m = userAliasMirrors.get(userId)
+  if (m) {
+    userAliasMirrors.delete(userId)
+    userAliasMirrors.set(userId, m)
+    return m
+  }
+  m = { data: null, time: 0, lastStat: 0 }
+  if (userAliasMirrors.size >= USER_MIRROR_CAP) {
+    const oldest = userAliasMirrors.keys().next().value
+    if (oldest !== undefined) userAliasMirrors.delete(oldest)
+  }
+  userAliasMirrors.set(userId, m)
+  return m
+}
+
+async function loadAliasesFromDisk(): Promise<Record<string, ImdbAlias>> {
+  try {
+    const stat = await fsp.stat(ALIAS_FILE).catch(() => null)
+    const raw = await fsp.readFile(ALIAS_FILE, "utf-8")
+    const data = JSON.parse(raw) as Record<string, ImdbAlias>
+    aliasMemCache = data
+    aliasMemCacheTime = stat ? stat.mtimeMs : Date.now()
+    return data
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      aliasMemCache = {}
+      aliasMemCacheTime = 0
+      return {}
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    log.warn("Failed to load aliases", { error: message })
+    return aliasMemCache ?? {}
+  }
+}
+
+async function readAliasesFromMem(): Promise<Record<string, ImdbAlias>> {
+  const now = Date.now()
+  if (aliasMemCache && now - aliasLastStatAt < READ_STAT_TTL_MS) return aliasMemCache
+  aliasLastStatAt = now
+  try {
+    const stat = await fsp.stat(ALIAS_FILE)
+    if (aliasMemCache && stat.mtimeMs <= aliasMemCacheTime) return aliasMemCache
+  } catch {
+    if (aliasMemCache) return aliasMemCache
+  }
+  return loadAliasesFromDisk()
+}
+
+async function persistAliases(data: Record<string, ImdbAlias>) {
+  await ensureDataDir()
+  const tmp = `${ALIAS_FILE}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
+  try {
+    await fsp.writeFile(tmp, JSON.stringify(data, null, 2))
+    try {
+      await fsp.rename(tmp, ALIAS_FILE)
+    } catch (e) {
+      if (isNodeError(e) && (e as NodeJS.ErrnoException).code === "EXDEV") {
+        await fsp.copyFile(tmp, ALIAS_FILE)
+        await fsp.unlink(tmp).catch(() => {})
+      } else {
+        throw e
+      }
+    }
+    aliasMemCache = data
+    aliasMemCacheTime = Date.now()
+  } catch (e) {
+    await fsp.unlink(tmp).catch(() => {})
+    const msg = e instanceof Error ? e.message : String(e)
+    log.error("Failed to write aliases", { file: ALIAS_FILE, error: msg })
+    throw new Error(`Cannot persist aliases: ${msg}`)
+  }
+}
+
+async function loadUserAliasesFromDisk(userId: string): Promise<Record<string, ImdbAlias>> {
+  const file = userAliasFile(userId)
+  const mirror = userAliasMirrorFor(userId)
+  try {
+    const stat = await fsp.stat(file).catch(() => null)
+    const raw = await fsp.readFile(file, "utf-8")
+    const data = JSON.parse(raw) as Record<string, ImdbAlias>
+    mirror.data = data
+    mirror.time = stat ? stat.mtimeMs : Date.now()
+    return data
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      mirror.data = {}
+      mirror.time = 0
+      return {}
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    log.warn("Failed to load user aliases", { error: message })
+    return mirror.data ?? {}
+  }
+}
+
+async function readUserAliasesFromMem(userId: string): Promise<Record<string, ImdbAlias>> {
+  const mirror = userAliasMirrorFor(userId)
+  const now = Date.now()
+  if (mirror.data && now - mirror.lastStat < READ_STAT_TTL_MS) return mirror.data
+  mirror.lastStat = now
+  try {
+    const stat = await fsp.stat(userAliasFile(userId))
+    if (mirror.data && stat.mtimeMs <= mirror.time) return mirror.data
+  } catch (e) {
+    if (isNodeError(e) && e.code === "ENOENT") return loadUserAliasesFromDisk(userId)
+    if (mirror.data) return mirror.data
+  }
+  return loadUserAliasesFromDisk(userId)
+}
+
+async function persistUserAliases(userId: string, data: Record<string, ImdbAlias>) {
+  const file = userAliasFile(userId)
+  await fsp.mkdir(path.dirname(file), { recursive: true }).catch((e) => {
+    const msg = e instanceof Error ? e.message : String(e)
+    log.error(`Failed to create user data dir '${path.dirname(file)}': ${msg}`)
+    throw new Error(`Cannot create user data directory: ${msg}`)
+  })
+  const tmp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
+  try {
+    await fsp.writeFile(tmp, JSON.stringify(data, null, 2))
+    try {
+      await fsp.rename(tmp, file)
+    } catch (e) {
+      if (isNodeError(e) && (e as NodeJS.ErrnoException).code === "EXDEV") {
+        await fsp.copyFile(tmp, file)
+        await fsp.unlink(tmp).catch(() => {})
+      } else {
+        throw e
+      }
+    }
+    const mirror = userAliasMirrorFor(userId)
+    mirror.data = data
+    mirror.time = Date.now()
+  } catch (e) {
+    await fsp.unlink(tmp).catch(() => {})
+    const msg = e instanceof Error ? e.message : String(e)
+    log.error("Failed to write user aliases", { error: msg })
+    throw new Error(`Cannot persist user aliases: ${msg}`)
+  }
+}
+
+async function readAliases(userId?: string | null): Promise<Record<string, ImdbAlias>> {
+  if (userId) {
+    assertValidUserId(userId)
+    if (useKv) return kvAliasRead(kvAliasUserCacheFor(userId), userAliasKvKey(userId))
+    return readUserAliasesFromMem(userId)
+  }
+  if (useKv) return kvAliasRead(kvAliasGlobal, "aliases")
+  return readAliasesFromMem()
+}
+
+/** Quota condivisa mapping+alias: un alias pesa come un rigo mapping. */
+async function assertAliasQuota(
+  aliases: Record<string, ImdbAlias>,
+  key: string,
+  userId?: string | null,
+): Promise<void> {
+  if (key in aliases) return
+  const max = getMaxMappingsPerUser()
+  const mappingCount = Object.keys(
+    userId
+      ? (useKv ? await kvReadAllCachedFor(userId) : await readUserFromMem(userId))
+      : (useKv ? await kvReadAllCached() : await readFromMem()),
+  ).length
+  if (mappingCount + Object.keys(aliases).length >= max) throw new QuotaExceededError(max)
+}
+
+export async function getAllAliases(userId?: string | null): Promise<ImdbAlias[]> {
+  return Object.values(await readAliases(userId))
+}
+
+/** Alias per-namespace stretto come getById: con userId mai fallback globale. */
+export async function getImdbAlias(imdbId: string, userId?: string | null): Promise<ImdbAlias | null> {
+  if (!isValidImdbAliasId(imdbId)) return null
+  return (await readAliases(userId))[normalizeAliasId(imdbId)] ?? null
+}
+
+export async function setImdbAlias(alias: ImdbAlias, userId?: string | null) {
+  assertValidAlias(alias)
+  const key = normalizeAliasId(alias.imdbId)
+  const next = { ...alias, imdbId: key, updatedAt: new Date().toISOString() }
+  if (userId) {
+    assertValidUserId(userId)
+    if (useKv) {
+      const { kv } = await import("@vercel/kv")
+      const current = await kvAliasRead(kvAliasUserCacheFor(userId), userAliasKvKey(userId))
+      await assertAliasQuota(current, key, userId)
+      await kv.hset(userAliasKvKey(userId), { [key]: next })
+      const c = kvAliasUserCaches.get(userId)
+      if (c?.map) c.map[key] = next
+      return
+    }
+    return enqueueUserWrite(userId, async () => {
+      const data = await loadUserAliasesFromDisk(userId)
+      await assertAliasQuota(data, key, userId)
+      data[key] = next
+      await persistUserAliases(userId, data)
+    })
+  }
+  if (useKv) {
+    const { kv } = await import("@vercel/kv")
+    const current = await kvAliasRead(kvAliasGlobal, "aliases")
+    await assertAliasQuota(current, key)
+    await kv.hset("aliases", { [key]: next })
+    if (kvAliasGlobal.map) kvAliasGlobal.map[key] = next
+    return
+  }
+  return enqueueWrite(async () => {
+    const data = await loadAliasesFromDisk()
+    await assertAliasQuota(data, key)
+    data[key] = next
+    await persistAliases(data)
+  })
+}
+
+export async function removeImdbAlias(imdbId: string, userId?: string | null) {
+  if (!isValidImdbAliasId(imdbId)) return
+  const key = normalizeAliasId(imdbId)
+  if (userId) {
+    assertValidUserId(userId)
+    if (useKv) {
+      const { kv } = await import("@vercel/kv")
+      await kv.hdel(userAliasKvKey(userId), key)
+      const c = kvAliasUserCaches.get(userId)
+      if (c?.map) delete c.map[key]
+      return
+    }
+    return enqueueUserWrite(userId, async () => {
+      const data = await loadUserAliasesFromDisk(userId)
+      delete data[key]
+      await persistUserAliases(userId, data)
+    })
+  }
+  if (useKv) {
+    const { kv } = await import("@vercel/kv")
+    await kv.hdel("aliases", key)
+    if (kvAliasGlobal.map) delete kvAliasGlobal.map[key]
+    return
+  }
+  return enqueueWrite(async () => {
+    const data = await loadAliasesFromDisk()
+    delete data[key]
+    await persistAliases(data)
+  })
+}
+
+/**
+ * Cascata alla cancellazione mapping: senza, un alias orfano continuerebbe a
+ * dirottare il tt sul (vecchio) tmdbId anche dopo che l'utente ha eliminato il
+ * poster. Ritorna gli imdbId rimossi.
+ */
+export async function removeAliasesFor(
+  type: "movie" | "tv",
+  id: number,
+  userId?: string | null,
+): Promise<string[]> {
+  const data = await readAliases(userId)
+  const doomed = Object.keys(data).filter(
+    (k) => data[k].mediaType === type && data[k].tmdbId === id,
+  )
+  for (const k of doomed) {
+    await removeImdbAlias(k, userId)
+  }
+  return doomed
+}
+
+/** Evict delle cache alias in-process (wipe account / test). */
+export function __evictAliasCache(userId?: string | null): void {
+  if (userId) {
+    kvAliasUserCaches.delete(userId)
+    userAliasMirrors.delete(userId)
+    return
+  }
+  kvAliasGlobal = { map: null, at: 0, inflight: null }
+  aliasMemCache = null
+}

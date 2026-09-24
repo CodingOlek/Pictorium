@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { getById, remove, upsert } from "@/lib/store"
+import { getById, remove, removeAliasesFor, upsert } from "@/lib/store"
 import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
 import { cacheInvalidate, cacheInvalidatePosterDataFor, cacheInvalidatePosterDataForUser } from "@/lib/cache"
 import { bumpCatalogEpoch } from "@/lib/catalog-epoch"
@@ -142,6 +142,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<Rou
     return Response.json({ error: "Invalid id format" }, { status: 400 })
   }
   await remove(type as "movie" | "tv", tmdbId, scoped)
+  // Cascata alias: senza, un alias orfano continuerebbe a dirottare il tt sul
+  // tmdbId eliminato (fail-open verso il vecchio 404, mai crash — ma meglio pulire).
+  await removeAliasesFor(type as "movie" | "tv", tmdbId, scoped)
   if (scoped) {
     cacheInvalidatePosterDataForUser(type as "movie" | "tv", tmdbId, scoped)
     await bumpCatalogEpoch(scoped)
