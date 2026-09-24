@@ -21,6 +21,7 @@ import {
 } from "@/lib/tmdb"
 import { resolveImdbId } from "@/lib/imdb-cache"
 import { getCatalogEpoch } from "@/lib/catalog-epoch"
+import { buildNoticeDetail, NOTICE_ID_PREFIX } from "@/lib/notice-meta"
 import { resolveCatalogRegionWithDefaults } from "@/lib/catalog-handler"
 import { getScopedUserId, userRateLimitKey } from "@/lib/user-auth"
 import { touchUserActivity } from "@/lib/user-activity"
@@ -159,6 +160,17 @@ export async function pictoriumMeta(
     return new Response("Invalid type", {
       status: 400,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    })
+  }
+  // Notice cards (Fase 2): id informativo, nessuna risoluzione TMDB/IMDb,
+  // nessuna chiamata upstream, nessuna scrittura in cache.
+  if (cleanId.startsWith(NOTICE_ID_PREFIX)) {
+    return metaResponse({
+      meta: buildNoticeDetail({
+        id: cleanId,
+        type: stType,
+        poster: `${getOriginFromRequest(req)}/pictorium.png`,
+      }),
     })
   }
   const tmdbMediaType = stType === "movie" ? "movie" : "tv"

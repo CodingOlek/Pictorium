@@ -12,6 +12,7 @@ import { decodeConfig, type PictoriumUserConfig } from "@/lib/config-token"
 import { getDetails, getDetailsWithExternalIds, getGenreList, getImages, personMovieCredits, personTvCredits, posterUrlOriginal, resolveUserApiKeys, searchMovies, searchPerson, searchTV, tmdbFindByImdb, type TMDBDetails } from "@/lib/tmdb"
 import { resolveImdbId } from "@/lib/imdb-cache"
 import { fetchMDBList } from "@/lib/mdblist"
+import { buildNoticeMeta } from "@/lib/notice-meta"
 import { fetchUnifiedCatalogItems } from "@/lib/custom-catalog-providers"
 import { buildStremioPosterUrl } from "@/lib/stremio-poster-url"
 import { getOriginFromRequest } from "@/lib/poster-public-url"
@@ -475,11 +476,14 @@ export async function pictoriumCatalog(
   if (extra.search) {
     const isPeopleCatalog = catalogId.startsWith("pictorium-search-people-")
     if (isPeopleCatalog) {
-      // Senza chiave (né richiesta, né namespace, né env): catalogo vuoto +
-      // motivo nel log (mai `metas: []` silenziosi e misteriosi).
+      // Senza chiave (né richiesta, né namespace, né env): notice card
+      // esplicativa invece di `metas: []` silenzioso. Mai cachata (return
+      // prima di ogni cacheSet; la chiave è frammento del cache key).
       if (!apiKey) {
         log.debug("Catalog key-missing: no TMDB key", { catalogId })
-        return catalogResponse({ metas: [] })
+        return catalogResponse({
+          metas: [buildNoticeMeta({ type: stType, poster: `${getOriginFromRequest(req)}/pictorium.png` })],
+        })
       }
       const page = Math.floor((extra.skip || 0) / 20) + 1
       const searchCacheKey = `stremio:search:people:${stType}:${hashFragment(extra.search)}:p${page}:pv${POSTER_URL_VERSION}${scopedUser ? `:u${hashUserFragment(scopedUser)}` : ""}:ak${hashFragment(apiKey)}${configParam ? `:cfg${hashFragment(configParam)}` : ""}${mdblistKey ? `:mk${hashFragment(mdblistKey)}` : ""}${regionFragment}${freshness}`
@@ -559,7 +563,9 @@ export async function pictoriumCatalog(
 
     if (!apiKey) {
       log.debug("Catalog key-missing: no TMDB key", { catalogId })
-      return catalogResponse({ metas: [] })
+      return catalogResponse({
+        metas: [buildNoticeMeta({ type: stType, poster: `${getOriginFromRequest(req)}/pictorium.png` })],
+      })
     }
     const page = Math.floor((extra.skip || 0) / 20) + 1
     const searchCacheKey = `stremio:search:${stType}:${hashFragment(extra.search)}:p${page}:pv${POSTER_URL_VERSION}${scopedUser ? `:u${hashUserFragment(scopedUser)}` : ""}:ak${hashFragment(apiKey)}${configParam ? `:cfg${hashFragment(configParam)}` : ""}${mdblistKey ? `:mk${hashFragment(mdblistKey)}` : ""}${regionFragment}${freshness}`
@@ -720,7 +726,9 @@ export async function pictoriumCatalog(
       if (!apiKey) {
         jwKeyMissing++
         log.debug("Catalog key-missing: no TMDB key", { catalogId })
-        return catalogResponse({ metas: [] })
+        return catalogResponse({
+          metas: [buildNoticeMeta({ type: stType, poster: `${getOriginFromRequest(req)}/pictorium.png` })],
+        })
       }
       // streamingCharts non supporta `offset`: l'overfetch da zero + slice è
       // l'unico modo per paginare (l'arricchimento TMDB resta comunque sui 20
@@ -790,8 +798,14 @@ export async function pictoriumCatalog(
       const mediaType = isMovie ? "movie" : "tv"
       const items = await fetchMDBList(listKey, mdblistKey)
 
+      // Block-paging: la lista intera resta in cache MDBList 30min, Stremio
+      // pagina con skip sulla finestra da 20. Lo slice va PRIMA
+      // dell'arricchimento TMDB così le pagine oltre la prima non rifanno
+      // getDetails sui titoli già serviti.
+      const animeSkip = typeof extra.skip === "number" && extra.skip > 0 ? extra.skip : 0
+      const pagedItems = items.slice(animeSkip, animeSkip + 20)
       const seenTmdb = new Set<number>()
-      const results = await concurrentMap(items, async (item, idx) => {
+      const results = await concurrentMap(pagedItems, async (item, idx) => {
         let tmdbId = Number(item.tmdb)
         if (!tmdbId && item.imdb && apiKey) {
           tmdbId = await tmdbFindByImdb(item.imdb, mediaType, apiKey, catalogTimeoutSignal()).catch(() => 0) || 0
@@ -815,14 +829,14 @@ export async function pictoriumCatalog(
           imdb: item.imdb,
           name,
           releaseInfo,
-          rank: idx + 1,
+          rank: animeSkip + idx + 1,
           genres: (d?.genres || []).map((g) => g.name).filter(Boolean),
           backdropPath: d?.backdrop_path ?? null,
           description: d?.overview ?? undefined,
           voteAverage: d?.vote_average ?? undefined,
         }
       }, 5)
-      const validResults = results.filter((r): r is NonNullable<typeof r> => r !== null).slice(0, 20)
+      const validResults = results.filter((r): r is NonNullable<typeof r> => r !== null)
       metas = await concurrentMap(validResults, async (r) => {
         const [imdbId, posterAndShape, logo] = await Promise.all([
           r.imdb ? Promise.resolve(r.imdb) : resolveImdbId(mediaType, r.tmdbId, apiKey, CATALOG_TMDB_TIMEOUT_MS),

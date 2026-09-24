@@ -396,7 +396,7 @@ describe("catalog con chiave namespace (fatal-block fix)", () => {
     expect(body.metas[0].poster).not.toContain(NS_TMDB_KEY)
   })
 
-  it("senza chiavi da nessuna parte: metas vuoti (key-missing esplicito)", async () => {
+  it("senza chiavi da nessuna parte: notice card (key-missing esplicito)", async () => {
     vi.resetModules()
     const { cacheClear } = await import("@/lib/cache")
     cacheClear()
@@ -406,6 +406,9 @@ describe("catalog con chiave namespace (fatal-block fix)", () => {
     const req = nextReq(`http://localhost:3000/catalog/series/pictorium-jw-series.json?u=${UUID_A}`)
     const res = await GET(req, { params: Promise.resolve({ type: "series", id: "pictorium-jw-series" }) })
     expect(res.status).toBe(200)
-    expect((await res.json()).metas).toEqual([])
+    const body = await res.json()
+    expect(body.metas).toHaveLength(1)
+    expect(body.metas[0].id.startsWith("pictorium:notice:")).toBe(true)
+    expect(body.metas[0].poster).toContain("/pictorium.png")
   })
 })

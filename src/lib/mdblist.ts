@@ -25,6 +25,11 @@ export const MDBLISTS = [
 // prossimo accesso.
 const CACHE_TTL_MS = 30 * 60 * 1000
 
+// Blocco unico cachato per lista: Stremio pagina con skip=0,20,40... su
+// finestre da 20, ma l'upstream viene chiamato 1 sola volta ogni 30min.
+// Allineato a fetchCustomMDBList (default limit 500).
+export const MDBLIST_BLOCK_SIZE = 500
+
 export async function fetchMDBList(
   listKey: string,
   apiKey?: string,
@@ -53,7 +58,7 @@ export async function fetchMDBList(
     if (explicitUrl) {
       res = await timedFetch(`${explicitUrl}/lists/snoak/${slug}`, { signal: combineAbortSignals(signal, 8000) }).catch(() => null)
     } else if (key) {
-      res = await timedFetch(`https://api.mdblist.com/lists/snoak/${slug}/items?apikey=${encodeURIComponent(key)}&limit=20`, {
+      res = await timedFetch(`https://api.mdblist.com/lists/snoak/${slug}/items?apikey=${encodeURIComponent(key)}&limit=${MDBLIST_BLOCK_SIZE}`, {
         headers: { "User-Agent": "Mozilla/5.0 Pictorium" },
         signal: combineAbortSignals(signal, 8000),
       }).catch(() => null)
@@ -100,7 +105,7 @@ export async function fetchMDBList(
       if (seenIds.has(dedupeKey)) continue
       seenIds.add(dedupeKey)
       items.push({ imdb, title, year, tmdb })
-      if (items.length >= 20) break
+      if (items.length >= MDBLIST_BLOCK_SIZE) break
     }
     if (items.length > 0) {
       cacheSet(cacheKey, items, ["mdblist"], CACHE_TTL_MS)
