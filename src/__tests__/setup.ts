@@ -127,6 +127,7 @@ const itDict: Record<string, string> = {
   "ui.changelogFeature": "Novità",
   "ui.changelogPerf": "Performance",
   "ui.changelogFix": "Fix",
+  "ui.changelogRecent": "Aggiornamenti recenti",
 }
 
 function mockT(key: string, params?: Record<string, string | number>): string {

@@ -4,7 +4,13 @@ import userEvent from "@testing-library/user-event"
 import { HomeStatusStrip } from "@/components/HomeStatusStrip"
 import { ChangelogModal } from "@/components/ChangelogModal"
 import { renderWithCtx } from "@/__tests__/test-utils"
-import { CHANGELOG_SEEN_KEY, LATEST_CHANGELOG_VERSION } from "@/data/changelog"
+import { CHANGELOG_SEEN_KEY, LATEST_CHANGELOG_VERSION, seenValue } from "@/data/changelog"
+
+// Sezione auto sempre vuota qui (determinismo): il percorso non-vuoto è
+// coperto da ChangelogRecent.test.tsx con modulo mockato.
+vi.mock("@/generated/recent-changes", () => ({
+  RECENT_CHANGES: [],
+}))
 
 function mockStatus(payload: unknown) {
   global.fetch = (async () => {
@@ -74,7 +80,7 @@ describe("HomeStatusStrip changelog dot", () => {
 
     await user.click(screen.getByTestId("changelog-close"))
     await waitFor(() => expect(screen.queryByTestId("changelog-list")).toBeNull())
-    expect(localStorage.getItem(CHANGELOG_SEEN_KEY)).toBe(LATEST_CHANGELOG_VERSION)
+    expect(localStorage.getItem(CHANGELOG_SEEN_KEY)).toBe(seenValue())
     expect(screen.queryByTestId("changelog-dot")).toBeNull()
   })
 })

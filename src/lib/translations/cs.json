@@ -718,5 +718,6 @@
   "ui.changelogTitle": "Novinky",
   "ui.changelogFeature": "Nové",
   "ui.changelogPerf": "Výkon",
-  "ui.changelogFix": "Opravy"
+  "ui.changelogFix": "Opravy",
+  "ui.changelogRecent": "Nedávné aktualizace"
 }

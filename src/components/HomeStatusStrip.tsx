@@ -8,9 +8,10 @@ import { APP_VERSION } from "@/generated/app-version"
 import { currentPathUuid } from "@/lib/user-token"
 import {
   CHANGELOG_SEEN_KEY,
-  LATEST_CHANGELOG_VERSION,
   hasUnseenChangelog,
+  seenValue,
 } from "@/data/changelog"
+import { RECENT_CHANGES } from "@/generated/recent-changes"
 import { ChangelogModal } from "@/components/ChangelogModal"
 
 export function HomeStatusStrip() {
@@ -21,8 +22,9 @@ export function HomeStatusStrip() {
   // versione) — nessun layout shift, nessun errore, mai un "0 attivi" bugiardo.
   const [spaces, setSpaces] = useState<{ users: number; maxUsers: number; activeUsers: number } | null>(null)
   // Changelog unread dot: localStorage read strictly in useEffect (initial
-  // false) to avoid SSR hydration mismatch. Compared against
-  // LATEST_CHANGELOG_VERSION, never APP_VERSION (commit counter).
+  // false) to avoid SSR hydration mismatch. Compared against the composite
+  // seen value (curated version + deploy): lights on curated news OR on a
+  // deploy carrying unseen auto content — never on empty auto alone.
   const [changelogOpen, setChangelogOpen] = useState(false)
   const [hasUnseen, setHasUnseen] = useState(false)
 
@@ -30,13 +32,13 @@ export function HomeStatusStrip() {
     setChangelogOpen(false)
     setHasUnseen(false)
     try {
-      localStorage.setItem(CHANGELOG_SEEN_KEY, LATEST_CHANGELOG_VERSION)
+      localStorage.setItem(CHANGELOG_SEEN_KEY, seenValue())
     } catch {}
   }
 
   useEffect(() => {
     try {
-      setHasUnseen(hasUnseenChangelog(localStorage.getItem(CHANGELOG_SEEN_KEY)))
+      setHasUnseen(hasUnseenChangelog(localStorage.getItem(CHANGELOG_SEEN_KEY), RECENT_CHANGES.length))
     } catch {
       setHasUnseen(false)
     }

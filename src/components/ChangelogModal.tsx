@@ -4,6 +4,7 @@ import { Sparkles, X } from "lucide-react"
 import { useT } from "@/lib/contexts/TranslationContext"
 import { Modal } from "@/components/ui/Modal"
 import { CHANGELOG, type ChangelogItemType } from "@/data/changelog"
+import { RECENT_CHANGES } from "@/generated/recent-changes"
 
 const TYPE_STYLE: Record<ChangelogItemType, string> = {
   feature: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
@@ -69,6 +70,26 @@ export function ChangelogModal({ isOpen, onClose }: Props) {
             </ul>
           </section>
         ))}
+        {RECENT_CHANGES.length > 0 && (
+          <section aria-label={t("ui.changelogRecent") || "Recent updates"} data-testid="changelog-recent">
+            <p className="mt-1 text-[13px] font-semibold text-zinc-100">
+              {t("ui.changelogRecent") || "Recent updates"}
+            </p>
+            <ul className="mt-1.5 space-y-1.5">
+              {RECENT_CHANGES.map((item) => (
+                <li key={item.sha} className="flex items-start gap-2 text-xs text-zinc-300 leading-relaxed">
+                  <span
+                    className={`shrink-0 mt-px text-[10px] font-semibold px-1.5 py-px rounded border ${TYPE_STYLE[item.type]}`}
+                  >
+                    {t(TYPE_LABEL_KEY[item.type])}
+                  </span>
+                  <span className="flex-1">{item.text}</span>
+                  {item.date ? <span className="text-[11px] text-zinc-500 shrink-0">{item.date}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
 
       <div className="flex justify-end pt-1">

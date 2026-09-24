@@ -718,5 +718,6 @@
   "ui.changelogTitle": "새 소식",
   "ui.changelogFeature": "신규 기능",
   "ui.changelogPerf": "성능",
-  "ui.changelogFix": "수정"
+  "ui.changelogFix": "수정",
+  "ui.changelogRecent": "최근 업데이트"
 }

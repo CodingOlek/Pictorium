@@ -4,8 +4,15 @@
 //
 // PROCESS RULE: add a bullet here only when a PR changes something the user
 // can see or click (feature, visible behavior, new setting). Internal fixes,
-// refactors, tests and dep bumps do NOT touch this file — so the unread dot
-// (driven by LATEST_CHANGELOG_VERSION below) lights up only for real news.
+// refactors, tests and dep bumps do NOT touch this file.
+//
+// Below the curated releases the modal also shows RECENT_CHANGES, generated
+// from conventional commits (scripts/write-recent-changes.mjs) — freshness
+// without curation. The dot lights when the curated version changes OR when
+// a deploy carries auto content the user hasn't seen (never for empty auto:
+// no phantom dots in quiet periods).
+
+import { APP_VERSION } from "@/generated/app-version"
 
 export type ChangelogItemType = "feature" | "perf" | "fix"
 
@@ -24,6 +31,16 @@ export interface ChangelogRelease {
 /** Newest first. The dot compares against CHANGELOG[0], never APP_VERSION
  *  (which bumps on every commit and would leave the dot permanently on). */
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: "1.22",
+    date: "2026-09-24",
+    title: "AIO templates & franchise-split safety net",
+    items: [
+      { type: "feature", text: "TMDB-first AIO template with IMDb fallback (dropdown in the install modal)" },
+      { type: "feature", text: "Manual IMDb alias and saved-mapping imdbId reverse lookup for split franchise entries" },
+      { type: "fix", text: "Franchise-shared tt ids resolving to artwork-less entries (404) now follow the alias chain" },
+    ],
+  },
   {
     version: "1.21",
     date: "2026-09-23",
@@ -65,7 +82,21 @@ export const LATEST_CHANGELOG_VERSION: string = CHANGELOG[0].version
 
 export const CHANGELOG_SEEN_KEY = "pictorium_last_seen_changelog"
 
-/** Pure dot logic (unit-tested): unseen when nothing stored or version differs. */
-export function hasUnseenChangelog(seen: string | null): boolean {
-  return seen !== LATEST_CHANGELOG_VERSION
+/** Valore "visto" da persistere: curata + deploy corrente (APP_VERSION cambia
+ *  a ogni commit, quindi ogni deploy è distinguibile). */
+export function seenValue(): string {
+  return `${LATEST_CHANGELOG_VERSION}::${APP_VERSION}`
+}
+
+/**
+ * Pure dot logic (unit-tested). `autoCount` = voci auto non vuote nel modale.
+ * Compatibile col vecchio formato (solo versione curata, senza "::").
+ */
+export function hasUnseenChangelog(seen: string | null, autoCount = 0): boolean {
+  if (seen === null) return true
+  const sep = seen.indexOf("::")
+  const seenCurated = sep === -1 ? seen : seen.slice(0, sep)
+  const seenDeploy = sep === -1 ? "" : seen.slice(sep + 2)
+  if (seenCurated !== LATEST_CHANGELOG_VERSION) return true
+  return autoCount > 0 && seenDeploy !== APP_VERSION
 }

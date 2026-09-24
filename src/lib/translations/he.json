@@ -718,5 +718,6 @@
   "ui.changelogTitle": "מה חדש",
   "ui.changelogFeature": "חדש",
   "ui.changelogPerf": "ביצועים",
-  "ui.changelogFix": "תיקונים"
+  "ui.changelogFix": "תיקונים",
+  "ui.changelogRecent": "עדכונים אחרונים"
 }

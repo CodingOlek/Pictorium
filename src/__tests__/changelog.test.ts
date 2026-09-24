@@ -4,7 +4,9 @@ import {
   CHANGELOG_SEEN_KEY,
   LATEST_CHANGELOG_VERSION,
   hasUnseenChangelog,
+  seenValue,
 } from "@/data/changelog"
+import { APP_VERSION } from "@/generated/app-version"
 
 describe("changelog data", () => {
   it("exposes a non-empty curated list, newest first", () => {
@@ -33,13 +35,33 @@ describe("changelog data", () => {
 describe("hasUnseenChangelog (dot logic)", () => {
   it("unseen when never opened (null)", () => {
     expect(hasUnseenChangelog(null)).toBe(true)
+    expect(hasUnseenChangelog(null, 5)).toBe(true)
   })
 
-  it("seen when stored version matches LATEST", () => {
-    expect(hasUnseenChangelog(LATEST_CHANGELOG_VERSION)).toBe(false)
+  it("seen when stored value matches current composite", () => {
+    expect(hasUnseenChangelog(seenValue())).toBe(false)
+    expect(hasUnseenChangelog(seenValue(), 5)).toBe(false)
   })
 
   it("unseen when a new curated release lands", () => {
     expect(hasUnseenChangelog("0.0")).toBe(true)
+    expect(hasUnseenChangelog("0.0::whatever", 5)).toBe(true)
+  })
+
+  it("legacy bare version still resolves against curated only", () => {
+    expect(hasUnseenChangelog(LATEST_CHANGELOG_VERSION)).toBe(false)
+    expect(hasUnseenChangelog("0.0")).toBe(true)
+  })
+
+  it("deploy part lights only with non-empty auto content", () => {
+    const sameDeployOldCurated = `0.0::${APP_VERSION}`
+    expect(hasUnseenChangelog(sameDeployOldCurated, 0)).toBe(true) // curated differs
+    const cur = `${LATEST_CHANGELOG_VERSION}::old-deploy`
+    expect(hasUnseenChangelog(cur, 3)).toBe(true)
+    expect(hasUnseenChangelog(cur, 0)).toBe(false)
+  })
+
+  it("seenValue pins curated version and current deploy", () => {
+    expect(seenValue()).toBe(`${LATEST_CHANGELOG_VERSION}::${APP_VERSION}`)
   })
 })

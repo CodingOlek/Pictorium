@@ -55,6 +55,12 @@ jobs:
             type=semver,pattern={{version}}
             type=sha,prefix=sha-
 
+      - name: Generate recent-changes for the changelog modal
+        # Il builder Docker non ha .git nel context: si genera qui (checkout
+        # completo) così l'immagine incorpora i commit di questo push. Lo
+        # script non sovrascrive mai senza git (fail-safe per altri builder).
+        run: node scripts/write-recent-changes.mjs
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:

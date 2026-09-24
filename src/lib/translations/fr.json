@@ -718,5 +718,6 @@
   "ui.changelogTitle": "Nouveautés",
   "ui.changelogFeature": "Nouveauté",
   "ui.changelogPerf": "Performance",
-  "ui.changelogFix": "Correctifs"
+  "ui.changelogFix": "Correctifs",
+  "ui.changelogRecent": "Mises à jour récentes"
 }
