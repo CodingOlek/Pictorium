@@ -24,7 +24,7 @@ import { useMappingsStore } from "./useMappingsStore"
 import { usePosterEditor, PosterEditorProvider } from "./contexts/PosterEditorContext"
 import { usePosterSave } from "./usePosterSave"
 import { defaultGradientHeightForPoster, defaultBlurFadeForPoster } from "./gradient-defaults"
-import { computeLogoOffsetBounds, PORTRAIT_LOGO_MAX_HEIGHT_PCT } from "./logo-layout"
+import { computeLogoOffsetBounds, PORTRAIT_LOGO_MAX_HEIGHT_PCT, PORTRAIT_LOGO_TOP_OFFSET } from "./logo-layout"
 import { LAND_W, LAND_H } from "./constants"
 import { useOutsideDismiss } from "./useOutsideDismiss"
 import { type AggregatedRatings } from "./ratings"
@@ -618,7 +618,7 @@ export function usePictorium(): PictoriumCtx {
       ...(hasBadges ? { bottomMarginPct: 12 } : {}),
       ...(isLandscapeShape
         ? { maxWidthPct: 40, maxHeightPct: 24, bottomMarginPct: 25, topOffset: 55 }
-        : { maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT }),
+        : { maxHeightPct: PORTRAIT_LOGO_MAX_HEIGHT_PCT, topOffset: PORTRAIT_LOGO_TOP_OFFSET }),
     })
   }, [navigation.previewPoster, navigation.selectedLogo, logoScale, hasBadges, posterShape, logoAlign])
 
