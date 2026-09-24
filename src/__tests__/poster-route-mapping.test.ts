@@ -742,7 +742,7 @@ describe("GET /api/poster/[type]/[id] with saved mappings", () => {
     expect(vi.mocked(fetchAllWikidata)).toHaveBeenCalledWith(61002, "movie", expect.anything(), { wikidataId: "Q23577" })
   })
 
-  it("falls back to null wikidataId for legacy mappings (SPARQL preserved)", async () => {
+  it("falls back to null wikidataId for legacy mappings without a key (SPARQL preserved)", async () => {
     const poster = await qidPoster()
     mockedGetById.mockResolvedValue({
       tmdbId: 61003, mediaType: "movie", title: "Qid Legacy", posterPath: "/qid-legacy.jpg",
@@ -758,6 +758,44 @@ describe("GET /api/poster/[type]/[id] with saved mappings", () => {
     })
     expect(res.status).toBe(200)
     expect(vi.mocked(fetchAllWikidata)).toHaveBeenCalledWith(61003, "movie", expect.anything(), { wikidataId: null })
+  })
+
+  it("resolves the QID server-side for legacy mappings when api_key is present", async () => {
+    const poster = await qidPoster()
+    mockedGetById.mockResolvedValue({
+      tmdbId: 61004, mediaType: "movie", title: "Qid Legacy Resolved", posterPath: "/qid-legacy2.jpg",
+      logoPath: null, originalPosterPath: null, language: "it",
+      rankingBadges: true, updatedAt: "2026-09-20T00:00:00.000Z",
+    })
+    mockedGetExternalIds.mockResolvedValue({ imdb_id: null, wikidata_id: "Q23577" })
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(poster), {
+      headers: { "content-type": "image/png" },
+    }))
+    vi.mocked(fetchAllWikidata).mockClear()
+    const res = await GET(new NextRequest("http://localhost:3000/api/poster/movie/61004?api_key=testkey"), {
+      params: Promise.resolve({ type: "movie", id: "61004" }),
+    })
+    expect(res.status).toBe(200)
+    expect(vi.mocked(fetchAllWikidata)).toHaveBeenCalledWith(61004, "movie", expect.anything(), { wikidataId: "Q23577" })
+  })
+
+  it("discards a garbage TMDB wikidata_id (SPARQL preserved)", async () => {
+    const poster = await qidPoster()
+    mockedGetById.mockResolvedValue({
+      tmdbId: 61005, mediaType: "movie", title: "Qid Garbage", posterPath: "/qid-garbage.jpg",
+      logoPath: null, originalPosterPath: null, language: "it",
+      rankingBadges: true, updatedAt: "2026-09-20T00:00:00.000Z",
+    })
+    mockedGetExternalIds.mockResolvedValue({ imdb_id: null, wikidata_id: "nope" })
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(poster), {
+      headers: { "content-type": "image/png" },
+    }))
+    vi.mocked(fetchAllWikidata).mockClear()
+    const res = await GET(new NextRequest("http://localhost:3000/api/poster/movie/61005?api_key=testkey"), {
+      params: Promise.resolve({ type: "movie", id: "61005" }),
+    })
+    expect(res.status).toBe(200)
+    expect(vi.mocked(fetchAllWikidata)).toHaveBeenCalledWith(61005, "movie", expect.anything(), { wikidataId: null })
   })
 })
 

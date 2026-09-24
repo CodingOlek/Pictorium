@@ -14,6 +14,7 @@ import { getRegionDef, normalizeRegion, parseRegion, defaultRegionForLang } from
 import { BEST_FIT_GLOBAL, resolveLogoFitEnabled } from "@/lib/best-fit-config"
 import { selectBestLogoFitPosterPath } from "@/lib/poster-auto-fit"
 import { fetchAllWikidata, matchTMDBStudios, directorBadgeLabel, isValidWikidataQid, type WikidataResult } from "@/lib/awards"
+import { resolveWikidataId } from "@/lib/imdb-cache"
 import { createT } from "@/lib/i18n"
 import type { EnrichedAnimeItem } from "@/lib/validation"
 import { fetchMDBList, type MDBListEntry } from "@/lib/mdblist"
@@ -617,7 +618,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // QID Wikidata per il fast-path REST awards (wbgetentities, ~150ms) invece
   // della lotteria SPARQL (4-13s contro race da 2.5s). Catena: query
   // `wikidata_id` (la preview lo ha già dai details, zero RTT) > mapping
-  // salvato > session cache TMDB del processo > ramo else (details +
+  // salvato > session cache TMDB del processo > resolve server-side con memo
+  // 7gg (quarto anello, prima della race) > ramo else (details +
   // external_ids in append). Senza QID ovunque: fallback SPARQL invariato.
   let wikidataId: string | null = null
   {
@@ -1081,6 +1083,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     // Rank anime inviato dal client nella preview WYSIWYG (override del fetch).
     const qAnimeRankParam = req.nextUrl.searchParams.get("animerank")
     const qAnimeRank = qAnimeRankParam ? Number(qAnimeRankParam) : NaN
+
+    // Quarto anello QID (mapping legacy senza wikidataId salvato): una
+    // external_ids con memo 7gg invece della lotteria SPARQL — il REST diventa
+    // il default anche per Stremio. Solo con ranking ON e chiave TMDB (senza
+    // chiave o a fetch fallito il QID resta null e vale lo SPARQL invariato);
+    // tetto 1500ms per non tassare il render a freddo oltre la race da 2.5s.
+    if (!wikidataId && rankingEnabledEarly && effTmdbKey) {
+      wikidataId = await resolveWikidataId(mediaType, tmdbId, effTmdbKey, 1500)
+    }
 
     // 5. Fetch all data in parallel: images + rankings + quality + wikidata + keywords + imdbTop250
     //    All dependencies are available before this point — no Block B depends on Block A

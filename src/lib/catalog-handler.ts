@@ -490,6 +490,13 @@ export async function pictoriumCatalog(
       const cachedSearch = cacheGet<{ metas: StremioMeta[] }>(searchCacheKey)
       if (cachedSearch) return catalogResponse(cachedSearch)
 
+      // Un id IMDb non è una persona: il ramo people torna sempre vuoto.
+      if (/^tt\d{7,10}$/i.test(extra.search.trim())) {
+        const body = { metas: [] as StremioMeta[] }
+        cacheSet(searchCacheKey, body, ["stremio", "search"], 10 * 60 * 1000)
+        return catalogResponse(body)
+      }
+
       if (!isPersonQuery(extra.search)) {
         const body = { metas: [] as StremioMeta[] }
         cacheSet(searchCacheKey, body, ["stremio", "search"], 60_000)
@@ -534,11 +541,10 @@ export async function pictoriumCatalog(
 
         const results: (StremioMeta | null)[] = await concurrentMap(paged, async (item) => {
           if (!item.id) return null
-          const imdbId = await resolveImdbId(stType === "movie" ? "movie" : "tv", item.id, apiKey)
           const { poster, banner, posterShape } = await pictoriumPosterAndShape(req, stType, item.id, configParam, userParam, undefined, posterLang, region.code)
           const releaseInfo = (item.release_date || item.first_air_date || "").slice(0, 4) || undefined
           return {
-            id: catalogMetaId(imdbId, item.id),
+            id: catalogMetaId(null, item.id),
             type: stType,
             name: item.title || item.name || "",
             poster,
@@ -572,6 +578,50 @@ export async function pictoriumCatalog(
     const cachedSearch = cacheGet<{ metas: StremioMeta[] }>(searchCacheKey)
     if (cachedSearch) return catalogResponse(cachedSearch)
 
+    // Id IMDb esatto: risoluzione diretta via /find, senza full-text search.
+    // Un solo risultato → le pagine oltre la prima sono vuote.
+    const imdbQuery = extra.search.trim()
+    if (/^tt\d{7,10}$/i.test(imdbQuery)) {
+      if ((extra.skip || 0) > 0) {
+        const emptyBody = { metas: [] as StremioMeta[] }
+        cacheSet(searchCacheKey, emptyBody, ["stremio", "search"], 10 * 60 * 1000)
+        return catalogResponse(emptyBody)
+      }
+      try {
+        const foundId = await tmdbFindByImdb(imdbQuery, stType === "movie" ? "movie" : "tv", apiKey)
+        if (!foundId) {
+          const emptyBody = { metas: [] as StremioMeta[] }
+          cacheSet(searchCacheKey, emptyBody, ["stremio", "search"], 10 * 60 * 1000)
+          return catalogResponse(emptyBody)
+        }
+        const d = await getDetails(stType === "movie" ? "movie" : "tv", foundId, tmdbLang, apiKey)
+        const genreNames = await tmdbGenreNames(stType, apiKey, tmdbLang)
+        const { poster, banner, posterShape } = await pictoriumPosterAndShape(req, stType, foundId, configParam, userParam, undefined, posterLang, region.code)
+        const body = {
+          metas: [
+            {
+              id: catalogMetaId(null, foundId),
+              type: stType,
+              name: d?.title || d?.name || imdbQuery,
+              poster,
+              posterShape,
+              banner,
+              background: catalogBackground(d?.backdrop_path ?? null),
+              releaseInfo: (d?.release_date || d?.first_air_date || "").slice(0, 4) || undefined,
+              imdbRating: d?.vote_average ? d.vote_average.toFixed(1) : undefined,
+              genres: genreNamesFromIds(d?.genres?.map((g) => g.id), genreNames),
+              description: d?.overview ?? undefined,
+            },
+          ] as StremioMeta[],
+        }
+        cacheSet(searchCacheKey, body, ["stremio", "search"], 10 * 60 * 1000)
+        return catalogResponse(body)
+      } catch (e) {
+        log.error("IMDb id search failed", { error: e instanceof Error ? e.message : String(e) })
+        return catalogResponse({ metas: [] })
+      }
+    }
+
     try {
       const searchRes = stType === "movie"
         ? await searchMovies(extra.search, tmdbLang, apiKey, page)
@@ -582,11 +632,10 @@ export async function pictoriumCatalog(
       const genreNames = await tmdbGenreNames(stType, apiKey, tmdbLang)
       const results: (StremioMeta | null)[] = await concurrentMap(items, async (item) => {
         if (!item.id) return null
-        const imdbId = await resolveImdbId(stType === "movie" ? "movie" : "tv", item.id, apiKey)
         const { poster, banner, posterShape } = await pictoriumPosterAndShape(req, stType, item.id, configParam, userParam, undefined, posterLang, region.code)
         const releaseInfo = (item.release_date || item.first_air_date || "").slice(0, 4) || undefined
         return {
-          id: catalogMetaId(imdbId, item.id),
+          id: catalogMetaId(null, item.id),
           type: stType,
           name: item.title || item.name || "",
           poster,
