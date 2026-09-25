@@ -69,6 +69,7 @@ import {
   bottomLuminance,
 } from "@/lib/poster-render-helpers"
 import { computeBottomLight } from "@/lib/accent-color"
+import { NON_CLEAN_BLUR_FADE, NON_CLEAN_GRADIENT_HEIGHT } from "@/lib/gradient-defaults"
 import { LAND_W, LAND_H, landscapeBackdropUrl, pillarboxLandscapeBase, cropBackdropToPortrait } from "@/lib/image-utils"
 import { generatePosterBuffer, type GenerationInput } from "@/lib/poster-service"
 import { computeTopBadge } from "@/lib/poster-badge"
@@ -563,6 +564,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // Block A fa il fetch normale.
   let logoPathBuffer: Buffer | null = null
   let logoPath: string | null = null
+  // Il poster finale del ramo automatico è clean (senza testo incorporato)?
+  // Solo TMDB iso_639_1===null o rescue TVDB textless. Serve a: (1) non
+  // sovrapporre mai il logo a un poster con testo, (2) forzare il profilo
+  // blur non-clean sui default iniettati da Stremio (Golden Rule col client).
+  let autoPosterClean = false
+  // Il rescue TVDB ha restituito artwork textless (base clean, logo tenuto)?
+  let tvdbRescueClean = false
   // Lingua richiesta per artwork/logo (ramo non-mappato; default "it"):
   // serve al blocco debug=1 fuori dallo scope del ramo.
   let posterRequestedLang = "it"
@@ -852,6 +860,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
 
       const clean = images.posters.find((p: TMDBImage) => p.iso_639_1 === null)
       if (clean) {
+        // Ramo clean: best-fit pesca solo dalla pool clean, quindi il poster
+        // finale resta clean (logo tenuto) salvo il fallback in lingua sotto.
+        autoPosterClean = true
         const qLogoFit = req.nextUrl.searchParams.get("logoFit")
         // Catena in best-fit-config.ts: globale > query > config token >
         // per-shape del namespace > legacy. Default spento.
@@ -919,6 +930,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           const fallbackPoster = langPoster || origPoster || nonCleanPoster || clean
           log.info("No logo — fallback to language poster", { mediaType, tmdbId, poster: fallbackPoster.file_path })
           posterPath = fallbackPoster.file_path
+          autoPosterClean = fallbackPoster.iso_639_1 === null
         }
       } else {
         // B1: TVDB rescue — solo senza clean TMDB, con logo e chiave TVDB
@@ -937,7 +949,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
                 : null)
             if (remoteTvdbId) {
               const arts = await getTvdbArtworks(mediaType, remoteTvdbId, tvdbApiKey, renderAbort.signal)
-              tvdbRescue = pickTvdbPoster(arts, preferredLanguage)?.image ?? null
+              const rescuedArt = pickTvdbPoster(arts, preferredLanguage)
+              tvdbRescue = rescuedArt?.image ?? null
+              // Solo il textless salva davvero il logo: con testo incorporato
+              // la base non è clean → niente logo sopra (doppio logo).
+              tvdbRescueClean = !!tvdbRescue && rescuedArt?.includesText === false
             }
           } catch {
             // Fallthrough al fallback in lingua.
@@ -947,6 +963,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           log.info("TVDB poster rescue", { mediaType, tmdbId, poster: tvdbRescue })
           recordTvdbRescue()
           posterPath = tvdbRescue
+          autoPosterClean = tvdbRescueClean
+          if (!tvdbRescueClean) {
+            // Base con testo incorporato: mai il logo sopra (stesso invariante
+            // del fallback in lingua sotto e del client).
+            logoPath = null
+            logoPathBuffer = null
+          }
         } else {
           // Nessun clean disponibile: il poster in lingua ha già il titolo
           // stampato → mai sovrapporre il logo (stesso invariante del client:
@@ -1459,6 +1482,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       preRelease, posterShape, logoAlign, hideLogo,
     } = renderConfig
 
+    // Allineamento blur non-clean (Golden Rule col client): se il poster
+    // finale del ramo automatico ha testo incorporato, i default globali
+    // iniettati negli URL Stremio (30/50) non devono vincere sul profilo
+    // non-clean (20/80) — come fa il client. Solo Stremio unmapped: mai su
+    // preview (slider editor), poster esplicito o mapping (intento utente).
+    let effBlurHeight = blurHeight
+    let effBlurFade = blurFade
+    if (!isPreview && !mapping && !queryPoster && !autoPosterClean) {
+      effBlurHeight = NON_CLEAN_GRADIENT_HEIGHT
+      effBlurFade = NON_CLEAN_BLUR_FADE
+    }
+
     // Colonna rating separati attiva solo con badge voto visibili e almeno un
     // valore: sostituisce il segmento ★ nel badge genere (sostituire, non
     // sommare). Senza valori → fallback media invariato.
@@ -1618,11 +1653,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
           topLight,
           bottomLight,
           blurEnabled,
-          blurHeight,
+          blurHeight: effBlurHeight,
           blurIntensity,
-          blurFade,
+          blurFade: effBlurFade,
           blurDarkness,
-          gradientHeight: blurHeight,
+          gradientHeight: effBlurHeight,
           accentColor: accentOverride?.genreColor || null,
         },
         logos: {
@@ -1657,7 +1692,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
       ratings: customRatingConfig.enabled ? [...new Map([...ratings, ...customRatings].map(item => [item.id, item])).values()] : undefined,
       posterBuf, logoFetch, backdropFetch: isLandscape ? null : backdropFetch,
       backdropScale, backdropOffsetX, backdropOffsetY,
-      blurEnabled, blurHeight, blurIntensity, blurFade, blurDarkness, tintStrength,
+      blurEnabled, blurHeight: effBlurHeight, blurIntensity, blurFade: effBlurFade, blurDarkness, tintStrength,
       badgesEnabled, rankingEnabled, genreName, voteAverage, badgeStyle,
       rankingBadgeStyle, badgeGenre, badgeYear, badgeRating: effectiveBadgeRating, badgeQuality,
       separateRatings: useSeparate ? sepItems : undefined,

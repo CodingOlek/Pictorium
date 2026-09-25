@@ -14,7 +14,6 @@ import { PosterOptions } from "@/components/PosterOptions"
 import { BackdropOptions } from "@/components/BackdropOptions"
 import { LogoOptions } from "@/components/LogoOptions"
 import { EditorPanel } from "@/components/EditorPanel"
-import { buildPreviewUrl } from "@/lib/poster-url"
 import { copyText } from "@/lib/clipboard"
 import { userFetch } from "@/lib/http"
 import { SearchBar } from "@/components/SearchBar"
@@ -28,19 +27,16 @@ import { TransformControls } from "@/components/TransformControls"
 import { EpisodeGroupControls } from "@/components/EpisodeGroupControls"
 import { JwRankBadge } from "@/components/JwRankBadge"
 import { usePosterPreview } from "@/lib/usePosterPreview"
-import { Check, Clock, ExternalLink, Save, Trash2, X, ChevronLeft, RectangleVertical, RectangleHorizontal } from "lucide-react"
+import { Check, Clock, Save, Trash2, X, ChevronLeft, RectangleVertical, RectangleHorizontal, Tv } from "lucide-react"
 
 export default function EditView() {
   const accentColor = usePSelector((v) => v.accentColor)
-  const autoAccentColor = usePSelector((v) => v.autoAccentColor)
   const clearRecentSearches = usePSelector((v) => v.clearRecentSearches)
   const doSearch = usePSelector((v) => v.doSearch)
   const goHome = usePSelector((v) => v.goHome)
   const loadingImages = usePSelector((v) => v.loadingImages)
   const logos = usePSelector((v) => v.logos)
   const mappingsMap = usePSelector((v) => v.mappingsMap)
-  const mdblistAnimeList = usePSelector((v) => v.mdblistAnimeList)
-  const metaInfo = usePSelector((v) => v.metaInfo)
   const posterActivePath = usePSelector((v) => v.posterActivePath)
   const posters = usePSelector((v) => v.posters)
   const previewPoster = usePSelector((v) => v.previewPoster)
@@ -63,6 +59,8 @@ export default function EditView() {
   const setSelected = usePSelector((v) => v.setSelected)
   const setSelectedLogo = usePSelector((v) => v.setSelectedLogo)
   const setSettingsOpen = usePSelector((v) => v.setSettingsOpen)
+  const stremioPreview = usePSelector((v) => v.stremioPreview)
+  const setStremioPreview = usePSelector((v) => v.setStremioPreview)
   const titleOf = usePSelector((v) => v.titleOf)
   const tmdbKey = usePSelector((v) => v.tmdbKey)
   const serverHasTmdbKey = usePSelector((v) => v.serverHasTmdbKey)
@@ -73,10 +71,6 @@ export default function EditView() {
   const serverKeyStatus = usePSelector((v) => v.serverKeyStatus)
   // Chiave TVDB effettiva = device oppure namespace (risolta dal server via ?u=).
   const hasTvdbKey = !!tvdbApiKey || !!serverKeyStatus?.tvdb
-  const topEdgeColor = usePSelector((v) => v.topEdgeColor)
-  const bottomEdgeColor = usePSelector((v) => v.bottomEdgeColor)
-  const trendRank = usePSelector((v) => v.trendRank)
-  const currentUserId = usePSelector((v) => v.currentUserId)
   const yearOf = usePSelector((v) => v.yearOf)
   const { t, lang } = useT()
   const ed = usePosterEditor()
@@ -116,8 +110,14 @@ export default function EditView() {
   }, [])
   const profileGate = multiUserOn && !pathUuid
   const [activePosterTab, setActivePosterTab] = useState("clean")
-  const [testUrl, setTestUrl] = useState<string | null>(null)
+  const stremioPreviewUrl = usePSelector((v) => v.stremioPreviewUrl)
+  const [stremioModalOpen, setStremioModalOpen] = useState(false)
   const [urlCopied, setUrlCopied] = useState(false)
+
+  const closeStremioModal = useCallback(() => {
+    setStremioModalOpen(false)
+    setStremioPreview(false)
+  }, [setStremioPreview])
 
   // Quando si seleziona un nuovo titolo, mostra sempre prima i clean (iso_639_1 === null)
   useEffect(() => {
@@ -463,7 +463,7 @@ export default function EditView() {
 
             {/* CENTER: Preview */}
             <div className={mobileSection === "preview" ? "block w-full" : "hidden lg:block h-full min-w-0"}>
-              <EditorPanel className="animate-fade-scale-in h-full" title={<><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 align-middle shadow-[0_0_6px_rgba(52,211,153,0.7)]" aria-hidden="true" />{t("ui.previewLive")}</>} headerRight={
+              <EditorPanel className="animate-fade-scale-in h-full" title={<><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 align-middle shadow-[0_0_6px_rgba(52,211,153,0.7)]" aria-hidden="true" />{stremioPreview ? "Stremio" : t("ui.previewLive")}</>} headerRight={
                 <div className="flex gap-1" role="group" aria-label={t("ui.posterShape")}>
                   <button
                     type="button"
@@ -510,71 +510,13 @@ export default function EditView() {
                         </button>
                       )
                     })()}
-                    <button type="button" aria-label={t("ui.testUrl")} onClick={() => {
-                      if (!selected || !previewPoster) return
-                      const url = buildPreviewUrl({
-                        selected: selected,
-                        previewPoster: previewPoster,
-                        selectedLogo: selectedLogo,
-                        selectedBackdrop: ed.selectedBackdrop,
-                        logoScale: ed.logoScale,
-                        logoOffsetX: ed.logoOffsetX,
-                        logoOffsetY: ed.logoOffsetY,
-                        backdropScale: ed.backdropScale,
-                        backdropOffsetX: ed.backdropOffsetX,
-                        backdropOffsetY: ed.backdropOffsetY,
-                        metaInfo: metaInfo,
-                        trendRank: trendRank,
-                        mdblistAnimeList: mdblistAnimeList,
-                        topEdgeColor: topEdgeColor,
-                        bottomEdgeColor: bottomEdgeColor,
-                        accentColor: accentColor,
-                        autoAccentColor: autoAccentColor,
-                        lang: lang,
-                        region: ed.defaultRegion,
-                        tmdbKey: tmdbKey,
-                        userId: currentUserId,
-                      }, {
-                        globalBadges: ed.globalBadges,
-                        rankingBadges: ed.rankingBadges,
-                        badgeGenre: ed.badgeGenre,
-                        badgeYear: ed.badgeYear,
-                        badgeRating: ed.badgeRating,
-                        badgeQuality: ed.badgeQuality,
-                        customRatings: ed.customRatings,
-                        ratingSources: ed.ratingSources,
-                        separateRatings: ed.separateRatings,
-                        badgeStyle: ed.badgeStyle,
-                        rankingBadgeStyle: ed.rankingBadgeStyle,
-                        customBadge: ed.customBadge,
-                        gradientHeight: ed.gradientHeight,
-                        blurIntensity: ed.blurIntensity,
-                        blurFade: ed.blurFade,
-                        blurDarkness: ed.blurDarkness,
-                        blurEnabled: ed.blurEnabled,
-                        networkLogo: ed.networkLogo,
-                        ribbonSide: ed.ribbonSide,
-                        posterShape: ed.posterShape,
-                        logoAlign: ed.logoAlign,
-                        topBadgeScale: ed.topBadgeScale,
-                        topBadgeOffsetX: ed.topBadgeOffsetX,
-                        topBadgeOffsetY: ed.topBadgeOffsetY,
-                        genreBadgeScale: ed.genreBadgeScale,
-                        qualityBadgeScale: ed.qualityBadgeScale,
-                        genreBadgeOffsetX: ed.genreBadgeOffsetX,
-                        genreBadgeOffsetY: ed.genreBadgeOffsetY,
-                        qualityBadgeOffsetX: ed.qualityBadgeOffsetX,
-                        qualityBadgeOffsetY: ed.qualityBadgeOffsetY,
-                        networkLogoScale: ed.networkLogoScale,
-                        networkLogoOffsetX: ed.networkLogoOffsetX,
-                        networkLogoOffsetY: ed.networkLogoOffsetY,
-                      })
-                      if (!url) return
-                      setUrlCopied(false)
-                      setTestUrl(`${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}`)
+                    <button type="button" aria-label="URL Stremio" onClick={() => {
+                      setStremioPreview(true)
+                      setStremioModalOpen(true)
+                      setMobileSection("preview")
                     }} className="btn-secondary min-h-[44px] px-4 rounded-xl text-xs">
-                      <ExternalLink className="w-4 h-4" />
-                      {t("ui.testUrl")}
+                      <Tv className="w-4 h-4" />
+                      Testa URL Stremio
                     </button>
                     <button type="button" aria-label={t("ui.savePoster")} onClick={handleSave} className="btn-primary min-h-[44px] px-5 rounded-xl">
                       <Save className="w-4 h-4" />
@@ -734,29 +676,28 @@ export default function EditView() {
         </>
       )}
 
-      {testUrl && createPortal(
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm overflow-y-auto animate-fade-scale-in" onClick={() => setTestUrl(null)}>
+      {stremioModalOpen && stremioPreview && stremioPreviewUrl && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm overflow-y-auto animate-fade-scale-in" onClick={closeStremioModal} role="dialog" aria-modal="true" aria-label="Stremio">
           <div className="max-w-md mx-auto px-4 py-8 min-h-full flex flex-col justify-center" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-zinc-50">{t("ui.testUrlTitle")}</h3>
-              <button type="button" onClick={() => setTestUrl(null)} aria-label={t("ui.close")} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface2 hover:bg-zinc-700 text-muted hover:text-zinc-200 transition-all"><X className="w-5 h-5" /></button>
+              <h3 className="text-lg font-bold text-zinc-50">Stremio</h3>
+              <button type="button" onClick={closeStremioModal} aria-label={t("ui.close")} className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface2 hover:bg-zinc-700 text-muted hover:text-zinc-200 transition-all"><X className="w-5 h-5" /></button>
             </div>
             <div className="rounded-2xl overflow-hidden border border-white/10 bg-surface shadow-2xl">
               {/* eslint-disable-next-line @next/next/no-img-element -- poster reale renderizzato dal server */}
-              <img src={testUrl} alt={t("ui.testUrlTitle")} className="w-full" />
+              <img src={stremioPreviewUrl} alt="Stremio" className="w-full" />
             </div>
             <div className="mt-4 flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2">
-              <code className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-mono text-muted select-text">{testUrl}</code>
+              <code className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-mono text-muted select-text">{stremioPreviewUrl}</code>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3">
               <button type="button" onClick={async () => {
                 // copyText non lancia mai: false se la clipboard non è disponibile.
-                if (!(await copyText(testUrl))) return
+                if (!(await copyText(stremioPreviewUrl))) return
                 setUrlCopied(true)
                 if (urlCopiedTimerRef.current) clearTimeout(urlCopiedTimerRef.current)
                 urlCopiedTimerRef.current = setTimeout(() => setUrlCopied(false), 2000)
-              }} className="btn-secondary min-h-[44px] rounded-xl text-xs">{urlCopied ? t("ui.copied") : t("ui.copyPosterUrl")}</button>
-              <button type="button" onClick={() => window.open(testUrl, "_blank")} className="btn-primary min-h-[44px] rounded-xl text-xs">{t("ui.openInNewTab")}</button>
+              }} className="btn-secondary min-h-[44px] rounded-xl text-xs w-full">{urlCopied ? t("ui.copied") : t("ui.copyUrl")}</button>
             </div>
           </div>
         </div>,

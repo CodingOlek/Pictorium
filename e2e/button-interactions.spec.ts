@@ -248,15 +248,16 @@ test.describe("Button interactions and immediate updates", () => {
     await logoTab.click()
     await expect(logoTab).toHaveAttribute("aria-selected", "true")
 
-    // Test Testa URL button (wait for preview poster to load so button is visible)
-    const testUrlBtn = page.getByRole("button", { name: /Testa URL/i })
-    await expect(testUrlBtn).toBeVisible({ timeout: 15_000 })
-    await testUrlBtn.click()
-    const testModalTitle = page.getByRole("heading", { name: /Anteprima URL/i })
-    await expect(testModalTitle).toBeVisible()
-    const closeTestModal = page.getByRole("button", { name: "Chiudi" }).or(page.getByLabel("Chiudi")).first()
-    await closeTestModal.click()
-    await expect(testModalTitle).not.toBeVisible()
+    // Bottone "URL Stremio" nel footer: apre il modale con URL + anteprima
+    // dell'artefatto finale (ex modale "Testa URL").
+    const stremioBtn = page.getByRole("button", { name: "URL Stremio", exact: true })
+    await expect(stremioBtn).toBeVisible({ timeout: 15_000 })
+    await stremioBtn.click()
+    const stremioDialog = page.getByRole("dialog", { name: "Stremio" })
+    await expect(stremioDialog).toBeVisible({ timeout: 20_000 })
+    await expect(stremioDialog.getByText("/api/poster/", { exact: false }).first()).toBeVisible()
+    await stremioDialog.getByRole("button", { name: "Chiudi" }).click()
+    await expect(stremioDialog).not.toBeVisible()
 
     // Test Salva Poster button
     const savePosterBtn = page.getByRole("button", { name: /Salva Poster/i }).first()
