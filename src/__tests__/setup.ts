@@ -56,6 +56,8 @@ const itDict: Record<string, string> = {
   "ui.posterWithLogo": "Poster con logo",
   "ui.cleanPoster": "Poster pulito",
   "ui.emptyPostersSub": "Nessun poster salvato. Personalizza un poster dai cataloghi e apparirà qui.",
+  "ui.backdrops": "Sfondi",
+  "ui.testStremioUrl": "Testa URL Stremio",
   "ui.emptyCollectionTitle": "Nessuna collezione",
   "ui.emptyCollectionSub": "Crea la tua prima collezione per organizzare i poster.",
   "ui.showAllPosters": "Mostra tutti ({count})",

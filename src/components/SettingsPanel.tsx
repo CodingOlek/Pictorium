@@ -319,14 +319,14 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
     <div
       role="tablist"
       aria-label={t("ui.settingsTitle")}
-      className="flex border-b border-white/10 px-3 sm:px-6 bg-white/[0.02] gap-1 shrink-0"
+      className="flex border-b border-white/10 px-3 sm:px-6 bg-white/[0.02] gap-1 shrink-0 overflow-x-auto scrollbar-none"
     >
       <button
         type="button"
         role="tab"
         aria-selected={activeTab === "badge"}
         onClick={() => setActiveTab("badge")}
-        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
           activeTab === "badge"
             ? "border-accent-orange text-accent-orange"
             : "border-transparent text-zinc-400 hover:text-zinc-200"
@@ -340,7 +340,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
         role="tab"
         aria-selected={activeTab === "trasforma"}
         onClick={() => setActiveTab("trasforma")}
-        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
           activeTab === "trasforma"
             ? "border-accent-orange text-accent-orange"
             : "border-transparent text-zinc-400 hover:text-zinc-200"
@@ -354,7 +354,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
         role="tab"
         aria-selected={activeTab === "prefs"}
         onClick={() => setActiveTab("prefs")}
-        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
           activeTab === "prefs"
             ? "border-accent-orange text-accent-orange"
             : "border-transparent text-zinc-400 hover:text-zinc-200"
@@ -368,7 +368,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
         role="tab"
         aria-selected={activeTab === "data"}
         onClick={() => setActiveTab("data")}
-        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+        className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
           activeTab === "data"
             ? "border-accent-orange text-accent-orange"
             : "border-transparent text-zinc-400 hover:text-zinc-200"
@@ -383,7 +383,7 @@ export function SettingsPanel({ setSettingsOpen, exportData, importData, mobile 
           role="tab"
           aria-selected={activeTab === "spazio"}
           onClick={() => setActiveTab("spazio")}
-          className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === "spazio"
               ? "border-accent-orange text-accent-orange"
               : "border-transparent text-zinc-400 hover:text-zinc-200"

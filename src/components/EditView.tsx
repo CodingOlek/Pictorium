@@ -218,7 +218,8 @@ export default function EditView() {
     }
   }, [ed, removeBackdrop, selectedMapping, selectedMappingKey])
 
-  const handleSelectPoster = useCallback((img: TMDBImage) => {    void selectPoster(img)
+  const handleSelectPoster = useCallback((img: TMDBImage) => {
+    void selectPoster(img)
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023.5px)").matches) {
       setMobileSection("preview")
     }
@@ -231,6 +232,14 @@ export default function EditView() {
       setMobileSection("preview")
     }
   }, [selectBackdrop])
+
+  // Mobile: tap su un logo salta all'anteprima (come poster e backdrop).
+  const handleSelectLogo = useCallback((img: TMDBImage) => {
+    void selectLogo(img)
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023.5px)").matches) {
+      setMobileSection("preview")
+    }
+  }, [selectLogo])
 
   const searchBar = (
     <div className={selected ? "w-full max-w-lg relative z-[100] isolate" : "max-w-lg mx-auto relative z-[100] isolate mb-8"}>
@@ -365,83 +374,86 @@ export default function EditView() {
             <p className="header-tagline text-xs md:text-sm text-muted">{t("ui.homeTagline")}</p>
           </header>
 
-          {/* Mobile Top Bar: Back / Title / Quick Save */}
-          <div className="flex lg:hidden items-center justify-between w-full px-2 mb-3 gap-2">
-            <button
-              type="button"
-              onClick={() => { setSelected(null); setPreviewPoster(null); setSelectedLogo(null); setPreviewId(null) }}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-surface border border-white/10 text-xs font-semibold text-zinc-300 hover:text-white active:scale-95 transition-all shrink-0 cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>{t("ui.back")}</span>
-            </button>
-            <div className="flex-1 min-w-0 text-center px-1">
-              <p className="text-xs font-bold text-zinc-100 truncate">{titleOf(selected)}</p>
-              <p className="text-[10px] text-zinc-400 font-mono">{yearOf(selected)} · {selected.media_type === "movie" ? t("ui.movie") : t("ui.tvSeries")}</p>
-            </div>
-            {previewPoster && (
+          {/* Mobile Sticky Controls Header (Top Bar + Segmented Switcher) */}
+          <div className="sticky top-0 z-30 flex flex-col items-center w-full bg-background/95 backdrop-blur-xl pt-1 pb-3 px-2 lg:hidden shadow-md shadow-black/20">
+            {/* Mobile Top Bar: Back / Title / Quick Save */}
+            <div className="flex items-center justify-between w-full mb-2.5 gap-2 max-w-md mx-auto">
               <button
                 type="button"
-                aria-label={t("ui.savePoster")}
-                onClick={handleSave}
-                className="btn-primary flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white font-semibold text-xs shrink-0 cursor-pointer"
+                onClick={() => { setSelected(null); setPreviewPoster(null); setSelectedLogo(null); setPreviewId(null) }}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-surface border border-white/10 text-xs font-semibold text-zinc-300 hover:text-white active:scale-95 transition-all shrink-0 cursor-pointer"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>{t("ui.save")}</span>
+                <ChevronLeft className="w-4 h-4" />
+                <span>{t("ui.back")}</span>
               </button>
-            )}
-          </div>
+              <div className="flex-1 min-w-0 text-center px-1">
+                <p className="text-xs font-bold text-zinc-100 truncate">{titleOf(selected)}</p>
+                <p className="text-[10px] text-zinc-400 font-mono">{yearOf(selected)} · {selected.media_type === "movie" ? t("ui.movie") : t("ui.tvSeries")}</p>
+              </div>
+              {previewPoster && (
+                <button
+                  type="button"
+                  aria-label={t("ui.savePoster")}
+                  onClick={handleSave}
+                  className="btn-primary flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white font-semibold text-xs shrink-0 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{t("ui.save")}</span>
+                </button>
+              )}
+            </div>
 
-          {/* Mobile Segmented Switcher (Scegli Poster / Anteprima / Modifica) */}
-          <div className="relative flex lg:hidden items-center justify-center p-1 bg-surface/90 backdrop-blur-md rounded-2xl border border-white/[0.08] mb-4 w-full max-w-md mx-auto shadow-lg shadow-black/20 overflow-hidden">
-            {/* Sliding Pill Indicator (GPU-accelerated) */}
-            <div
-              className="absolute top-1 bottom-1 rounded-xl bg-accent-orange shadow-md shadow-accent-orange/25 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] pointer-events-none"
-              style={{
-                width: "calc((100% - 8px) / 3)",
-                left: "4px",
-                transform:
+            {/* Mobile Segmented Switcher (Scegli Poster o Sfondi / Anteprima / Modifica) */}
+            <div className="relative flex items-center justify-center p-1 bg-surface/90 backdrop-blur-md rounded-2xl border border-white/[0.08] w-full max-w-md mx-auto shadow-lg shadow-black/20 overflow-hidden">
+              {/* Sliding Pill Indicator (GPU-accelerated) */}
+              <div
+                className="absolute top-1 bottom-1 rounded-xl bg-accent-orange shadow-md shadow-accent-orange/25 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] pointer-events-none"
+                style={{
+                  width: "calc((100% - 8px) / 3)",
+                  left: "4px",
+                  transform:
+                    mobileSection === "poster"
+                      ? "translateX(0%)"
+                      : mobileSection === "preview"
+                        ? "translateX(100%)"
+                        : "translateX(200%)",
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setMobileSection("poster")}
+                className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer ${
                   mobileSection === "poster"
-                    ? "translateX(0%)"
-                    : mobileSection === "preview"
-                      ? "translateX(100%)"
-                      : "translateX(200%)",
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => setMobileSection("poster")}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer ${
-                mobileSection === "poster"
-                  ? "text-white"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <span>{t("ui.poster")}</span>
-              <span className="text-[10px] opacity-75 font-mono">({posters.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileSection("preview")}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer ${
-                mobileSection === "preview"
-                  ? "text-white"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <span>{t("ui.preview")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileSection("customize")}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer ${
-                mobileSection === "customize"
-                  ? "text-white"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <span>{t("ui.customize")}</span>
-            </button>
+                    ? "text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>{isLandscape ? (t("ui.backdrops") || "Sfondi") : t("ui.poster")}</span>
+                <span className="text-[10px] opacity-75 font-mono">({isLandscape ? ed.backdrops.length : posters.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileSection("preview")}
+                className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer ${
+                  mobileSection === "preview"
+                    ? "text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>{t("ui.preview")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileSection("customize")}
+                className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer ${
+                  mobileSection === "customize"
+                    ? "text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>{t("ui.customize")}</span>
+              </button>
+            </div>
           </div>
 
           <div className="editor-workspace w-full px-2 sm:px-4 md:px-6 lg:h-[clamp(660px,calc(100dvh-260px),830px)] lg:min-h-0">
@@ -510,13 +522,13 @@ export default function EditView() {
                         </button>
                       )
                     })()}
-                    <button type="button" aria-label="URL Stremio" onClick={() => {
+                    <button type="button" aria-label={t("ui.testStremioUrl")} onClick={() => {
                       setStremioPreview(true)
                       setStremioModalOpen(true)
                       setMobileSection("preview")
                     }} className="btn-secondary min-h-[44px] px-4 rounded-xl text-xs">
                       <Tv className="w-4 h-4" />
-                      Testa URL Stremio
+                      {t("ui.testStremioUrl")}
                     </button>
                     <button type="button" aria-label={t("ui.savePoster")} onClick={handleSave} className="btn-primary min-h-[44px] px-5 rounded-xl">
                       <Save className="w-4 h-4" />
@@ -590,7 +602,7 @@ export default function EditView() {
                 )}
                 <div className="animate-tab-fade-in space-y-3">
                 {activeRightTab === "logo" && <>
-                  <LogoOptions logos={logos} selectedLogo={selectedLogo} lang={lang} selectLogo={selectLogo} removeLogo={removeLogo} disabled={!cleanPoster} />
+                  <LogoOptions logos={logos} selectedLogo={selectedLogo} lang={lang} selectLogo={handleSelectLogo} removeLogo={removeLogo} disabled={!cleanPoster} />
                   {!cleanPoster && <p className="text-xs text-zinc-400 text-center mt-2 px-1">{t("ui.logoHint")}</p>}
                 </>}
                 {activeRightTab === "badge" && <BadgeControls />}
