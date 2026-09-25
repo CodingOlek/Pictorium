@@ -130,6 +130,14 @@ const itDict: Record<string, string> = {
   "ui.changelogPerf": "Performance",
   "ui.changelogFix": "Fix",
   "ui.changelogRecent": "Aggiornamenti recenti",
+  "ui.hostedByToggle": "Info sponsor: ElfHosted",
+  "ui.hostedByTitle": "Ospitato da {name} ❤️",
+  "ui.hostedByShared": "Condividi gli slot di rendering e la cache con tutti gli altri.",
+  "ui.hostedByElfhosted": "ElfHosted",
+  "ui.hostedByDeploy": "Crea la tua istanza privata su ElfHosted",
+  "ui.hostedByGuide": "guida gratuita agli addon",
+  "ui.hostedByGuideLine": "Nuovo di Stremio? Dai un'occhiata alla {guide}.",
+  "ui.hostedByMinimize": "Riduci a icona",
 }
 
 function mockT(key: string, params?: Record<string, string | number>): string {

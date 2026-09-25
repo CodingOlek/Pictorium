@@ -38,6 +38,8 @@ const ENV_KEYS = [
   "PICTORIUM_USER_RETENTION_DAYS",
   "PROFILE_ENCRYPTION_KEY",
   "PICTORIUM_TMDB_KEY",
+  "PICTORIUM_HOSTED_BY",
+  "POSTERIUM_HOSTED_BY",
   "ADMIN_TOKEN",
 ] as const
 let savedEnv: Record<string, string | undefined> = {}
@@ -54,6 +56,8 @@ beforeEach(async () => {
   delete process.env.PICTORIUM_MAX_MAPPINGS_PER_USER
   delete process.env.PICTORIUM_USER_RETENTION_DAYS
   delete process.env.PICTORIUM_TMDB_KEY
+  delete process.env.PICTORIUM_HOSTED_BY
+  delete process.env.POSTERIUM_HOSTED_BY
 })
 
 afterEach(async () => {
@@ -260,6 +264,45 @@ describe("status aggregates", () => {
     expect(body.keysEncryption).toBe(true)
     expect(body.keyMissing).toMatchObject({ catalogs: expect.any(Number), keyMissing: expect.any(Number) })
     expect(JSON.stringify(body)).not.toContain("11111111")
+  })
+})
+
+describe("status hostedBy", () => {
+  async function hostedBy(env?: string, headers?: Record<string, string>): Promise<unknown> {
+    if (env === undefined) delete process.env.PICTORIUM_HOSTED_BY
+    else process.env.PICTORIUM_HOSTED_BY = env
+    vi.resetModules()
+    const route = await import("@/app/api/status/route")
+    const res = await route.GET(nextReq("http://x/api/status", { headers }))
+    expect(res.status).toBe(200)
+    return (await res.json()).hostedBy
+  }
+
+  it("default null senza env né host elfhosted", async () => {
+    expect(await hostedBy()).toBeNull()
+  })
+
+  it("env elfhosted (case-insensitive, trim) → hostedBy", async () => {
+    expect(await hostedBy("elfhosted")).toBe("elfhosted")
+    expect(await hostedBy(" ElfHosted ")).toBe("elfhosted")
+  })
+
+  it("whitelist rigida: altri valori → null, mai echo", async () => {
+    expect(await hostedBy("evil\"><script>")).toBeNull()
+    expect(await hostedBy("none")).toBeNull()
+    expect(await hostedBy("0")).toBeNull()
+  })
+
+  it("fallback best-effort da host senza env", async () => {
+    expect(await hostedBy(undefined, { host: "pictorium.elfhosted.com" })).toBe("elfhosted")
+  })
+
+  it("fallback da x-forwarded-host senza env", async () => {
+    expect(await hostedBy(undefined, { "x-forwarded-host": "pictorium.elfhosted.com" })).toBe("elfhosted")
+  })
+
+  it("env elfhosted vince su host normale", async () => {
+    expect(await hostedBy("elfhosted", { host: "pictorium.duckdns.org" })).toBe("elfhosted")
   })
 })
 

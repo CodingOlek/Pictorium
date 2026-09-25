@@ -716,5 +716,13 @@
   "ui.changelogFeature": "新機能",
   "ui.changelogPerf": "パフォーマンス",
   "ui.changelogFix": "修正",
-  "ui.changelogRecent": "最近の更新"
+  "ui.changelogRecent": "最近の更新",
+  "ui.hostedByToggle": "Sponsor info: ElfHosted",
+  "ui.hostedByTitle": "Hosted by {name} ❤️",
+  "ui.hostedByShared": "You're sharing rendering slots and cache with everyone else.",
+  "ui.hostedByElfhosted": "ElfHosted",
+  "ui.hostedByDeploy": "Deploy your own private instance on ElfHosted",
+  "ui.hostedByGuide": "free addons guide",
+  "ui.hostedByGuideLine": "New to Stremio? Check the {guide}.",
+  "ui.hostedByMinimize": "Minimize to icon"
 }

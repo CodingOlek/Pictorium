@@ -64,6 +64,8 @@ services:
       # Proxy fidato (dietro Cloudflare/Caddy/Nginx) e allowlist host pubblici
       - PICTORIUM_TRUST_PROXY=${PICTORIUM_TRUST_PROXY:-${POSTERIUM_TRUST_PROXY:-}}
       - PICTORIUM_ALLOWED_HOSTS=${PICTORIUM_ALLOWED_HOSTS:-${POSTERIUM_ALLOWED_HOSTS:-}}
+      # Banner sponsor hosting pubblico (es. "elfhosted"; vuoto = nessun banner).
+      - PICTORIUM_HOSTED_BY=${PICTORIUM_HOSTED_BY:-}
 
       # ── Opzionali — Persistenza distribuita ──
       # Redis nativo (TCP) per HA multi-replica senza /data: PICTORIUM_REDIS_URL

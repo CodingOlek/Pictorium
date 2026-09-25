@@ -248,6 +248,7 @@ npm install --ignore-scripts && npm run build && npm start
 | `PICTORIUM_DATA_DIR` | `./data` | Percorso della cartella per salvare configurazioni e poster su disco. In Docker deve puntare a un volume persistente (`/data`, volume `posterium-data`, scrivibile da uid 1000): il file nasce al primo save, quindi "not found" con 0 poster a installazione fresca è normale. |
 | `PICTORIUM_REDIS_URL` | *(vuoto)* | Redis nativo (TCP) per HA multi-replica senza volume `/data`: mapping, default, profili, epoche e rate-limit diventano condivisi tra le repliche. Vince su `KV_REST_*` se entrambi settati (nessuna migrazione automatica). Su ElfHosted/K8s basta `REDIS_URL` (letto come fallback). |
 | `KV_REST_API_URL` / `TOKEN` | *(vuoto)* | Credenziali Upstash Redis per deploy serverless su Vercel. |
+| `PICTORIUM_HOSTED_BY` | *(vuoto)* | Sponsor/hosting pubblico: se `elfhosted` mostra il banner ElfHosted nella home (rilevamento automatico da host `elfhosted.com` come fallback). Vuoto = nessun banner. |
 
 ### Modalità Multi-Utente
 

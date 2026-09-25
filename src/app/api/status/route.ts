@@ -4,6 +4,22 @@ import { isMultiUserEnabled, getMaxUsers } from "@/lib/user-auth"
 import { countActiveUsers, listUsers } from "@/lib/user-activity"
 import { getKeyMissingStats } from "@/lib/catalog-handler"
 import { isUserKeysEncryptionAvailable } from "@/lib/user-keys"
+import { envWithFallback } from "@/lib/env-compat"
+
+/**
+ * Sponsor/hosting pubblico dell'istanza (banner UI, mai segreti).
+ * Whitelist rigida: solo "elfhosted" o null — il raw env non esce mai.
+ * Primario l'env esplicito, fallback best-effort sull'host della richiesta.
+ */
+export function resolveHostedBy(req: NextRequest): "elfhosted" | null {
+  const raw = envWithFallback("HOSTED_BY")?.toLowerCase().trim()
+  if (raw === "elfhosted") return "elfhosted"
+  if (raw) return null
+  const host = req.headers.get("host")?.toLowerCase() ?? ""
+  const xfh = req.headers.get("x-forwarded-host")?.toLowerCase() ?? ""
+  if (host.includes("elfhosted.com") || xfh.includes("elfhosted.com")) return "elfhosted"
+  return null
+}
 
 /**
  * Stato multi-user (aggregati soli, nessun UUID/segreto): numero utenti,
@@ -28,6 +44,7 @@ export async function GET(req: NextRequest) {
     usersBytes,
     keysEncryption: isUserKeysEncryptionAvailable(),
     keyMissing: getKeyMissingStats(),
+    hostedBy: resolveHostedBy(req),
     timestamp: new Date().toISOString(),
   })
 }

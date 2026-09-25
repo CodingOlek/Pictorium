@@ -116,3 +116,6 @@ Run these against the deployed instance:
   headers (Cloudflare/HF edge/Nginx).
 - Env table + full defaults live in README "Variabili d'Ambiente" — keep this
   skill in sync with it.
+- `PICTORIUM_HOSTED_BY=elfhosted` shows the sponsor banner on the home page
+  (served via `GET /api/status` → `hostedBy`, auto-detected from an
+  `elfhosted.com` host as fallback). Empty = no banner.
