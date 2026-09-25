@@ -5,7 +5,9 @@ import { getImages, getDetails, getDetailsWithExternalIds, getExternalIds, getKe
 import { getJWRankings, hasJWOffers } from "@/lib/justwatch"
 import { extractDigitalReleaseDate, isDigitalPreRelease } from "@/lib/pre-release"
 import { getAll, getById, getImdbAlias } from "@/lib/store"
-import { getScopedUserId } from "@/lib/user-auth"
+import { getScopedUserId, userExists } from "@/lib/user-auth"
+import { verifySessionFromRequestSync } from "@/lib/pin-auth"
+import { checkAdminToken } from "@/lib/auth"
 import { userRateLimitKey } from "@/lib/user-auth"
 import { touchUserActivity } from "@/lib/user-activity"
 import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
@@ -58,7 +60,7 @@ import {
   type PosterErrorStatus,
 } from "@/lib/poster-runtime-cache"
 import { hashUserFragment, userTagFragment } from "@/lib/cache"
-import { hardenPosterSearchParams, isPresetsPosterMode, isPublicPosterInstance } from "@/lib/poster-params-hardening"
+import { hardenPosterSearchParams, isPresetsPosterMode, isPreviewAuthRequired, isPreviewDowngraded, isPublicPosterInstance } from "@/lib/poster-params-hardening"
 import {
   STD_H,
   STD_W,
@@ -181,6 +183,18 @@ function posterErrorResponse(status: PosterErrorStatus): Response {
   return new Response("Poster generation failed", { status: 500, headers: corsHeaders() })
 }
 
+/**
+ * Sessione preview sbloccata: cookie PIN/admin o admin token. Sync e senza
+ * I/O oltre la config cachata — sicuro sull'hot path. Mai throw.
+ */
+function hasUnlockedPreviewSession(req: NextRequest): boolean {
+  try {
+    return verifySessionFromRequestSync(req) || checkAdminToken(req)
+  } catch {
+    return false
+  }
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<RouteParams> }) {
   const startTime = Date.now()
   initSharp()
@@ -192,12 +206,34 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
 
   // Namespace utente (multi-user): null con flag OFF o senza `?u=` → globale.
   const rawUser = req.nextUrl.searchParams.get("u") ?? req.nextUrl.searchParams.get("user")
-  const scopedUser = getScopedUserId(rawUser)
+  let scopedUser = getScopedUserId(rawUser)
   // Rate-limit per-utente (multi-user): il bucket segue il namespace
   // (IP+UUID) così il flood su `?u=vittima` brucia solo il sotto-bucket
   // dell'attaccante e non la quota legittima del proprietario.
   const rl = await rateLimit(scopedUser ? userRateLimitKey(req, scopedUser) : rateLimitKey(req), "poster")
   if (!rl.ok) return rateLimitResponse(rl.retAfter)
+  // Spazi inventati → anonimo (v1.23.0): niente cache key separate né
+  // hardening bypassato. DOPO il rate-limit: il flood su UUID altrui resta
+  // confinato al sotto-bucket dell'attaccante.
+  if (scopedUser && !(await userExists(scopedUser))) scopedUser = null
+  // Preview blindata opt-in (v1.23.0): con PICTORIUM_PREVIEW_AUTH=1 le
+  // preview anonime sulle pubbliche vengono hardenate e cachate come
+  // normali (niente bypass bot). Restano live: spazi esistenti (editor del
+  // proprietario) e sessioni sbloccate (cookie PIN/admin). Default OFF.
+  const rawPreview = req.nextUrl.searchParams.has("preview")
+  let isPreview = rawPreview
+  if (
+    rawPreview &&
+    isPreviewDowngraded({
+      presets: isPresetsPosterMode(),
+      publicInstance: isPublicPosterInstance(),
+      previewAuth: isPreviewAuthRequired(),
+      hasScopedUser: !!scopedUser,
+      unlocked: hasUnlockedPreviewSession(req),
+    })
+  ) {
+    isPreview = false
+  }
   // Chiavi effettive (slice 2, una sola lettura namespace): esplicite della
   // richiesta > namespace utente > env d'istanza. Con `scopedUser` null sono
   // identiche a oggi (byte-identico).
@@ -346,12 +382,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   // il resto legge la query originale (parametri funzionali intatti).
   const hardenedParams = hardenPosterSearchParams(req.nextUrl.searchParams, {
     presets: isPresetsPosterMode(),
-    preview: req.nextUrl.searchParams.has("preview"),
+    preview: isPreview,
     anonymous: !scopedUser,
     publicInstance: isPublicPosterInstance(),
     hasMapping: !!mapping,
     mappingCustomBadge: mapping?.customBadge ?? null,
   })
+  // Preview declassata (blindatura opt-in): senza il flag la chiave resterebbe
+  // separata dalle anonime — rimuovendolo condivide la entry canonica.
+  if (rawPreview && !isPreview) hardenedParams.delete("preview")
   const cacheParams = normalizePosterCacheParams(hardenedParams)
   cacheParams.delete("config")
   cacheParams.delete("c")
@@ -413,7 +452,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     mappingVersionMatches: !!currentMappingVersion && req.nextUrl.searchParams.get("mv") === currentMappingVersion,
   })
   const refreshRequest = isPosterRefreshRequest(req.nextUrl.searchParams)
-  const isPreview = req.nextUrl.searchParams.has("preview")
+  // isPreview effettivo calcolato a inizio richiesta (può essere declassato
+  // dalla blindatura opt-in PICTORIUM_PREVIEW_AUTH) — non rileggere la query.
   // Poster non-mappato (composto al volo con dati dinamici): TTL ridotto (6h)
   // invece delle 24h del path mappato, così rank/IMDb Top 250 non restano
   // stantii per un giorno intero. Il flag non cambia per tutta la richiesta.
@@ -1210,6 +1250,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
                     fallbackTitle,
                     renderAbort.signal,
                     effSeasonCount,
+                    posterRegion.code,
                   ).catch(() => null)
                 })())
           : Promise.resolve(null),

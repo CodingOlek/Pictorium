@@ -77,6 +77,15 @@ export function HomeStatusStrip() {
         </Link>
         <span className="status-divider hidden sm:inline-block" aria-hidden="true" />
         <span className="status-meta hidden sm:inline" aria-hidden="true">{t("ui.statusMeta")}</span>
+        <span className="status-divider hidden sm:inline-block" aria-hidden="true" />
+        <a
+          className="status-meta hidden sm:inline"
+          href="https://www.themoviedb.org/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          This product uses the TMDB API but is not endorsed or certified by TMDB.
+        </a>
       </div>
       <div className="status-right">
         {spaces !== null && (

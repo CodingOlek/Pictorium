@@ -89,6 +89,8 @@ async function kvRemoveAll() {
 }
 
 async function kvImportMappings(mappings: Mapping[]) {
+  // Import vuoto: hset con 0 campi fa 500 su Redis — niente da scrivere.
+  if (mappings.length === 0) return
   const entries: Record<string, Mapping> = {}
   const now = new Date().toISOString()
   for (const m of mappings) {
@@ -548,6 +550,8 @@ export async function removeAll(userId?: string | null) {
 }
 
 export async function importMappings(mappings: Mapping[], userId?: string | null) {
+  // Import vuoto: no-op (hset con 0 campi fa 500 su Redis — v1.23.0).
+  if (mappings.length === 0) return
   if (userId) {
     assertValidUserId(userId)
     if (isKvMode()) {

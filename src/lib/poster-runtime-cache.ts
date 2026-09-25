@@ -87,8 +87,15 @@ export function normalizePosterCacheParams(searchParams: URLSearchParams): URLSe
   // entrano nella chiave — ?x=$RANDOM collassa invece di missare. I repeat
   // multipli della stessa chiave sono preservati come prima.
   const params = new URLSearchParams()
+  const seen = new Set<string>()
   for (const [key, value] of searchParams) {
-    if (POSTER_CACHE_ALLOWLIST.has(key)) params.append(key, value)
+    if (!POSTER_CACHE_ALLOWLIST.has(key)) continue
+    // Dedup al primo valore (v1.23.0): il render legge .get() (prima
+    // occorrenza), ma la serializzazione includerebbe i repeat —
+    // ?blur=20&blur=20 sarebbe una chiave diversa a render identico.
+    if (seen.has(key)) continue
+    seen.add(key)
+    params.append(key, value)
   }
   params.delete("rv")
   params.delete("v")

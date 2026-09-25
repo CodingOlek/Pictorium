@@ -29,8 +29,6 @@ vi.mock("@vercel/kv", () => ({
   },
 }))
 
-const UUID_A = "11111111-1111-4111-8111-111111111111"
-
 const ENV_KEYS = [
   "PICTORIUM_DATA_DIR",
   "PICTORIUM_MULTI_USER",
@@ -243,6 +241,18 @@ describe("cleanup inattivi", () => {
     expect(ok.status).toBe(200)
     expect(await ok.json()).toMatchObject({ disabled: false, retentionDays: 180 })
   })
+
+  it("cleanup route: rifiuta cross-origin anche con admin token (anti-CSRF, v1.23.0)", async () => {
+    vi.resetModules()
+    const route = await import("@/app/api/users/cleanup/route")
+    const evil = await route.POST(
+      nextReq("http://x/api/users/cleanup", {
+        method: "POST",
+        headers: { "x-admin-token": "admin-secret", origin: "https://evil.example.com" },
+      }),
+    )
+    expect(evil.status).toBe(403)
+  })
 })
 
 describe("status aggregates", () => {
@@ -308,15 +318,32 @@ describe("status hostedBy", () => {
 
 describe("touch activity", () => {
   it("scrive lastAccess throttled senza rompere il chiamante", async () => {
+    const { uuid } = await createUser()
     vi.resetModules()
     const activity = await import("@/lib/user-activity")
-    activity.touchUserActivity(UUID_A)
+    activity.touchUserActivity(uuid)
     await new Promise((r) => setTimeout(r, 50))
-    const raw = await fsp.readFile(path.join(tempDir!, "users", UUID_A, "activity.json"), "utf-8")
+    const raw = await fsp.readFile(path.join(tempDir!, "users", uuid, "activity.json"), "utf-8")
     const parsed = JSON.parse(raw) as { lastAccess: string }
     expect(Date.parse(parsed.lastAccess)).toBeGreaterThan(Date.now() - 60_000)
     // Secondo tocco immediato: nessun throw, nessun loop.
-    activity.touchUserActivity(UUID_A)
+    activity.touchUserActivity(uuid)
+  })
+
+  it("non crea directory/chiavi per UUID inventati (anti-crescita incontrollata, v1.23.0)", async () => {
+    vi.resetModules()
+    const activity = await import("@/lib/user-activity")
+    const invented = "00000000-0000-4000-8000-000000000000"
+    activity.touchUserActivity(invented)
+    await new Promise((r) => setTimeout(r, 50))
+    await expect(fsp.stat(path.join(tempDir!, "users", invented))).rejects.toThrow()
+  })
+
+  it("activityTtlSec segue la retention, cap 1 anno se disabilitata", async () => {
+    vi.resetModules()
+    const activity = await import("@/lib/user-activity")
+    expect(activity.activityTtlSec(180)).toBe(180 * 86400)
+    expect(activity.activityTtlSec(0)).toBe(365 * 86400)
   })
 })
 

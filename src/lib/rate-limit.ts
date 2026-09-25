@@ -176,12 +176,18 @@ export function rateLimitKey(request: Request): string {
   // restano usati (Nginx/Cloudflare) ma il fallback ua: garantisce granularità
   // minima senza ricadere nel vecchio bucket "shared" globale.
   const trusted = envWithFallback("TRUST_PROXY") === "1"
+  // Solo dietro proxy fidato (v1.23.0): x-real-ip/cf-connecting-ip sono
+  // scrivibili da chiunque raggiunga l'origin direttamente — fidarsene
+  // sempre permette di ruotare bucket falsi ed evadere il rate limit.
+  // Dietro Cloudflare/proxy che li sovrascrive, TRUST_PROXY=1 li riabilita.
   // 1) x-real-ip — Nginx/HF
-  const realIp = request.headers.get("x-real-ip")
-  if (realIp) return realIp.trim()
-  // 2) cf-connecting-ip — Cloudflare
-  const cfIp = request.headers.get("cf-connecting-ip")
-  if (cfIp) return cfIp.trim()
+  if (trusted) {
+    const realIp = request.headers.get("x-real-ip")
+    if (realIp) return realIp.trim()
+    // 2) cf-connecting-ip — Cloudflare
+    const cfIp = request.headers.get("cf-connecting-ip")
+    if (cfIp) return cfIp.trim()
+  }
   // 3) x-forwarded-for — solo se trusted, altrimenti spoofabile (H2).
   // Catena "client, proxy1, proxy2": il client è il PRIMO elemento.
   // Prendere l'ultimo raggrupperebbe tutti gli utenti dietro lo stesso

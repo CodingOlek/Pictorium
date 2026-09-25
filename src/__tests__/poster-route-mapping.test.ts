@@ -1778,3 +1778,28 @@ describe("GET /api/poster/[type]/[id] con alias IMDb manuale", () => {
   })
 })
 
+describe("invented user namespaces (v1.23.0)", () => {
+  it("treats ?u= with no stored user as anonymous (global mapping, no separate key space)", async () => {
+    vi.stubEnv("PICTORIUM_MULTI_USER", "1")
+    vi.stubEnv("POSTERIUM_MULTI_USER", "1")
+    const poster = await imageBuffer("#101010", 500, 750)
+    const globalMapping = {
+      tmdbId: 61091, mediaType: "movie" as const, title: "Global", posterPath: "/global.jpg",
+      logoPath: null, originalPosterPath: null, language: "it", showBadges: false,
+      rankingBadges: false, updatedAt: "2026-09-12T00:00:00.000Z",
+    }
+    // Globale sì, namespace no: senza downgrade la route leggerebbe il
+    // namespace inventato (vuoto) invece del mapping globale.
+    mockedGetById.mockImplementation(async (_t, _id, userId) => (userId ? null : globalMapping))
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(poster), {
+      headers: { "content-type": "image/png" },
+    }))
+    const invented = "00000000-0000-4000-8000-000000000000"
+    const res = await GET(new NextRequest(`http://localhost:3000/api/poster/movie/61091?u=${invented}`), {
+      params: Promise.resolve({ type: "movie", id: "61091" }),
+    })
+    expect(res.status).toBe(200)
+    expect(mockedGetById).toHaveBeenCalledWith("movie", 61091, null)
+  })
+})
+

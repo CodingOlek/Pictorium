@@ -21,6 +21,11 @@ import { isRankKey } from "./i18n"
 const POSTER_PARAMS_MODE = (envWithFallback("POSTER_PARAMS") || "").toLowerCase().trim()
 const PUBLIC_INSTANCE = envWithFallback("PUBLIC_INSTANCE") === "1"
 const HOSTED_BY = (envWithFallback("HOSTED_BY") || "").toLowerCase().trim()
+// Preview blindata (v1.23.0): sulle istanze pubbliche le preview anonime
+// vengono declassate e cachate come normali (niente bypass bot). Restano live
+// per gli spazi utente reali (?u=<uuid>) e sessioni PIN/admin.
+// Auto-on sulle pubbliche; `PICTORIUM_PREVIEW_AUTH=0` permette di disattivarla.
+const PREVIEW_AUTH_RAW = (envWithFallback("PREVIEW_AUTH") || "").toLowerCase().trim()
 
 const MULTI_USER = envWithFallback("MULTI_USER") === "1"
 
@@ -38,6 +43,40 @@ export function isPresetsPosterMode(): boolean {
   if (POSTER_PARAMS_MODE === "presets") return true
   if (POSTER_PARAMS_MODE === "free") return false
   return isPublicPosterInstance()
+}
+
+/**
+ * Preview blindata attiva: auto-on sulle istanze pubbliche (ElfHosted,
+ * PUBLIC_INSTANCE=1, MULTI_USER=1). Override esplicito: PREVIEW_AUTH=1/0.
+ */
+export function isPreviewAuthRequired(): boolean {
+  if (PREVIEW_AUTH_RAW === "1" || PREVIEW_AUTH_RAW === "true") return true
+  if (PREVIEW_AUTH_RAW === "0" || PREVIEW_AUTH_RAW === "false") return false
+  return isPublicPosterInstance()
+}
+
+export interface PreviewDowngradeInput {
+  /** Presets attivi (isPresetsPosterMode). */
+  readonly presets: boolean
+  /** Istanza pubblica (isPublicPosterInstance). */
+  readonly publicInstance: boolean
+  /** Blindatura preview richiesta (isPreviewAuthRequired). */
+  readonly previewAuth: boolean
+  /** La richiesta porta uno spazio esistente (editor del proprietario: resta live). */
+  readonly hasScopedUser: boolean
+  /** Sessione sbloccata (cookie PIN/admin) o admin token: resta live. */
+  readonly unlocked: boolean
+}
+
+/**
+ * True quando una preview anonima va declassata a richiesta normale
+ * (hardenata + cachabile): solo con blindatura opt-in attiva su pubblica,
+ * senza spazio e senza sessione. Default (flag OFF): mai.
+ */
+export function isPreviewDowngraded(input: PreviewDowngradeInput): boolean {
+  if (!(input.presets && input.publicInstance && input.previewAuth)) return false
+  if (input.hasScopedUser || input.unlocked) return false
+  return true
 }
 
 // Allowlist esplicita dei parametri noti dell'endpoint poster: tutto il resto

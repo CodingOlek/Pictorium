@@ -389,8 +389,10 @@ describe("catalog con chiave namespace (fatal-block fix)", () => {
 
   it("serve il catalogo con la sola chiave namespace (niente chiave in request/env)", async () => {
     vi.resetModules()
+    const auth = await import("@/lib/user-auth")
+    const created = await auth.createUser("namespace-12")
     const keys = await import("@/lib/user-keys")
-    await keys.setUserKeys(UUID_A, { tmdb: NS_TMDB_KEY })
+    await keys.setUserKeys(created.uuid, { tmdb: NS_TMDB_KEY })
     const { cacheClear } = await import("@/lib/cache")
     cacheClear()
     const { __resetJWRankingsCache } = await import("@/lib/justwatch")
@@ -402,7 +404,7 @@ describe("catalog con chiave namespace (fatal-block fix)", () => {
       .mockResolvedValueOnce(tmdbDetailsResponse(94997))
       .mockResolvedValueOnce(tmdbImagesResponse(94997))
 
-    const req = nextReq(`http://localhost:3000/catalog/series/pictorium-jw-series.json?u=${UUID_A}`)
+    const req = nextReq(`http://localhost:3000/catalog/series/pictorium-jw-series.json?u=${created.uuid}`)
     const res = await GET(req, { params: Promise.resolve({ type: "series", id: "pictorium-jw-series" }) })
     expect(res.status).toBe(200)
     const body = await res.json()

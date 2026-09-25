@@ -3,6 +3,8 @@ import {
   POSTER_CACHE_ALLOWLIST,
   hardenPosterSearchParams,
   isPresetsPosterMode,
+  isPreviewAuthRequired,
+  isPreviewDowngraded,
   isPublicPosterInstance,
 } from "@/lib/poster-params-hardening"
 import { normalizePosterCacheParams } from "@/lib/poster-runtime-cache"
@@ -52,6 +54,13 @@ describe("POSTER_CACHE_ALLOWLIST", () => {
     expect(a.toString()).toBe(b.toString())
     expect(a.toString()).toBe(c.toString())
     expect(a.get("gradHeight")).toBe("30")
+  })
+
+  it("dedupes repeated keys to the first value (render reads .get())", () => {
+    const a = normalizePosterCacheParams(new URLSearchParams("blur=20&blur=20&blur=20"))
+    const b = normalizePosterCacheParams(new URLSearchParams("blur=20"))
+    expect(a.toString()).toBe(b.toString())
+    expect(a.get("blur")).toBe("20")
   })
 
   it("covers every key of posterQuerySchema (drift guard: new schema keys need an explicit allowlist decision)", () => {
@@ -169,26 +178,21 @@ describe("poster mode env wiring", () => {
     expect(isPresetsPosterMode()).toBe(true)
   })
 
-  it("treats MULTI_USER=1 as public even when PUBLIC_INSTANCE and HOSTED_BY are unset", async () => {
+  it("auto-enables preview auth on public instances (setup forces PUBLIC_INSTANCE=1)", () => {
+    expect(isPreviewAuthRequired()).toBe(true)
+  })
+
+  it("allows explicit PICTORIUM_PREVIEW_AUTH=0 override even on public instances", async () => {
     vi.resetModules()
-    vi.stubEnv("PICTORIUM_PUBLIC_INSTANCE", "0")
-    vi.stubEnv("PUBLIC_INSTANCE", "0")
-    vi.stubEnv("PICTORIUM_HOSTED_BY", "")
-    vi.stubEnv("HOSTED_BY", "")
-    vi.stubEnv("PICTORIUM_MULTI_USER", "1")
-    vi.stubEnv("MULTI_USER", "1")
-    vi.stubEnv("PICTORIUM_POSTER_PARAMS", "")
-    vi.stubEnv("POSTER_PARAMS", "")
-
-    const mod = await import("@/lib/poster-params-hardening")
-    expect(mod.isPublicPosterInstance()).toBe(true)
-    expect(mod.isPresetsPosterMode()).toBe(true)
-
+    vi.stubEnv("PICTORIUM_PREVIEW_AUTH", "0")
+    vi.stubEnv("PREVIEW_AUTH", "0")
+    const off = await import("@/lib/poster-params-hardening")
+    expect(off.isPreviewAuthRequired()).toBe(false)
     vi.unstubAllEnvs()
     vi.resetModules()
   })
 
-  it("is private when PUBLIC_INSTANCE, HOSTED_BY, and MULTI_USER are all disabled", async () => {
+  it("disables preview auth on private instances unless explicitly forced", async () => {
     vi.resetModules()
     vi.stubEnv("PICTORIUM_PUBLIC_INSTANCE", "0")
     vi.stubEnv("PUBLIC_INSTANCE", "0")
@@ -196,32 +200,34 @@ describe("poster mode env wiring", () => {
     vi.stubEnv("HOSTED_BY", "")
     vi.stubEnv("PICTORIUM_MULTI_USER", "0")
     vi.stubEnv("MULTI_USER", "0")
-    vi.stubEnv("PICTORIUM_POSTER_PARAMS", "")
-    vi.stubEnv("POSTER_PARAMS", "")
+    vi.stubEnv("PICTORIUM_PREVIEW_AUTH", "")
+    vi.stubEnv("PREVIEW_AUTH", "")
 
-    const mod = await import("@/lib/poster-params-hardening")
-    expect(mod.isPublicPosterInstance()).toBe(false)
-    expect(mod.isPresetsPosterMode()).toBe(false)
+    const priv = await import("@/lib/poster-params-hardening")
+    expect(priv.isPreviewAuthRequired()).toBe(false)
+
+    vi.stubEnv("PICTORIUM_PREVIEW_AUTH", "1")
+    vi.stubEnv("PREVIEW_AUTH", "1")
+    vi.resetModules()
+    const forced = await import("@/lib/poster-params-hardening")
+    expect(forced.isPreviewAuthRequired()).toBe(true)
 
     vi.unstubAllEnvs()
     vi.resetModules()
   })
+})
 
-  it("allows explicit POSTER_PARAMS=free override even with MULTI_USER=1", async () => {
-    vi.resetModules()
-    vi.stubEnv("PICTORIUM_PUBLIC_INSTANCE", "0")
-    vi.stubEnv("PUBLIC_INSTANCE", "0")
-    vi.stubEnv("PICTORIUM_MULTI_USER", "1")
-    vi.stubEnv("MULTI_USER", "1")
-    vi.stubEnv("PICTORIUM_POSTER_PARAMS", "free")
-    vi.stubEnv("POSTER_PARAMS", "free")
-
-    const mod = await import("@/lib/poster-params-hardening")
-    expect(mod.isPublicPosterInstance()).toBe(true)
-    expect(mod.isPresetsPosterMode()).toBe(false)
-
-    vi.unstubAllEnvs()
-    vi.resetModules()
+describe("isPreviewDowngraded (preview blindata opt-in)", () => {
+  const live = { presets: true, publicInstance: true, previewAuth: true, hasScopedUser: false, unlocked: false }
+  it("downgrades anonymous previews only with the full opt-in chain", () => {
+    expect(isPreviewDowngraded(live)).toBe(true)
+  })
+  it("stays live by default (flag OFF), with a user space, or unlocked", () => {
+    expect(isPreviewDowngraded({ ...live, previewAuth: false })).toBe(false)
+    expect(isPreviewDowngraded({ ...live, presets: false })).toBe(false)
+    expect(isPreviewDowngraded({ ...live, publicInstance: false })).toBe(false)
+    expect(isPreviewDowngraded({ ...live, hasScopedUser: true })).toBe(false)
+    expect(isPreviewDowngraded({ ...live, unlocked: true })).toBe(false)
   })
 })
 

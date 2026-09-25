@@ -58,4 +58,11 @@ describe("HomeStatusStrip spaces indicator", () => {
     await new Promise((r) => setTimeout(r, 50))
     expect(screen.queryByTestId("home-spaces")).toBeNull()
   })
+
+  it("mostra l'attribution TMDB con link (TOS, v1.23.0)", async () => {
+    mockStatus({ multiUser: false, users: 0, maxUsers: 0 })
+    renderWithCtx(<HomeStatusStrip />)
+    const link = await screen.findByRole("link", { name: /uses the TMDB API/i })
+    expect(link).toHaveAttribute("href", "https://www.themoviedb.org/")
+  })
 })

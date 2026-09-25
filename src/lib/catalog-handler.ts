@@ -4,7 +4,7 @@ import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
 import { cacheGet, cacheGetShared, cacheSet, hashUserFragment } from "@/lib/cache"
 import { getTop10 } from "@/lib/flixpatrol"
 import { getServerDefaults, getServerDefaultsForUser, type ServerDefaults } from "@/lib/server-defaults"
-import { getScopedUserId, userRateLimitKey } from "@/lib/user-auth"
+import { getScopedUserId, userExists, userRateLimitKey } from "@/lib/user-auth"
 import { touchUserActivity } from "@/lib/user-activity"
 import { POSTER_URL_VERSION } from "@/lib/render-version"
 import { getById } from "@/lib/store"
@@ -426,7 +426,9 @@ export async function pictoriumCatalog(
   const extra = parseCatalogExtra(extraSegments, req.nextUrl.searchParams)
   // Namespace utente (multi-user): null con flag OFF o senza `?u=` → path
   // globale byte-identico a oggi. Con `u` → SOLO namespace, mai fallback.
-  const scopedUser = getScopedUserId(userParam)
+  // Spazi inventati → anonimo (v1.23.0): niente cache key separate.
+  let scopedUser = getScopedUserId(userParam)
+  if (scopedUser && !(await userExists(scopedUser))) scopedUser = null
   // Attività di lettura per il cleanup inattivi (throttled, fire-and-forget).
   if (scopedUser) touchUserActivity(scopedUser)
   // Chiavi effettive (slice 2): esplicite della richiesta > namespace utente

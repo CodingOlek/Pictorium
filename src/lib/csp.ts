@@ -36,6 +36,11 @@ export function buildCspHeader(env: Record<string, string | undefined>, opts: Cs
   const isDev = opts.isDev === true
   const cdn = cspExtraOrigins(env).join(" ")
   const cdnSuffix = cdn ? ` ${cdn}` : ""
+  // Frame embedding: default compatibile con HF Spaces (l'app gira in
+  // iframe); PICTORIUM_FRAME_ANCESTORS lo sovrascrive (es. "'self'" per
+  // istanze pubbliche che non vogliono essere embeddate).
+  const frameAncestors = (env.PICTORIUM_FRAME_ANCESTORS || "").trim() ||
+    "'self' https://huggingface.co https://*.huggingface.co https://*.hf.space"
   return [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -46,6 +51,6 @@ export function buildCspHeader(env: Record<string, string | undefined>, opts: Cs
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co https://*.hf.space",
+    `frame-ancestors ${frameAncestors}`,
   ].join("; ")
 }

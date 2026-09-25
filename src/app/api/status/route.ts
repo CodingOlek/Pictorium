@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
 import { isMultiUserEnabled, getMaxUsers } from "@/lib/user-auth"
-import { countActiveUsers, listUsers } from "@/lib/user-activity"
+import { countActiveUsers, listUsers, type UserInfo } from "@/lib/user-activity"
 import { getKeyMissingStats } from "@/lib/catalog-handler"
 import { isUserKeysEncryptionAvailable } from "@/lib/user-keys"
 import { envWithFallback } from "@/lib/env-compat"
@@ -21,6 +21,24 @@ export function resolveHostedBy(req: NextRequest): "elfhosted" | null {
   return null
 }
 
+const STATUS_USERS_TTL_MS = 60_000
+let usersCache: { at: number; users: UserInfo[] } | null = null
+
+async function listUsersCached(): Promise<UserInfo[]> {
+  const now = Date.now()
+  if (usersCache && now - usersCache.at < STATUS_USERS_TTL_MS) return usersCache.users
+  const users = await listUsers()
+  usersCache = { at: now, users }
+  return users
+}
+
+/**
+ * Solo per i test: invalida il memo degli aggregati.
+ */
+export function __resetStatusUsersCache(): void {
+  usersCache = null
+}
+
 /**
  * Stato multi-user (aggregati soli, nessun UUID/segreto): numero utenti,
  * utenti attivi ultimi 7 giorni (solo conteggio), cap spazi (0 = illimitati),
@@ -31,7 +49,9 @@ export async function GET(req: NextRequest) {
   const rl = await rateLimit(rateLimitKey(req), "default")
   if (!rl.ok) return rateLimitResponse(rl.retAfter)
   const multiUser = isMultiUserEnabled()
-  const users = multiUser ? await listUsers() : []
+  // Memo breve (v1.23.0): listUsers scansiona storage/Redis — i conteggi non
+  // servono realtime, 60s bastano ed evitano SCAN+GET per utente a ogni hit.
+  const users = multiUser ? await listUsersCached() : []
   let usersBytes = 0
   for (const u of users) {
     if (u.bytes > 0) usersBytes += u.bytes

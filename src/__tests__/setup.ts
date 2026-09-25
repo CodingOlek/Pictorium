@@ -3,6 +3,7 @@ import { cleanup } from "@testing-library/react"
 import * as matchers from "@testing-library/jest-dom/matchers"
 
 import { _resetPinCache } from "@/lib/pin-auth"
+import { __resetKey401Cache } from "@/lib/tmdb"
 
 expect.extend(matchers)
 
@@ -14,6 +15,9 @@ afterEach(() => {
   cleanup()
   vi.unstubAllEnvs()
   _resetPinCache()
+  // Stato fetch TMDB (negative cache 401) isolato tra i test: senza, un 401
+  // reale (mock esauriti → rete) marchierebbe la chiave per i test seguenti.
+  __resetKey401Cache()
   process.env.POSTERIUM_PUBLIC_INSTANCE = "1"
 })
 

@@ -140,6 +140,15 @@ describe("file mapping store", () => {
     // updatedAt deve essere una data ISO valida recente (timbrata all'import)
     expect(new Date(all[0].updatedAt).getTime()).toBeGreaterThan(Date.now() - 60_000)
   })
+
+  it("importMappings([]) è no-op (niente hset vuoto → niente 500, v1.23.0)", async () => {
+    tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pictorium-import-empty-"))
+    process.env.POSTERIUM_DATA_DIR = tempDir
+    vi.resetModules()
+    const store = await import("@/lib/store")
+    await expect(store.importMappings([])).resolves.toBeUndefined()
+    expect(await store.getAll()).toHaveLength(0)
+  })
 })
 
 describe("KV backend (Redis/Upstash via lib/kv)", () => {

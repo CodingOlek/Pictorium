@@ -5,7 +5,7 @@ import { DATA_DIR } from "@/lib/data-dir"
 import { envWithFallback } from "@/lib/env-compat"
 import { createLogger } from "@/lib/logger"
 import { cacheExpire } from "@/lib/cache"
-import { userDir } from "@/lib/user-auth"
+import { userDir, userExists } from "@/lib/user-auth"
 import { atomicWriteFile } from "@/lib/atomic-write"
 import { getKv, getStorageMode } from "@/lib/kv"
 
@@ -39,9 +39,16 @@ function activityKvKey(userId: string): string {
 }
 
 async function persistActivity(userId: string, now: number): Promise<void> {
+  // Solo spazi reali (v1.23.0): gli UUID inventati non devono creare
+  // directory/chiavi orfane mai visibili al cleanup (crescita incontrollata).
+  if (!(await userExists(userId))) return
   const payload = JSON.stringify({ lastAccess: new Date(now).toISOString() })
   if (isKvMode()) {
-    await getKv().set(activityKvKey(userId), payload)
+    // TTL = finestra retention (v1.23.0): oltre, il cleanup rimuoverebbe
+    // comunque lo spazio — la chiave si auto-estingue senza cron. Con
+    // retention disabilitata (0) cap a 1 anno: i dati restano utili allo
+    // status ma smettono di accumularsi per sempre.
+    await getKv().set(activityKvKey(userId), payload, { ex: activityTtlSec() })
     return
   }
   await fsp.mkdir(userDir(userId), { recursive: true })
@@ -254,6 +261,11 @@ export function getUserRetentionDays(): number {
   const n = parseInt(raw, 10)
   if (raw.trim() === "0") return 0
   return Number.isFinite(n) && n > 0 ? n : 180
+}
+
+/** TTL (secondi) delle chiavi activity in KV: finestra retention, cap 1 anno se disabilitata. */
+export function activityTtlSec(retentionDays = getUserRetentionDays()): number {
+  return (retentionDays > 0 ? retentionDays : 365) * 24 * 60 * 60
 }
 
 export interface CleanupResult {

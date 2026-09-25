@@ -59,4 +59,10 @@ describe("buildCspHeader", () => {
     expect(header).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'")
     expect(header).toContain("connect-src 'self' ws://127.0.0.1:* ws://localhost:*")
   })
+
+  it("PICTORIUM_FRAME_ANCESTORS sovrascrive il default HF (v1.23.0)", () => {
+    const header = buildCspHeader({ PICTORIUM_FRAME_ANCESTORS: "'self'" })
+    expect(header).toContain("frame-ancestors 'self'")
+    expect(header).not.toContain("hf.space")
+  })
 })
