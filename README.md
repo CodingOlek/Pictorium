@@ -249,6 +249,7 @@ npm install --ignore-scripts && npm run build && npm start
 | `PICTORIUM_REDIS_URL` | *(vuoto)* | Redis nativo (TCP) per HA multi-replica senza volume `/data`: mapping, default, profili, epoche e rate-limit diventano condivisi tra le repliche. Vince su `KV_REST_*` se entrambi settati (nessuna migrazione automatica). Su ElfHosted/K8s basta `REDIS_URL` (letto come fallback). |
 | `KV_REST_API_URL` / `TOKEN` | *(vuoto)* | Credenziali Upstash Redis per deploy serverless su Vercel. |
 | `PICTORIUM_HOSTED_BY` | *(vuoto)* | Sponsor/hosting pubblico: se `elfhosted` mostra il banner ElfHosted nella home (rilevamento automatico da host `elfhosted.com` come fallback). Vuoto = nessun banner. |
+| `PICTORIUM_POSTER_PARAMS` | *(auto)* | Hardening anti cache-busting poster: `presets` limita le richieste non-preview a un set finito di render (allowlist cache key, step numerici 5/10/5px, `ac` solo palette, niente free-text/override keyless anonimi), `free` è il comportamento storico. Auto-`presets` su istanze pubbliche (`PUBLIC_INSTANCE=1`, `HOSTED_BY=elfhosted` o `MULTI_USER=1`); la preview WYSIWYG resta sempre live. |
 
 ### Modalità Multi-Utente
 

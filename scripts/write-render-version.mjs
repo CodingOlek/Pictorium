@@ -37,6 +37,7 @@ const RENDER_FILES = [
   "src/lib/poster-config.ts",
   "src/lib/poster-fit-adjust.ts",
   "src/lib/poster-fit-score.ts",
+  "src/lib/poster-params-hardening.ts",
   "src/lib/poster-render-helpers.ts",
   "src/lib/poster-rotation.ts",
   "src/lib/poster-service.ts",

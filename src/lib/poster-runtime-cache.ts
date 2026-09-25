@@ -3,6 +3,7 @@ import { cacheGet, cacheGetStale, cacheSet } from "@/lib/cache"
 import { createLogger } from "@/lib/logger"
 import { envWithFallback } from "@/lib/env-compat"
 import { isBadgeStyle, isRankingBadgeStyle } from "@/lib/badge-styles"
+import { POSTER_CACHE_ALLOWLIST } from "./poster-params-hardening"
 
 const log = createLogger("poster-cache")
 
@@ -82,7 +83,13 @@ const MAX_REFRESH_TRACKED = 500
 const INFLIGHT_TIMEOUT_MS = 60_000
 
 export function normalizePosterCacheParams(searchParams: URLSearchParams): URLSearchParams {
-  const params = new URLSearchParams(searchParams)
+  // Allowlist rigida anti cache-busting (v1.23.0): solo i parametri noti
+  // entrano nella chiave — ?x=$RANDOM collassa invece di missare. I repeat
+  // multipli della stessa chiave sono preservati come prima.
+  const params = new URLSearchParams()
+  for (const [key, value] of searchParams) {
+    if (POSTER_CACHE_ALLOWLIST.has(key)) params.append(key, value)
+  }
   params.delete("rv")
   params.delete("v")
   params.delete(POSTER_REFRESH_PARAM)

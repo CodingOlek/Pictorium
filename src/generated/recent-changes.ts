@@ -11,6 +11,7 @@ export interface RecentChange {
 }
 
 export const RECENT_CHANGES: RecentChange[] = [
+  { type: "fix", text: "runtime CSP via proxy so POSTER_CDN_URL works without rebuild", sha: "42d832d", date: "2026-09-25" },
   { type: "feature", text: "elfhosted sponsor menu via PICTORIUM_HOSTED_BY", sha: "ddbf8a6", date: "2026-09-25" },
   { type: "feature", text: "native Redis HA backend via unified kv.ts", sha: "031d1ab", date: "2026-09-25" },
   { type: "feature", text: "poster CDN allowlist in CSP via cspExtraOrigins", sha: "0823839", date: "2026-09-25" },

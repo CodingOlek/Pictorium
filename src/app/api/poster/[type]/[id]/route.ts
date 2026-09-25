@@ -58,6 +58,7 @@ import {
   type PosterErrorStatus,
 } from "@/lib/poster-runtime-cache"
 import { hashUserFragment, userTagFragment } from "@/lib/cache"
+import { hardenPosterSearchParams, isPresetsPosterMode, isPublicPosterInstance } from "@/lib/poster-params-hardening"
 import {
   STD_H,
   STD_W,
@@ -337,7 +338,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
   const customRatingHash = customRatingConfig.enabled
     ? createHash("sha256").update(JSON.stringify(customRatingConfig)).digest("hex") : ""
   const sdHash = hashKey(JSON.stringify(sd) + customRatingHash)
-  const cacheParams = normalizePosterCacheParams(req.nextUrl.searchParams)
+  // Hardening anti cache-busting (v1.23.0): con presets attivi le richieste
+  // non-preview collassano su un set finito di render (quantize numerici +
+  // palette ac + extra canonico dal mapping + strip override keyless su
+  // pubbliche anonime). Preview WYSIWYG e istanze private passano intatte.
+  // `hardenedParams` alimenta chiave di cache E render così non divergono;
+  // il resto legge la query originale (parametri funzionali intatti).
+  const hardenedParams = hardenPosterSearchParams(req.nextUrl.searchParams, {
+    presets: isPresetsPosterMode(),
+    preview: req.nextUrl.searchParams.has("preview"),
+    anonymous: !scopedUser,
+    publicInstance: isPublicPosterInstance(),
+    hasMapping: !!mapping,
+    mappingCustomBadge: mapping?.customBadge ?? null,
+  })
+  const cacheParams = normalizePosterCacheParams(hardenedParams)
   cacheParams.delete("config")
   cacheParams.delete("c")
   if (scopedUser) {
@@ -639,9 +654,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     else if (isValidWikidataQid(sessionWikidataId)) wikidataId = sessionWikidataId
   }
 
-  const queryPoster = req.nextUrl.searchParams.get("poster")
-  const queryLogo = req.nextUrl.searchParams.get("logo")
-  const queryBackdrop = req.nextUrl.searchParams.get("backdrop")
+  const queryPoster = hardenedParams.get("poster")
+  const queryLogo = hardenedParams.get("logo")
+  const queryBackdrop = hardenedParams.get("backdrop")
   // Formato canvas: query `shape` > mapping > config > defaults (stessa
   // catena degli altri parametri — vedi resolvePosterShape). Solo
   // "landscape" attiva il ramo 16:9 con base = sfondo TMDB.
@@ -665,12 +680,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     logoPath = queryLogo || null
     backdropPath = queryBackdrop || null
     if (queryBackdrop) {
-      backdropScale = Number(req.nextUrl.searchParams.get("bscale") || "100")
+      backdropScale = Number(hardenedParams.get("bscale") || "100")
       // Bound inferiore + superiore: un valore come 1e-7 produrrebbe resize(0,0) → 500.
       if (!Number.isFinite(backdropScale) || backdropScale < 5 || backdropScale > 500) backdropScale = 100
-      backdropOffsetX = Number(req.nextUrl.searchParams.get("box") || "0")
+      backdropOffsetX = Number(hardenedParams.get("box") || "0")
       if (!Number.isFinite(backdropOffsetX)) backdropOffsetX = 0
-      backdropOffsetY = Number(req.nextUrl.searchParams.get("boy") || "0")
+      backdropOffsetY = Number(hardenedParams.get("boy") || "0")
       if (!Number.isFinite(backdropOffsetY)) backdropOffsetY = 0
     }
     if (queryGenre) genreName = queryGenre
@@ -1379,8 +1394,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     // titolo uscito dalla chart mostrerebbe per sempre il rank del save
     // precedente (es. "top 15" di un titolo oggi fuori top 20).
     const rankingRank = rankingResult
-    const qRank = req.nextUrl.searchParams.get("rank")
-    const qLabel = req.nextUrl.searchParams.get("label")
+    // rank/label dalla query hardenata (stessa del cache key): su presets il
+    // label free-text è droppato/canonicalizzato, il rank numerico resta.
+    const qRank = hardenedParams.get("rank")
+    const qLabel = hardenedParams.get("label")
     const finalRank = qRank !== null ? (parseInt(qRank, 10) >= 0 ? parseInt(qRank, 10) : rankingRank) : rankingRank
 
     // Fase 6 (observability): fine della fase fetch (mapping/defaults + TMDB +
@@ -1455,7 +1472,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
 
     // 7. Parse blur / badge / logo config from query
     const renderConfig = resolvePosterRenderConfig({
-      searchParams: req.nextUrl.searchParams,
+      searchParams: hardenedParams,
       mapping,
       configOverride,
       sd,
@@ -1536,7 +1553,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<RouteP
     const targetCenter = Math.round(30 * (isLandscape ? LAND_H : STD_H) / 570)
 
     // 8. Pre-resolve accent color override
-    const qAc = req.nextUrl.searchParams.get("ac")
+    const qAc = hardenedParams.get("ac")
     const accentOverride = (qAc && isValidHex(qAc))
       ? { genreColor: qAc, rankColor: qAc }
       : mapping?.accentColor
