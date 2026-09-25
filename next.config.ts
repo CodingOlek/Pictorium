@@ -1,29 +1,11 @@
 import type { NextConfig } from "next";
-import { cspExtraOrigins } from "./src/lib/csp";
 
-// CSP estesa (hardening): default-src 'self' mitiga XSS, img-src copre i
-// poster TMDB diretti, gli still episodi TVDB (artworks.thetvdb.com, usati
-// dall'anteprima Stagioni & Episodi e da AniZip) e i blob: delle preview
-// secure (useSecurePosterUrl/usePosterPreview). connect-src 'self' basta
-// finché pagina e API stanno sullo stesso host; con POSTER_CDN_URL impostato
-// gli URL poster escono cross-origin → si aggiungono scheme+host del CDN a
-// img-src e connect-src (stessa precedenza env di poster-public-url.ts).
-// In dev si aggiungono 'unsafe-eval' (React Refresh) e il websocket HMR.
+// Security headers statici (CSP esclusa: è calcolata per-request dal
+// middleware così segue POSTER_CDN_URL a runtime senza rebuild).
+// img-src copre i poster TMDB diretti, gli still episodi TVDB
+// (artworks.thetvdb.com, anteprima Stagioni & Episodi e AniZip) e i blob:
+// delle preview secure (useSecurePosterUrl/usePosterPreview).
 // frame-ancestors permette l'embedding su HF Spaces.
-const isDev = process.env.NODE_ENV === "development";
-const cdnOrigins = cspExtraOrigins(process.env).join(" ");
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https://image.tmdb.org https://artworks.thetvdb.com${cdnOrigins ? ` ${cdnOrigins}` : ""}`,
-  "font-src 'self'",
-  `connect-src 'self'${cdnOrigins ? ` ${cdnOrigins}` : ""}${isDev ? " ws://127.0.0.1:* ws://localhost:*" : ""}`,
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co https://*.hf.space",
-].join("; ");
 
 const nextConfig: NextConfig = {
   // `standalone` serve al self-hosting Docker (il Dockerfile copia
@@ -58,7 +40,6 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Content-Security-Policy", value: contentSecurityPolicy },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],

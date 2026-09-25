@@ -18,3 +18,34 @@ export function cspExtraOrigins(env: Record<string, string | undefined>): string
     return []
   }
 }
+
+export interface CspHeaderOptions {
+  /** `true` sotto `next dev`: aggiunge 'unsafe-eval' (React Refresh) e i
+   *  websocket HMR, come faceva la CSP congelata in next.config.ts. */
+  readonly isDev?: boolean
+}
+
+/**
+ * Stringa `Content-Security-Policy` completa dalla stessa env di
+ * cspExtraOrigins. Puro (solo URL parsing): sicuro da importare nel
+ * middleware Edge. Chiamato per-request così un cambio di POSTER_CDN_URL
+ * richiede solo restart, mai rebuild (prima la policy era congelata a
+ * build time in next.config.ts e il CDN restava bloccato fuori).
+ */
+export function buildCspHeader(env: Record<string, string | undefined>, opts: CspHeaderOptions = {}): string {
+  const isDev = opts.isDev === true
+  const cdn = cspExtraOrigins(env).join(" ")
+  const cdnSuffix = cdn ? ` ${cdn}` : ""
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: https://image.tmdb.org https://artworks.thetvdb.com${cdnSuffix}`,
+    "font-src 'self'",
+    `connect-src 'self'${cdnSuffix}${isDev ? " ws://127.0.0.1:* ws://localhost:*" : ""}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co https://*.hf.space",
+  ].join("; ")
+}

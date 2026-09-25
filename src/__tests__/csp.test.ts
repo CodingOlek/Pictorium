@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { cspExtraOrigins } from "@/lib/csp"
+import { buildCspHeader, cspExtraOrigins } from "@/lib/csp"
 
 describe("cspExtraOrigins", () => {
   it("vuoto senza env (policy invariata)", () => {
@@ -23,5 +23,40 @@ describe("cspExtraOrigins", () => {
     expect(cspExtraOrigins({ POSTER_CDN_URL: "ftp://cdn.example.com" })).toEqual([])
     expect(cspExtraOrigins({ POSTER_CDN_URL: "http://[invalid" })).toEqual([])
     expect(cspExtraOrigins({ POSTER_CDN_URL: "   " })).toEqual([])
+  })
+})
+
+describe("buildCspHeader", () => {
+  const BASE =
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob: https://image.tmdb.org https://artworks.thetvdb.com; " +
+    "font-src 'self'; " +
+    "connect-src 'self'; " +
+    "object-src 'none'; " +
+    "base-uri 'self'; " +
+    "form-action 'self'; " +
+    "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co https://*.hf.space"
+
+  it("byte-identico alla policy congelata storica senza CDN", () => {
+    expect(buildCspHeader({})).toBe(BASE)
+  })
+
+  it("aggiunge scheme+host CDN a img-src e connect-src (stessa precedenza env)", () => {
+    const header = buildCspHeader({ POSTER_CDN_URL: "https://cdn.example.com/x?y=1" })
+    expect(header).toContain("img-src 'self' data: blob: https://image.tmdb.org https://artworks.thetvdb.com https://cdn.example.com")
+    expect(header).toContain("connect-src 'self' https://cdn.example.com")
+    expect(header).not.toContain("/x")
+  })
+
+  it("CDN invalido = policy invariata", () => {
+    expect(buildCspHeader({ POSTER_CDN_URL: "ftp://cdn.example.com" })).toBe(BASE)
+  })
+
+  it("dev aggiunge unsafe-eval e websocket HMR", () => {
+    const header = buildCspHeader({}, { isDev: true })
+    expect(header).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'")
+    expect(header).toContain("connect-src 'self' ws://127.0.0.1:* ws://localhost:*")
   })
 })
