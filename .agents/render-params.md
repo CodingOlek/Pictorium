@@ -219,6 +219,7 @@ Opt-in portrait-only (`sep=1`, default OFF): sostituisce la media ★ nel badge 
 - `src/lib/simkl.ts` — voto Simkl diretto (BYOK, redirect 301 + details; solo se `simkl` in `rsrc`)
 - `src/lib/anime-ratings.ts` — voti anime diretti (AniZip mapping tmdb→imdb con fallback + AniList GraphQL + Kitsu REST; solo se `anilist`/`kitsu` in `rsrc`). `anilist`/`kitsu`/`simkl` NON arrivano da MDBList: il parse resta per compatibilità
 - `src/lib/badge-priority.ts` — logica priorità badge (condivisa)
+- `src/lib/badge-labels.ts` — label pure client-safe (match studio/network, label premi/nomination, QID regex; foglia senza import server, in RENDER_FILES)
 - `src/lib/logo-layout.ts` — geometria condivisa logo preview/server
 - `src/app/api/poster/[type]/[id]/route.ts` — composizione poster finale (preview + Stremio usano la stessa route)
 - `e2e/pictorium-visual.spec.ts` — test di regressione visiva (screenshot) per poster e interfaccia

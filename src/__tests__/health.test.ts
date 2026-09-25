@@ -32,6 +32,9 @@ describe("GET /api/health", () => {
     expect(json.storage.dataDir).toBeUndefined()
     expect(json.storage.dataDirExists).toBe(true)
     expect(json.storage.dataDirWritable).toBe(true)
+    // Contratto storage: mode resta "kv" | "file", backend diagnostico null in file-mode.
+    expect(json.storage.mode).toBe("file")
+    expect(json.storage.storageBackend).toBeNull()
   })
 
   it("answers the liveness probe without key, probes or storage I/O (D1)", async () => {

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { rateLimit, rateLimitKey, rateLimitResponse } from "@/lib/rate-limit"
 import { DATA_DIR } from "@/lib/data-dir"
 import { getAll, getStorageMode } from "@/lib/store"
+import { getStorageBackend } from "@/lib/kv"
 import { checkTmdbEndpoint, resolveRouteApiKey } from "@/lib/tmdb"
 import { getJWRankings } from "@/lib/justwatch"
 import { getTop10 } from "@/lib/flixpatrol"
@@ -139,6 +140,9 @@ export async function GET(request: Request) {
 
   const storage = {
     mode: storageMode,
+    // Diagnostica: quale backend KV è attivo ("redis" nativo, "upstash" REST, null = file).
+    // `mode` resta il contratto ("kv" | "file"): Redis conta come "kv".
+    storageBackend: getStorageBackend(),
     // dataDir NON esposto: rivelerebbe il path assoluto del filesystem (info leak)
     dataDirExists: storageMode === "file" ? await fileExists(targetDir) : null,
     dataDirWritable: storageMode === "file" ? await canWriteDir(dirToCheck) : null,

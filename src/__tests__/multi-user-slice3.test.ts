@@ -6,6 +6,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import type { Mapping } from "@/lib/types"
 
+// Store KV in-memory con scan: valida il cablaggio user-activity ->
+// kv.ts -> @vercel/kv senza rete. Attivo solo con KV_REST_API_URL/TOKEN.
+const kvMemory = vi.hoisted(() => new Map<string, unknown>())
+function kvGlobToRegExp(glob: string): RegExp {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")
+  return new RegExp(`^${escaped}$`)
+}
+vi.mock("@vercel/kv", () => ({
+  kv: {
+    get: async (key: string) => kvMemory.get(key) ?? null,
+    set: async (key: string, value: unknown) => {
+      kvMemory.set(key, value)
+    },
+    del: async (key: string) => (kvMemory.delete(key) ? 1 : 0),
+    scan: async (cursor: number, opts?: { match?: string; count?: number }) => {
+      void cursor
+      void opts?.count
+      const re = kvGlobToRegExp(opts?.match ?? "*")
+      return [0, [...kvMemory.keys()].filter((k) => re.test(k))]
+    },
+  },
+}))
+
 const UUID_A = "11111111-1111-4111-8111-111111111111"
 
 const ENV_KEYS = [
@@ -251,5 +274,35 @@ describe("touch activity", () => {
     expect(Date.parse(parsed.lastAccess)).toBeGreaterThan(Date.now() - 60_000)
     // Secondo tocco immediato: nessun throw, nessun loop.
     activity.touchUserActivity(UUID_A)
+  })
+})
+
+describe("KV backend (Redis/Upstash via lib/kv)", () => {
+  it("listUsers trova i namespace via scan, con lastAccess e senza file", async () => {
+    process.env.KV_REST_API_URL = "https://example.upstash.io"
+    process.env.KV_REST_API_TOKEN = "test-token"
+    try {
+      vi.resetModules()
+      const auth = await import("@/lib/user-auth")
+      const activity = await import("@/lib/user-activity")
+      const u1 = await auth.createUser()
+      const u2 = await auth.createUser()
+      activity.touchUserActivity(u1.uuid)
+      await new Promise((r) => setTimeout(r, 50))
+
+      const users = await activity.listUsers()
+      const uuids = users.map((u) => u.uuid)
+      expect(uuids).toContain(u1.uuid)
+      expect(uuids).toContain(u2.uuid)
+      expect(users.find((u) => u.uuid === u1.uuid)?.lastAccess).toBeTruthy()
+      expect(users.every((u) => u.bytes === -1)).toBe(true)
+      // Mai file su disco (ramo KV preso davvero).
+      expect(await fsp.stat(path.join(tempDir!, "users")).catch(() => null)).toBeNull()
+    } finally {
+      delete process.env.KV_REST_API_URL
+      delete process.env.KV_REST_API_TOKEN
+      kvMemory.clear()
+      vi.resetModules()
+    }
   })
 })

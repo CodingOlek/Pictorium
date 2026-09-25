@@ -5,6 +5,7 @@ import crypto from "node:crypto"
 import { DATA_DIR } from "@/lib/data-dir"
 import { createLogger } from "@/lib/logger"
 import { envWithFallback } from "@/lib/env-compat"
+import { getKv, getStorageMode } from "@/lib/kv"
 
 const log = createLogger("pin-auth")
 
@@ -17,8 +18,13 @@ function getDataDir(): string {
   return envWithFallback("DATA_DIR") || DATA_DIR
 }
 
-const useKv = !!process.env.KV_REST_API_URL && !!process.env.KV_REST_API_TOKEN
 const KV_KEY = "security"
+
+// Lettura live (mai a module level): i test mutano le env + resetModules.
+// Nome senza prefisso `use`: la regola react-hooks lo scambierebbe per un Hook.
+function isKvMode(): boolean {
+  return getStorageMode() === "kv"
+}
 
 export const PIN_COOKIE_NAME = "pictorium_pin_session"
 const SESSION_DURATION_SECONDS = 30 * 24 * 60 * 60 // 30 giorni
@@ -44,10 +50,9 @@ export async function readSecurityConfig(): Promise<SecurityConfig> {
     return cachedConfig
   }
 
-  if (useKv) {
+  if (isKvMode()) {
     try {
-      const { kv } = await import("@vercel/kv")
-      const data = await kv.get<SecurityConfig>(KV_KEY)
+      const data = await getKv().get<SecurityConfig>(KV_KEY)
       cachedConfig = data ?? {}
       cacheAt = now
       return cachedConfig
@@ -79,7 +84,7 @@ export function readSecurityConfigSync(): SecurityConfig {
   if (cachedConfig && now - cacheAt < CACHE_TTL_MS) {
     return cachedConfig
   }
-  if (!useKv) {
+  if (!isKvMode()) {
     try {
       const file = getSecurityFile()
       if (!existsSync(file)) {
@@ -128,10 +133,9 @@ export async function writeSecurityConfig(config: SecurityConfig): Promise<void>
     updatedAt: new Date().toISOString(),
   }
 
-  if (useKv) {
+  if (isKvMode()) {
     try {
-      const { kv } = await import("@vercel/kv")
-      await kv.set(KV_KEY, updated)
+      await getKv().set(KV_KEY, updated)
       cachedConfig = updated
       cacheAt = Date.now()
       return
