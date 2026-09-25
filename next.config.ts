@@ -1,20 +1,24 @@
 import type { NextConfig } from "next";
+import { cspExtraOrigins } from "./src/lib/csp";
 
 // CSP estesa (hardening): default-src 'self' mitiga XSS, img-src copre i
 // poster TMDB diretti, gli still episodi TVDB (artworks.thetvdb.com, usati
 // dall'anteprima Stagioni & Episodi e da AniZip) e i blob: delle preview
-// secure (useSecurePosterUrl/usePosterPreview), connect-src 'self' basta perché TUTTE le fetch client
-// passano da /api/* (le chiamate a TMDB/MDBList/JustWatch/ani.zip sono
-// server-side). In dev si aggiungono 'unsafe-eval' (React Refresh) e il
-// websocket HMR. frame-ancestors permette l'embedding su HF Spaces.
+// secure (useSecurePosterUrl/usePosterPreview). connect-src 'self' basta
+// finché pagina e API stanno sullo stesso host; con POSTER_CDN_URL impostato
+// gli URL poster escono cross-origin → si aggiungono scheme+host del CDN a
+// img-src e connect-src (stessa precedenza env di poster-public-url.ts).
+// In dev si aggiungono 'unsafe-eval' (React Refresh) e il websocket HMR.
+// frame-ancestors permette l'embedding su HF Spaces.
 const isDev = process.env.NODE_ENV === "development";
+const cdnOrigins = cspExtraOrigins(process.env).join(" ");
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://image.tmdb.org https://artworks.thetvdb.com",
+  `img-src 'self' data: blob: https://image.tmdb.org https://artworks.thetvdb.com${cdnOrigins ? ` ${cdnOrigins}` : ""}`,
   "font-src 'self'",
-  `connect-src 'self'${isDev ? " ws://127.0.0.1:* ws://localhost:*" : ""}`,
+  `connect-src 'self'${cdnOrigins ? ` ${cdnOrigins}` : ""}${isDev ? " ws://127.0.0.1:* ws://localhost:*" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -36,7 +40,7 @@ const nextConfig: NextConfig = {
   // `npm run dev` attivo su .next.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1"],
-  serverExternalPackages: ["@resvg/resvg-js", "sharp"],
+  serverExternalPackages: ["@resvg/resvg-js", "sharp", "ioredis"],
   outputFileTracingIncludes: {
     "/api/poster/**/*": ["src/assets/fonts/**/*"],
   },
