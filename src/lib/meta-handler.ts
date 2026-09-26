@@ -435,11 +435,20 @@ export async function pictoriumMeta(
       // Skip se già ordinato via TVDB (dati già TVDB nativi) o se i videos
       // seguono un Episode Group: la mappa TVDB è su S:E standard e con le
       // Parti assegnerebbe nome/cover/trama dell'episodio sbagliato.
-      const isTvdbOrdering = (mapping?.episodeGroupId === "tvdb" || (mapping?.episodeGroupId?.startsWith("tvdb:") ?? false))
+            const isTvdbOrdering = (mapping?.episodeGroupId === "tvdb" || (mapping?.episodeGroupId?.startsWith("tvdb:") ?? false))
       if (videos.length > 0 && episodeMetadataSource === "tvdb" && tvdbApiKey && !isTvdbOrdering && !videosFromGroup) {
         await enrichVideosWithTvdb(videos, imdbId, tmdbId, tvdbApiKey, "ita", apiKey)
       }
     }
+
+    const ratingBit = details.vote_average ? `⭐ ${details.vote_average.toFixed(1)}` : null
+    const genreBit = (details.genres || []).map((g) => g.name).slice(0, 3).join(", ") || null
+    const castBit = cast.length > 0 ? `Cast: ${cast.slice(0, 4).join(", ")}` : null
+    const enrichedDescription = [
+      [ratingBit, genreBit].filter(Boolean).join(" • "),
+      details.overview || details.tagline,
+      castBit,
+    ].filter(Boolean).join("\n\n")
 
     const meta: StremioMetaDetail = {
       id: cleanId,
@@ -451,7 +460,7 @@ export async function pictoriumMeta(
       posterShape,
       background,
       logo,
-      description: details.overview || details.tagline || undefined,
+      description: enrichedDescription || undefined,
       releaseInfo: (details.release_date || details.first_air_date || "").slice(0, 4) || undefined,
       released: details.release_date ? `${details.release_date}T00:00:00.000Z` : undefined,
       runtime: details.runtime ? `${details.runtime} min` : undefined,
